@@ -6,6 +6,7 @@ import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
 import io.ktor.http.*
 import io.ktor.server.application.*
+import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
@@ -65,8 +66,7 @@ fun Route.stolenReportRoutes() {
                 return@post
             }
 
-            val principal = call.principal<JWTPrincipal>()!!
-            val userId = principal.payload.getClaim("userId").asString()
+            val userId = call.userId()
 
             val reportId = ObjectId().toString()
             val now = Instant.now().toString()
@@ -113,8 +113,7 @@ fun Route.stolenReportRoutes() {
 
         // GET /api/stolen/reports
         get("/api/stolen/reports") {
-            val principal = call.principal<JWTPrincipal>()!!
-            val userId = principal.payload.getClaim("userId").asString()
+            val userId = call.userId()
 
             val reports = Collections.stolenReports
                 .find(Filters.eq("reportedBy", userId))

@@ -8,6 +8,7 @@ import com.trucaller.backend.data.models.LookupResponse
 import com.trucaller.backend.data.models.SpamCategory
 import io.ktor.http.*
 import io.ktor.server.application.*
+import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
@@ -53,8 +54,7 @@ fun Route.callerIdRoutes() {
 
                 val phoneNumber = normalizeToE164(rawPhone)
 
-                val userId = call.principal<JWTPrincipal>()!!
-                    .payload.getClaim("userId").asString()
+                val userId = call.userId()
 
                 // ── Tier 1: callerIds collection ────────────────────────
                 val callerIdDoc = Collections.callerIds

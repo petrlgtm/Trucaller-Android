@@ -115,7 +115,7 @@ fun Route.adminAuthRoutes() {
             }
 
             val userId = doc.getString("_id")
-            val role = doc.getString("role")
+            val role = doc.getString("role") ?: "MODERATOR"
 
             // Generate JWT token via JwtConfig (created by Task 2.1)
             val token = JwtConfig.makeToken(userId = userId, role = role)

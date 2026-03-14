@@ -29,7 +29,15 @@ fun Routing.authRoutes() {
 
 private fun Route.registerRoute() {
     post("/register") {
-        val request = call.receive<RegisterRequest>()
+        val request = try {
+            call.receive<RegisterRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body")
+            )
+            return@post
+        }
 
         // Validate E.164 phone number format (+256...)
         if (!request.phoneNumber.matches(Regex("^\\+[1-9]\\d{6,14}$"))) {
@@ -96,7 +104,15 @@ private fun Route.registerRoute() {
 
 private fun Route.loginRoute() {
     post("/login") {
-        val request = call.receive<LoginRequest>()
+        val request = try {
+            call.receive<LoginRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body")
+            )
+            return@post
+        }
 
         val userDoc = Collections.users
             .find(Filters.eq("phoneNumber", request.phoneNumber))

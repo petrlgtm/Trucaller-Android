@@ -65,7 +65,7 @@ object JwtConfig {
                         .build()
                 )
                 validate { credential ->
-                    if (credential.payload.getClaim("userId").asString().isNullOrEmpty()) {
+                    if (credential.payload.getClaim("userId")?.asString().isNullOrEmpty()) {
                         null
                     } else {
                         JWTPrincipal(credential.payload)

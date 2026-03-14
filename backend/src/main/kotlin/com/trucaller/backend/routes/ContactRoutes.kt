@@ -7,6 +7,7 @@ import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
 import io.ktor.http.*
 import io.ktor.server.application.*
+import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
@@ -61,10 +62,17 @@ fun Route.contactRoutes() {
 
 private fun Route.uploadContacts() {
     post("/upload") {
-        val userId = call.principal<JWTPrincipal>()!!
-            .payload.getClaim("userId").asString()
+        val userId = call.userId()
 
-        val request = call.receive<ContactUploadRequest>()
+        val request = try {
+            call.receive<ContactUploadRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body")
+            )
+            return@post
+        }
 
         if (request.contacts.isEmpty()) {
             call.respond(
@@ -117,8 +125,7 @@ private fun Route.uploadContacts() {
 
 private fun Route.syncContacts() {
     get("/sync") {
-        val userId = call.principal<JWTPrincipal>()!!
-            .payload.getClaim("userId").asString()
+        val userId = call.userId()
 
         val since = call.request.queryParameters["since"]
 
@@ -167,8 +174,7 @@ private fun Route.syncContacts() {
 
 private fun Route.getAllContacts() {
     get {
-        val userId = call.principal<JWTPrincipal>()!!
-            .payload.getClaim("userId").asString()
+        val userId = call.userId()
 
         val docs = Collections.contacts
             .find(Filters.eq("userId", userId))

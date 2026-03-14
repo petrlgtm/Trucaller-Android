@@ -6,6 +6,8 @@ import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
 import io.ktor.http.*
 import io.ktor.server.application.*
+import com.trucaller.backend.auth.userId
+import com.trucaller.backend.auth.userRole
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
@@ -56,9 +58,8 @@ fun Route.alarmRoutes() {
                 return@post
             }
 
-            val principal = call.principal<JWTPrincipal>()!!
-            val userId = principal.payload.getClaim("userId").asString()
-            val role = principal.payload.getClaim("role").asString() ?: "user"
+            val userId = call.userId()
+            val role = call.userRole()
 
             // Look up user name from users collection
             val userDoc = Collections.users

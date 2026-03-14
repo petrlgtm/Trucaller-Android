@@ -7,6 +7,7 @@ import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
 import io.ktor.http.*
 import io.ktor.server.application.*
+import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
@@ -76,10 +77,17 @@ fun Route.deviceRoutes() {
 
 private fun Route.registerDevice() {
     post("/register") {
-        val userId = call.principal<JWTPrincipal>()!!
-            .payload.getClaim("userId").asString()
+        val userId = call.userId()
 
-        val request = call.receive<DeviceRegisterRequest>()
+        val request = try {
+            call.receive<DeviceRegisterRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body")
+            )
+            return@post
+        }
 
         val clientIp = call.request.header("X-Forwarded-For")
             ?.split(",")?.firstOrNull()?.trim()
@@ -160,8 +168,7 @@ private fun Route.registerDevice() {
 
 private fun Route.getDevicesByUser() {
     get("/{userId}") {
-        val currentUserId = call.principal<JWTPrincipal>()!!
-            .payload.getClaim("userId").asString()
+        val currentUserId = call.userId()
         val requestedUserId = call.parameters["userId"]
 
         if (requestedUserId.isNullOrBlank()) {
