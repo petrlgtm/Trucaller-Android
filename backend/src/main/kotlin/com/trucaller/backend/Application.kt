@@ -1,6 +1,7 @@
 package com.trucaller.backend
 
 import com.trucaller.backend.auth.JwtConfig
+import com.trucaller.backend.auth.adminAuthRoutes
 import com.trucaller.backend.auth.authRoutes
 import com.trucaller.backend.data.MongoDB
 import io.ktor.http.*
@@ -55,5 +56,6 @@ fun Application.module() {
         }
 
         authRoutes()
+        adminAuthRoutes()
     }
 }
