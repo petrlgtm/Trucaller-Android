@@ -1,0 +1,60 @@
+package com.trucaller.backend.data.models
+
+import kotlinx.serialization.Serializable
+
+// ── Request DTOs ──
+
+@Serializable
+data class LoginRequest(
+    val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
+    val password: String
+)
+
+@Serializable
+data class RegisterRequest(
+    val fullName: String,
+    val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
+    val password: String
+)
+
+@Serializable
+data class OtpVerification(
+    val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
+    val code: String,
+    val expiresAt: Long            // Unix timestamp millis
+)
+
+@Serializable
+data class AdminLoginRequest(
+    val email: String,
+    val password: String
+)
+
+// ── Response DTOs ──
+
+@Serializable
+data class TokenResponse(
+    val token: String,
+    val refreshToken: String? = null,
+    val expiresIn: Long,           // seconds until token expiry
+    val userId: String
+)
+
+@Serializable
+data class LookupResponse(
+    val phoneNumber: String,
+    val name: String?,
+    val spamScore: Int,
+    val reportCount: Int,
+    val category: SpamCategory,
+    val source: String,
+    val confidence: Int
+)
+
+@Serializable
+data class ApiResponse<T>(
+    val success: Boolean,
+    val data: T? = null,
+    val message: String? = null,
+    val error: String? = null
+)
