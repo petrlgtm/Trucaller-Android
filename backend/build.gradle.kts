@@ -5,7 +5,16 @@ val mongodbVersion = "5.3.1"
 plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.serialization)
+    alias(libs.plugins.shadow)
     application
+}
+
+tasks.shadowJar {
+    archiveFileName.set("trucaller-backend.jar")
+    mergeServiceFiles()
+    manifest {
+        attributes("Main-Class" to "com.trucaller.backend.ApplicationKt")
+    }
 }
 
 application {
@@ -20,6 +29,7 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("io.ktor:ktor-server-auth:$ktorVersion")
     implementation("io.ktor:ktor-server-auth-jwt:$ktorVersion")
+    implementation("io.ktor:ktor-server-cors:$ktorVersion")
 
     // MongoDB Kotlin Coroutine Driver
     implementation("org.mongodb:mongodb-driver-kotlin-coroutine:$mongodbVersion")
