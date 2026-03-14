@@ -13,7 +13,6 @@ import com.trucaller.backend.routes.stolenReportRoutes
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
-import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
@@ -26,10 +25,7 @@ import kotlinx.serialization.json.Json
 @Serializable
 data class HealthResponse(val status: String)
 
-fun main() {
-    embeddedServer(Netty, port = 8080, host = "0.0.0.0", module = Application::module)
-        .start(wait = true)
-}
+fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
 
 fun Application.module() {
     // ── Content Negotiation ──────────────────────────────────────────────
