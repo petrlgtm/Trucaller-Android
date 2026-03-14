@@ -24,3 +24,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "TruCaller"
 include(":app")
+include(":backend")
