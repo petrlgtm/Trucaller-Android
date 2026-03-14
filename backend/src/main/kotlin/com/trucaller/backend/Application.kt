@@ -1,5 +1,8 @@
 package com.trucaller.backend
 
+import com.trucaller.backend.auth.JwtConfig
+import com.trucaller.backend.auth.authRoutes
+import com.trucaller.backend.data.MongoDB
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -8,6 +11,7 @@ import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 
@@ -20,6 +24,7 @@ fun main() {
 }
 
 fun Application.module() {
+    // ── Content Negotiation ──────────────────────────────────────────────
     install(ContentNegotiation) {
         json(Json {
             prettyPrint = true
@@ -28,9 +33,27 @@ fun Application.module() {
         })
     }
 
+    // ── JWT Authentication ───────────────────────────────────────────────
+    JwtConfig.init(environment)
+    JwtConfig.configureAuth(this)
+
+    // ── MongoDB connection ───────────────────────────────────────────────
+    val mongoUri = environment.config.property("mongo.uri").getString()
+    environment.monitor.subscribe(ApplicationStarted) { app ->
+        app.launch {
+            MongoDB.connect(mongoUri)
+        }
+    }
+    environment.monitor.subscribe(ApplicationStopped) {
+        MongoDB.close()
+    }
+
+    // ── Routing ──────────────────────────────────────────────────────────
     routing {
         get("/") {
             call.respond(HttpStatusCode.OK, HealthResponse(status = "ok"))
         }
+
+        authRoutes()
     }
 }
