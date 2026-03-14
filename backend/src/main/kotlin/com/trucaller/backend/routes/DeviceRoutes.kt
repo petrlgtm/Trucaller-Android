@@ -160,9 +160,11 @@ private fun Route.registerDevice() {
 
 private fun Route.getDevicesByUser() {
     get("/{userId}") {
-        val userId = call.parameters["userId"]
+        val currentUserId = call.principal<JWTPrincipal>()!!
+            .payload.getClaim("userId").asString()
+        val requestedUserId = call.parameters["userId"]
 
-        if (userId.isNullOrBlank()) {
+        if (requestedUserId.isNullOrBlank()) {
             call.respond(
                 HttpStatusCode.BadRequest,
                 ApiResponse<Unit>(
@@ -172,6 +174,19 @@ private fun Route.getDevicesByUser() {
             )
             return@get
         }
+
+        if (currentUserId != requestedUserId) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                ApiResponse<Unit>(
+                    success = false,
+                    error = "Access denied"
+                )
+            )
+            return@get
+        }
+
+        val userId = requestedUserId
 
         val docs = Collections.devices
             .find(Filters.eq("userId", userId))

@@ -15,6 +15,7 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
 import org.bson.Document
+import org.bson.types.ObjectId
 import java.time.Instant
 
 // ── Request / Response DTOs ─────────────────────────────────────────────
@@ -92,7 +93,7 @@ private fun Route.uploadContacts() {
                         .append("userId", userId)
                         .append("syncedAt", now)
                         .append("isBackedUp", true)
-                ),
+                ).append("\$setOnInsert", Document("_id", ObjectId().toString())),
                 UpdateOptions().upsert(true)
             )
         }
