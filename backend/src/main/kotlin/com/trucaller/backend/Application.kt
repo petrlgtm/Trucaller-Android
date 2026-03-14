@@ -4,7 +4,11 @@ import com.trucaller.backend.auth.JwtConfig
 import com.trucaller.backend.auth.adminAuthRoutes
 import com.trucaller.backend.auth.authRoutes
 import com.trucaller.backend.data.MongoDB
+import com.trucaller.backend.routes.alarmRoutes
 import com.trucaller.backend.routes.callerIdRoutes
+import com.trucaller.backend.routes.contactRoutes
+import com.trucaller.backend.routes.deviceRoutes
+import com.trucaller.backend.routes.stolenReportRoutes
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
 import io.ktor.server.application.*
@@ -59,5 +63,9 @@ fun Application.module() {
         authRoutes()
         adminAuthRoutes()
         callerIdRoutes()
+        contactRoutes()
+        deviceRoutes()
+        stolenReportRoutes()
+        alarmRoutes()
     }
 }
