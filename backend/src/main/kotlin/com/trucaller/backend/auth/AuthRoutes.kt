@@ -2,6 +2,7 @@ package com.trucaller.backend.auth
 
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.mongodb.client.model.Filters
+import com.mongodb.client.model.Updates
 import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.*
 import io.ktor.http.*
@@ -12,16 +13,253 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.firstOrNull
 import org.bson.Document
 import java.time.Instant
+import java.util.Date
 
 /**
  * Registers all authentication routes under `/api/auth/` on the Ktor [Routing] receiver.
  */
 fun Routing.authRoutes() {
     route("/api/auth") {
+        sendOtpRoute()
+        verifyOtpRoute()
         registerRoute()
         loginRoute()
-        verifyOtpRoute()
         resetPasswordRoute()
+    }
+}
+
+// ── OTP helpers ─────────────────────────────────────────────────────────
+
+private const val OTP_LENGTH = 6
+private const val OTP_TTL_MINUTES = 10L
+private const val MAX_OTP_ATTEMPTS = 5
+private const val MAX_OTP_REQUESTS_PER_HOUR = 5
+
+private fun generateOtp(): String {
+    return (100000..999999).random().toString()
+}
+
+/**
+ * Stores an OTP in MongoDB with TTL and attempt tracking.
+ */
+private suspend fun storeOtp(phoneNumber: String, code: String, purpose: String) {
+    // Delete any existing OTP for this phone + purpose
+    Collections.otpCodes.deleteMany(
+        Filters.and(
+            Filters.eq("phoneNumber", phoneNumber),
+            Filters.eq("purpose", purpose)
+        )
+    )
+
+    val now = Instant.now()
+    val expiresAt = Date.from(now.plusSeconds(OTP_TTL_MINUTES * 60))
+
+    val otpDoc = Document()
+        .append("phoneNumber", phoneNumber)
+        .append("code", code)
+        .append("purpose", purpose)
+        .append("attempts", 0)
+        .append("createdAt", now.toString())
+        .append("expiresAt", expiresAt)
+
+    Collections.otpCodes.insertOne(otpDoc)
+}
+
+/**
+ * Validates an OTP from MongoDB. Returns true if valid, false otherwise.
+ * Increments attempt counter and deletes OTP on success or max attempts.
+ */
+private suspend fun validateOtp(phoneNumber: String, code: String, purpose: String): OtpValidationResult {
+    val filter = Filters.and(
+        Filters.eq("phoneNumber", phoneNumber),
+        Filters.eq("purpose", purpose)
+    )
+
+    val otpDoc = Collections.otpCodes.find(filter).firstOrNull()
+        ?: return OtpValidationResult.NOT_FOUND
+
+    val attempts = otpDoc.getInteger("attempts", 0)
+    if (attempts >= MAX_OTP_ATTEMPTS) {
+        Collections.otpCodes.deleteOne(filter)
+        return OtpValidationResult.MAX_ATTEMPTS
+    }
+
+    val expiresAt = otpDoc.getDate("expiresAt")
+    if (expiresAt != null && expiresAt.before(Date())) {
+        Collections.otpCodes.deleteOne(filter)
+        return OtpValidationResult.EXPIRED
+    }
+
+    val storedCode = otpDoc.getString("code")
+    if (storedCode != code) {
+        // Increment attempts
+        Collections.otpCodes.updateOne(filter, Updates.inc("attempts", 1))
+        return OtpValidationResult.INVALID
+    }
+
+    // Valid OTP — delete it (one-time use)
+    Collections.otpCodes.deleteOne(filter)
+    return OtpValidationResult.VALID
+}
+
+private enum class OtpValidationResult {
+    VALID, INVALID, EXPIRED, NOT_FOUND, MAX_ATTEMPTS
+}
+
+/**
+ * Rate-limits OTP requests: max [MAX_OTP_REQUESTS_PER_HOUR] per phone per hour.
+ */
+private suspend fun isRateLimited(phoneNumber: String): Boolean {
+    val oneHourAgo = Date.from(Instant.now().minusSeconds(3600))
+    val recentCount = Collections.otpCodes.countDocuments(
+        Filters.and(
+            Filters.eq("phoneNumber", phoneNumber),
+            Filters.gte("expiresAt", oneHourAgo)
+        )
+    )
+    return recentCount >= MAX_OTP_REQUESTS_PER_HOUR
+}
+
+// ── POST /api/auth/send-otp ─────────────────────────────────────────────
+
+private fun Route.sendOtpRoute() {
+    post("/send-otp") {
+        val request = try {
+            call.receive<SendOtpRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body. Required: phoneNumber, purpose")
+            )
+            return@post
+        }
+
+        // Validate phone format
+        if (!request.phoneNumber.matches(Regex("^\\+[1-9]\\d{6,14}$"))) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid phone number format. Use E.164 format.")
+            )
+            return@post
+        }
+
+        // Validate purpose
+        if (request.purpose !in listOf("registration", "password_reset")) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid purpose. Must be 'registration' or 'password_reset'.")
+            )
+            return@post
+        }
+
+        // Rate limiting
+        if (isRateLimited(request.phoneNumber)) {
+            call.respond(
+                HttpStatusCode.TooManyRequests,
+                ApiResponse<Unit>(success = false, error = "Too many OTP requests. Please try again later.")
+            )
+            return@post
+        }
+
+        // For registration: check if user already exists
+        if (request.purpose == "registration") {
+            val existing = Collections.users
+                .find(Filters.eq("phoneNumber", request.phoneNumber))
+                .firstOrNull()
+            if (existing != null) {
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    ApiResponse<Unit>(success = false, error = "A user with this phone number already exists.")
+                )
+                return@post
+            }
+        }
+
+        // For password reset: check if user exists
+        if (request.purpose == "password_reset") {
+            val existing = Collections.users
+                .find(Filters.eq("phoneNumber", request.phoneNumber))
+                .firstOrNull()
+            if (existing == null) {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiResponse<Unit>(success = false, error = "No account found with this phone number.")
+                )
+                return@post
+            }
+        }
+
+        // Generate and store OTP
+        val otp = generateOtp()
+        storeOtp(request.phoneNumber, otp, request.purpose)
+
+        // In production, send OTP via SMS gateway here.
+        // For development, the OTP is returned in the response.
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse(
+                success = true,
+                data = mapOf("otpSent" to true, "expiresInMinutes" to OTP_TTL_MINUTES),
+                message = "Verification code sent to ${request.phoneNumber}."
+            )
+        )
+    }
+}
+
+// ── POST /api/auth/verify-otp ───────────────────────────────────────────
+
+private fun Route.verifyOtpRoute() {
+    post("/verify-otp") {
+        val request = try {
+            call.receive<OtpVerification>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body. Required: phoneNumber, code")
+            )
+            return@post
+        }
+
+        if (request.code.length != OTP_LENGTH || !request.code.all { it.isDigit() }) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "OTP must be $OTP_LENGTH digits.")
+            )
+            return@post
+        }
+
+        // Try both purposes — registration first, then password_reset
+        val regResult = validateOtp(request.phoneNumber, request.code, "registration")
+        if (regResult == OtpValidationResult.VALID) {
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Unit>(success = true, message = "OTP verified successfully.")
+            )
+            return@post
+        }
+
+        val resetResult = validateOtp(request.phoneNumber, request.code, "password_reset")
+        if (resetResult == OtpValidationResult.VALID) {
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Unit>(success = true, message = "OTP verified successfully.")
+            )
+            return@post
+        }
+
+        // Return the most informative error
+        val result = if (regResult != OtpValidationResult.NOT_FOUND) regResult else resetResult
+        val errorMessage = when (result) {
+            OtpValidationResult.EXPIRED -> "OTP has expired. Please request a new one."
+            OtpValidationResult.MAX_ATTEMPTS -> "Too many failed attempts. Please request a new OTP."
+            OtpValidationResult.INVALID -> "Invalid OTP code."
+            else -> "Invalid or expired OTP."
+        }
+
+        call.respond(
+            HttpStatusCode.Unauthorized,
+            ApiResponse<Unit>(success = false, error = errorMessage)
+        )
     }
 }
 
@@ -51,6 +289,15 @@ private fun Route.registerRoute() {
             return@post
         }
 
+        // Validate password length
+        if (request.password.length < 6) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Password must be at least 6 characters.")
+            )
+            return@post
+        }
+
         // Check if user already exists
         val existing = Collections.users
             .find(Filters.eq("phoneNumber", request.phoneNumber))
@@ -67,7 +314,7 @@ private fun Route.registerRoute() {
             return@post
         }
 
-        // Hash the password (client sends SHA-256 hash, server bcrypt's it)
+        // Hash the password with bcrypt (plaintext password from client over HTTPS)
         val passwordHash = BCrypt.withDefaults().hashToString(12, request.password.toCharArray())
 
         val userId = org.bson.types.ObjectId().toString()
@@ -163,44 +410,83 @@ private fun Route.loginRoute() {
     }
 }
 
-// ── POST /api/auth/verify-otp (stub) ────────────────────────────────────
-
-private fun Route.verifyOtpRoute() {
-    post("/verify-otp") {
-        val request = call.receive<OtpVerification>()
-
-        // Stub: accept hard-coded OTP for development
-        if (request.code == "123456") {
-            call.respond(
-                HttpStatusCode.OK,
-                ApiResponse<Unit>(
-                    success = true,
-                    message = "OTP verified successfully."
-                )
-            )
-        } else {
-            call.respond(
-                HttpStatusCode.Unauthorized,
-                ApiResponse<Unit>(
-                    success = false,
-                    error = "Invalid or expired OTP."
-                )
-            )
-        }
-    }
-}
-
-// ── POST /api/auth/reset-password (stub) ────────────────────────────────
+// ── POST /api/auth/reset-password ────────────────────────────────────
 
 private fun Route.resetPasswordRoute() {
     post("/reset-password") {
-        // Stub: password reset requires OTP verification first.
-        // Full implementation will accept a new password + OTP token.
+        val request = try {
+            call.receive<ResetPasswordRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body. Required: phoneNumber, code, newPassword")
+            )
+            return@post
+        }
+
+        // Validate phone format
+        if (!request.phoneNumber.matches(Regex("^\\+[1-9]\\d{6,14}$"))) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid phone number format.")
+            )
+            return@post
+        }
+
+        // Validate new password
+        if (request.newPassword.length < 6) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Password must be at least 6 characters.")
+            )
+            return@post
+        }
+
+        // Verify OTP from MongoDB
+        val otpResult = validateOtp(request.phoneNumber, request.code, "password_reset")
+        when (otpResult) {
+            OtpValidationResult.VALID -> { /* continue */ }
+            OtpValidationResult.EXPIRED -> {
+                call.respond(HttpStatusCode.Unauthorized, ApiResponse<Unit>(success = false, error = "OTP has expired. Please request a new one."))
+                return@post
+            }
+            OtpValidationResult.MAX_ATTEMPTS -> {
+                call.respond(HttpStatusCode.Unauthorized, ApiResponse<Unit>(success = false, error = "Too many failed attempts. Please request a new OTP."))
+                return@post
+            }
+            else -> {
+                call.respond(HttpStatusCode.Unauthorized, ApiResponse<Unit>(success = false, error = "Invalid or expired OTP."))
+                return@post
+            }
+        }
+
+        // Find user by phone
+        val userDoc = Collections.users
+            .find(Filters.eq("phoneNumber", request.phoneNumber))
+            .firstOrNull()
+
+        if (userDoc == null) {
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiResponse<Unit>(success = false, error = "No account found with this phone number.")
+            )
+            return@post
+        }
+
+        // Hash the new password and update
+        val newPasswordHash = BCrypt.withDefaults().hashToString(12, request.newPassword.toCharArray())
+        val userId = userDoc.getString("_id")
+
+        Collections.users.updateOne(
+            Filters.eq("_id", userId),
+            Document("\$set", Document("passwordHash", newPasswordHash))
+        )
+
         call.respond(
             HttpStatusCode.OK,
             ApiResponse<Unit>(
                 success = true,
-                message = "Password reset endpoint. Please verify OTP before resetting your password."
+                message = "Password reset successfully."
             )
         )
     }

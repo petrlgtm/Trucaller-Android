@@ -1,5 +1,6 @@
 package com.trucaller.backend
 
+import com.trucaller.backend.auth.UnauthorizedException
 import com.trucaller.backend.auth.JwtConfig
 import com.trucaller.backend.auth.adminAuthRoutes
 import com.trucaller.backend.auth.authRoutes
@@ -9,6 +10,8 @@ import com.trucaller.backend.routes.alarmRoutes
 import com.trucaller.backend.routes.callerIdRoutes
 import com.trucaller.backend.routes.contactRoutes
 import com.trucaller.backend.routes.deviceRoutes
+import com.trucaller.backend.routes.blockedRoutes
+import com.trucaller.backend.routes.smsRoutes
 import com.trucaller.backend.routes.stolenReportRoutes
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -16,6 +19,8 @@ import io.ktor.server.application.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
 import io.ktor.server.plugins.cors.routing.*
+import io.ktor.server.plugins.statuspages.*
+import io.ktor.server.http.content.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.launch
@@ -47,6 +52,28 @@ fun Application.module() {
         allowMethod(HttpMethod.Patch)
     }
 
+    // ── Exception Handling ──────────────────────────────────────────────
+    install(StatusPages) {
+        exception<UnauthorizedException> { call, cause ->
+            call.respond(
+                HttpStatusCode.Unauthorized,
+                mapOf("success" to false, "error" to (cause.message ?: "Authentication required"))
+            )
+        }
+        exception<IllegalAccessException> { call, cause ->
+            call.respond(
+                HttpStatusCode.Forbidden,
+                mapOf("success" to false, "error" to (cause.message ?: "Access denied"))
+            )
+        }
+        exception<Throwable> { call, cause ->
+            call.respond(
+                HttpStatusCode.InternalServerError,
+                mapOf("success" to false, "error" to "Internal server error")
+            )
+        }
+    }
+
     // ── JWT Authentication ───────────────────────────────────────────────
     JwtConfig.init(environment)
     JwtConfig.configureAuth(this)
@@ -65,9 +92,24 @@ fun Application.module() {
     // ── Routing ──────────────────────────────────────────────────────────
     routing {
         get("/") {
-            call.respond(HttpStatusCode.OK, HealthResponse(status = "ok"))
+            call.resolveResource("static/index.html")?.let {
+                call.respond(it)
+            } ?: call.respond(HttpStatusCode.OK, HealthResponse(status = "ok"))
         }
 
+        get("/privacy-policy") {
+            call.resolveResource("static/privacy-policy.html")?.let {
+                call.respond(it)
+            } ?: call.respond(HttpStatusCode.NotFound, "Page not found")
+        }
+
+        get("/terms-of-service") {
+            call.resolveResource("static/terms-of-service.html")?.let {
+                call.respond(it)
+            } ?: call.respond(HttpStatusCode.NotFound, "Page not found")
+        }
+
+        // ── API Routes ──────────────────────────────────────────────────
         authRoutes()
         adminAuthRoutes()
         callerIdRoutes()
@@ -75,6 +117,8 @@ fun Application.module() {
         deviceRoutes()
         stolenReportRoutes()
         alarmRoutes()
+        smsRoutes()
+        blockedRoutes()
         adminRoutes()
     }
 }

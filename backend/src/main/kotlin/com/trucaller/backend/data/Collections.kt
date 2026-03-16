@@ -41,6 +41,12 @@ object Collections {
     val adminUsers: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("adminUsers")
 
+    val otpCodes: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("otpCodes")
+
+    val smsSpamReports: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("smsSpamReports")
+
     // ── Index creation ───────────────────────────────────────────────────
 
     /**
@@ -50,6 +56,7 @@ object Collections {
      * - `callerIds.phoneNumber`  – unique
      * - `contacts.(userId, phoneNumber)` – compound
      * - `devices.userId`         – ascending
+     * - `otpCodes.expiresAt`     – TTL (auto-delete expired OTPs)
      */
     suspend fun ensureIndexes(database: MongoDatabase) {
         val uniqueOption = IndexOptions().unique(true)
@@ -71,6 +78,35 @@ object Collections {
 
         // Index on userId for devices
         database.getCollection<Document>("devices")
+            .createIndex(Indexes.ascending("userId"))
+
+        // TTL index: auto-delete OTP documents 10 minutes after expiresAt
+        database.getCollection<Document>("otpCodes")
+            .createIndex(
+                Indexes.ascending("expiresAt"),
+                IndexOptions().expireAfter(0, java.util.concurrent.TimeUnit.SECONDS)
+            )
+
+        // Compound index on (phoneNumber, purpose) for OTP lookups
+        database.getCollection<Document>("otpCodes")
+            .createIndex(Indexes.compoundIndex(
+                Indexes.ascending("phoneNumber"),
+                Indexes.ascending("purpose")
+            ))
+
+        // Compound index on (userId, phoneNumber) for blocked numbers
+        database.getCollection<Document>("blockedNumbers")
+            .createIndex(Indexes.compoundIndex(
+                Indexes.ascending("userId"),
+                Indexes.ascending("phoneNumber")
+            ))
+
+        // Index on senderNumber for SMS spam reports
+        database.getCollection<Document>("smsSpamReports")
+            .createIndex(Indexes.ascending("senderNumber"))
+
+        // Index on userId for SMS spam reports
+        database.getCollection<Document>("smsSpamReports")
             .createIndex(Indexes.ascending("userId"))
     }
 }

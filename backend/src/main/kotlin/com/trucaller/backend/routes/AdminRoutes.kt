@@ -23,7 +23,8 @@ data class DashboardStats(
     val deviceCount: Long,
     val reportCount: Long,
     val alarmCount: Long,
-    val callerIdCount: Long
+    val callerIdCount: Long,
+    val smsSpamReportCount: Long
 )
 
 @Serializable
@@ -77,7 +78,8 @@ fun Route.adminRoutes() {
                     deviceCount = Collections.devices.countDocuments(),
                     reportCount = Collections.stolenReports.countDocuments(),
                     alarmCount = Collections.alarmLogs.countDocuments(),
-                    callerIdCount = Collections.callerIds.countDocuments()
+                    callerIdCount = Collections.callerIds.countDocuments(),
+                    smsSpamReportCount = Collections.smsSpamReports.countDocuments()
                 )
 
                 call.respond(
@@ -297,6 +299,37 @@ fun Route.adminRoutes() {
                     ApiResponse<Nothing>(
                         success = true,
                         message = "Caller ID entry updated"
+                    )
+                )
+            }
+
+            // ── GET /api/admin/sms-spam-reports ────────────────────────
+            get("/sms-spam-reports") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@get
+                }
+
+                val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
+
+                val reports = Collections.smsSpamReports
+                    .find()
+                    .skip(skip)
+                    .limit(limit)
+                    .toList()
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse(
+                        success = true,
+                        data = reports.map { it.toJson() },
+                        message = "Retrieved ${reports.size} SMS spam report(s)"
                     )
                 )
             }

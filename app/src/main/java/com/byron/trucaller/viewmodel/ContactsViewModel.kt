@@ -1,0 +1,243 @@
+package com.byron.trucaller.viewmodel
+
+import android.app.Application
+import android.content.Intent
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.byron.trucaller.TruCallerApplication
+import com.byron.trucaller.data.model.BlockedNumber
+import com.byron.trucaller.data.model.Contact
+import com.byron.trucaller.data.preferences.UserPreferences
+import com.byron.trucaller.data.repository.BlockedNumberRepository
+import com.byron.trucaller.data.repository.CallerIdRepository
+import com.byron.trucaller.data.repository.ContactRepository
+import com.byron.trucaller.service.ApiClient
+import com.byron.trucaller.service.DriveSyncService
+import com.byron.trucaller.util.readPhoneContacts
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+
+class ContactsViewModel(
+    application: Application,
+    private val contactRepository: ContactRepository,
+    private val preferences: UserPreferences,
+    private val blockedNumberRepository: BlockedNumberRepository,
+    private val callerIdRepository: CallerIdRepository
+) : AndroidViewModel(application) {
+
+    val autoBackup: Flow<Boolean> = preferences.autoBackup
+    private val driveSyncService = DriveSyncService(application)
+
+    private val _isSyncing = MutableStateFlow(false)
+    val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
+
+    private val _syncMessage = MutableStateFlow<String?>(null)
+    val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
+
+    fun getContactsByUser(userId: String): Flow<List<Contact>> = contactRepository.getContactsByUser(userId)
+    fun getAllContacts(): Flow<List<Contact>> = contactRepository.getAllContacts()
+    fun getContactCountByUser(userId: String): Flow<Int> = contactRepository.getContactCountByUser(userId)
+
+    fun setAutoBackup(enabled: Boolean, userId: String) {
+        viewModelScope.launch {
+            preferences.setAutoBackup(enabled)
+            if (enabled) {
+                contactRepository.updateAllBackupStatus(userId, true)
+            }
+        }
+    }
+
+    fun updateContact(contact: Contact) {
+        viewModelScope.launch {
+            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+            contactRepository.updateContact(contact.copy(syncedAt = now))
+            _syncMessage.value = "${contact.name} updated"
+        }
+    }
+
+    fun deleteContact(contact: Contact) {
+        viewModelScope.launch {
+            contactRepository.deleteContact(contact)
+            _syncMessage.value = "${contact.name} deleted"
+        }
+    }
+
+    fun blockContact(contact: Contact, userId: String) {
+        viewModelScope.launch {
+            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+            val blocked = BlockedNumber(
+                id = "blk-${System.currentTimeMillis()}",
+                userId = userId,
+                phoneNumber = contact.phoneNumber,
+                name = contact.name,
+                reason = "Blocked from contacts",
+                blockedAt = now
+            )
+            blockedNumberRepository.blockNumber(blocked)
+            _syncMessage.value = "${contact.name} has been blocked"
+        }
+    }
+
+    fun unblockContact(phoneNumber: String, userId: String, name: String) {
+        viewModelScope.launch {
+            blockedNumberRepository.unblockNumber(userId, phoneNumber)
+            _syncMessage.value = "$name has been unblocked"
+        }
+    }
+
+    suspend fun isContactBlocked(userId: String, phoneNumber: String): Boolean {
+        return blockedNumberRepository.isBlocked(userId, phoneNumber)
+    }
+
+    fun syncContacts(userId: String) {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+
+            // Step 1: Read contacts from the phone's contact book and import into Room DB
+            val importedCount = withContext(Dispatchers.IO) {
+                val phoneContacts = readPhoneContacts(getApplication())
+                var count = 0
+                phoneContacts.forEach { pc ->
+                    val existing = contactRepository.getContactByPhone(pc.phoneNumber)
+                    if (existing == null) {
+                        contactRepository.insertContact(
+                            Contact(
+                                id = "cnt-${userId}-${System.nanoTime()}",
+                                userId = userId,
+                                name = pc.name,
+                                phoneNumber = pc.phoneNumber,
+                                email = pc.email,
+                                syncedAt = now,
+                                isBackedUp = true
+                            )
+                        )
+                        count++
+                    } else if (existing.userId == userId) {
+                        // Update name/email if changed in phone contacts
+                        if (existing.name != pc.name || (pc.email != null && existing.email != pc.email)) {
+                            contactRepository.updateContact(
+                                existing.copy(
+                                    name = pc.name,
+                                    email = pc.email ?: existing.email,
+                                    syncedAt = now,
+                                    isBackedUp = true
+                                )
+                            )
+                        }
+                    }
+                }
+                count
+            }
+
+            // Step 2: Update all user's contacts' sync timestamp
+            // Use .first() to get a single snapshot instead of .collect{} which would
+            // re-emit on every update, causing an infinite loop race condition.
+            val list = contactRepository.getContactsByUser(userId).first()
+            list.forEach { contact ->
+                contactRepository.updateContact(
+                    contact.copy(syncedAt = now, isBackedUp = true)
+                )
+            }
+
+            // Step 3: Upload contacts to backend MongoDB
+            try {
+                val contactMaps = list.map { c ->
+                    mapOf(
+                        "name" to c.name,
+                        "phoneNumber" to c.phoneNumber,
+                        "email" to (c.email ?: "")
+                    )
+                }
+                withContext(Dispatchers.IO) {
+                    ApiClient.uploadContacts(contactMaps)
+                }
+            } catch (_: Exception) { }
+
+            // Step 3b: Upload caller IDs to backend MongoDB
+            var callerIdCount = 0
+            try {
+                val callerIds = withContext(Dispatchers.IO) {
+                    callerIdRepository.getAllEntriesOnce()
+                }
+                callerIdCount = callerIds.size
+                if (callerIds.isNotEmpty()) {
+                    val callerIdMaps = callerIds.map { entry ->
+                        mapOf(
+                            "phoneNumber" to entry.phoneNumber,
+                            "name" to entry.name,
+                            "spamScore" to entry.spamScore,
+                            "reportCount" to entry.reportCount,
+                            "category" to entry.category.name
+                        )
+                    }
+                    withContext(Dispatchers.IO) {
+                        ApiClient.uploadCallerIds(callerIdMaps)
+                    }
+                }
+            } catch (_: Exception) { }
+
+            // Step 4: Sync to Google Drive if signed in
+            if (driveSyncService.isSignedIn()) {
+                val result = driveSyncService.fullSync()
+                _isSyncing.value = false
+                _syncMessage.value = "Imported $importedCount new contacts. " +
+                        "${list.size} contacts & $callerIdCount caller IDs synced to Cloud & Drive."
+            } else {
+                _isSyncing.value = false
+                _syncMessage.value = "Imported $importedCount new contacts. " +
+                        "${list.size} contacts & $callerIdCount caller IDs backed up to cloud."
+            }
+        }
+    }
+
+    fun syncToGoogleDrive() {
+        viewModelScope.launch {
+            _isSyncing.value = true
+            if (driveSyncService.isSignedIn()) {
+                val result = driveSyncService.fullSync()
+                _isSyncing.value = false
+                _syncMessage.value = "Cloud sync complete. Downloaded ${result.newContactsDownloaded} new contacts, " +
+                        "${result.newCallerIdDownloaded} new caller IDs."
+            } else {
+                _isSyncing.value = false
+                _syncMessage.value = "Please sign in to Google first."
+            }
+        }
+    }
+
+    fun isDriveSignedIn(): Boolean = driveSyncService.isSignedIn()
+    fun getDriveSignInIntent(): Intent = driveSyncService.getSignInIntent()
+
+    fun clearSyncMessage() {
+        _syncMessage.value = null
+    }
+
+    companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val app = this[APPLICATION_KEY] as TruCallerApplication
+                ContactsViewModel(
+                    app,
+                    app.container.contactRepository,
+                    app.container.userPreferences,
+                    app.container.blockedNumberRepository,
+                    app.container.callerIdRepository
+                )
+            }
+        }
+    }
+}

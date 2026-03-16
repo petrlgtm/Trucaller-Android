@@ -18,16 +18,28 @@ data class RegisterRequest(
 )
 
 @Serializable
+data class SendOtpRequest(
+    val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
+    val purpose: String = "registration" // "registration" or "password_reset"
+)
+
+@Serializable
 data class OtpVerification(
     val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
-    val code: String,
-    val expiresAt: Long            // Unix timestamp millis
+    val code: String
 )
 
 @Serializable
 data class AdminLoginRequest(
     val email: String,
     val password: String
+)
+
+@Serializable
+data class ResetPasswordRequest(
+    val phoneNumber: String,        // E.164 format: "+256XXXXXXXXX"
+    val code: String,
+    val newPassword: String
 )
 
 // ── Response DTOs ──

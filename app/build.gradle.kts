@@ -6,30 +6,36 @@ plugins {
 }
 
 android {
-    namespace = "com.example.trucaller"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    namespace = "com.byron.trucaller"
+    compileSdk = 35
 
     defaultConfig {
-        applicationId = "com.example.trucaller"
-        minSdk = 24
-        targetSdk = 36
+        applicationId = "com.byron.trucaller"
+        minSdk = 29
+        targetSdk = 35
         versionCode = 1
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            storeFile = file("release-keystore.jks")
+            storePassword = "trucaller123"
+            keyAlias = "trucaller"
+            keyPassword = "trucaller123"
+        }
+    }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            signingConfig = signingConfigs.getByName("release")
         }
     }
     compileOptions {
@@ -78,9 +84,15 @@ dependencies {
     ksp(libs.room.compiler)
     implementation(libs.datastore.preferences)
     implementation(libs.play.services.auth)
+    implementation(libs.play.services.location)
     implementation(libs.google.api.client.android)
     implementation(libs.google.api.services.drive)
     implementation(libs.gson)
     implementation(platform(libs.firebase.bom))
     implementation(libs.firebase.auth)
+    implementation(libs.firebase.analytics)
+    implementation(libs.firebase.messaging)
+    implementation(libs.osmdroid.android)
+    implementation(libs.okhttp)
+    implementation(libs.okhttp.logging)
 }

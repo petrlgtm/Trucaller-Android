@@ -94,6 +94,7 @@ fun Route.alarmRoutes() {
 
         // GET /api/alarms/logs/{deviceId}
         get("/api/alarms/logs/{deviceId}") {
+            val currentUserId = call.userId()
             val deviceId = call.parameters["deviceId"]
             if (deviceId == null) {
                 call.respond(
@@ -102,6 +103,18 @@ fun Route.alarmRoutes() {
                         success = false,
                         error = "Missing deviceId"
                     )
+                )
+                return@get
+            }
+
+            // Ownership check
+            val deviceDoc = Collections.devices
+                .find(Filters.eq("deviceId", deviceId))
+                .firstOrNull()
+            if (deviceDoc != null && deviceDoc.getString("userId") != currentUserId) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiResponse<Nothing>(success = false, error = "Access denied")
                 )
                 return@get
             }

@@ -131,6 +131,7 @@ fun Route.stolenReportRoutes() {
 
         // PUT /api/stolen/reports/{id}/status
         put("/api/stolen/reports/{id}/status") {
+            val userId = call.userId()
             val reportId = call.parameters["id"]
             if (reportId == null) {
                 call.respond(
@@ -156,10 +157,38 @@ fun Route.stolenReportRoutes() {
                 return@put
             }
 
-            Collections.stolenReports.updateOne(
-                Filters.eq("_id", reportId),
+            // Validate status value
+            val validStatuses = listOf("PENDING", "VERIFIED", "ESCALATED", "RESOLVED")
+            if (request.status !in validStatuses) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Nothing>(
+                        success = false,
+                        error = "Invalid status. Must be one of: ${validStatuses.joinToString()}"
+                    )
+                )
+                return@put
+            }
+
+            // Ownership check: only the reporter can update their own report
+            val result = Collections.stolenReports.updateOne(
+                Filters.and(
+                    Filters.eq("_id", reportId),
+                    Filters.eq("reportedBy", userId)
+                ),
                 Document("\$set", Document("status", request.status))
             )
+
+            if (result.matchedCount == 0L) {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiResponse<Nothing>(
+                        success = false,
+                        error = "Report not found or access denied"
+                    )
+                )
+                return@put
+            }
 
             call.respond(
                 HttpStatusCode.OK,

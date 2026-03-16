@@ -13,6 +13,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
 import org.bson.Document
@@ -216,6 +217,7 @@ private fun Route.getDevicesByUser() {
 
 private fun Route.getIpLogsByDevice() {
     get("/{deviceId}/ip-logs") {
+        val currentUserId = call.userId()
         val deviceId = call.parameters["deviceId"]
 
         if (deviceId.isNullOrBlank()) {
@@ -225,6 +227,19 @@ private fun Route.getIpLogsByDevice() {
                     success = false,
                     error = "Path parameter 'deviceId' is required."
                 )
+            )
+            return@get
+        }
+
+        // Ownership check: verify the device belongs to the requesting user
+        val deviceDoc = Collections.devices
+            .find(Filters.eq("deviceId", deviceId))
+            .firstOrNull()
+
+        if (deviceDoc != null && deviceDoc.getString("userId") != currentUserId) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                ApiResponse<Unit>(success = false, error = "Access denied")
             )
             return@get
         }

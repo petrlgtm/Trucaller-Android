@@ -126,7 +126,7 @@ fun Route.adminAuthRoutes() {
                 Updates.set("lastLogin", Instant.now().toString())
             )
 
-            val expiresIn = 3600L // 1 hour in seconds
+            val expiresIn = JwtConfig.expiresInSeconds()
 
             call.respond(
                 HttpStatusCode.OK,

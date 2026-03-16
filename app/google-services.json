@@ -1,22 +1,37 @@
 {
   "project_info": {
-    "project_number": "YOUR_PROJECT_NUMBER",
-    "project_id": "YOUR_PROJECT_ID",
-    "storage_bucket": "YOUR_PROJECT_ID.appspot.com"
+    "project_number": "827232813478",
+    "project_id": "trucaller-a6c9d",
+    "storage_bucket": "trucaller-a6c9d.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:YOUR_PROJECT_NUMBER:android:YOUR_APP_HASH",
+        "mobilesdk_app_id": "1:827232813478:android:3393fe05c55e5672a7cf67",
         "android_client_info": {
-          "package_name": "com.example.trucaller"
+          "package_name": "com.byron.trucaller"
         }
       },
+      "oauth_client": [
+        {
+          "client_id": "827232813478-hnk2cqod62pnsfgdkg2mjqqiqjo38t1p.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.byron.trucaller",
+            "certificate_hash": "fb7499d8efa14e5c0bb3eef9a623314e174bb380"
+          }
+        }
+      ],
       "api_key": [
         {
-          "current_key": "YOUR_API_KEY"
+          "current_key": "AIzaSyDVud3q_wGB3vb62EdoyyGQYZvHRbEUzGc"
         }
-      ]
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"

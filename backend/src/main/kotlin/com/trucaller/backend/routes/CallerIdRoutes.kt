@@ -147,6 +147,73 @@ fun Route.callerIdRoutes() {
                 )
             }
 
+            // ── POST /api/caller-id/upload ────────────────────────────────
+            post("/upload") {
+                @Serializable
+                data class CallerIdUpload(
+                    val phoneNumber: String,
+                    val name: String,
+                    val spamScore: Int = 0,
+                    val reportCount: Int = 0,
+                    val category: String = "SAFE"
+                )
+
+                @Serializable
+                data class BulkUploadRequest(val entries: List<CallerIdUpload>)
+
+                val request = try {
+                    call.receive<BulkUploadRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Unit>(success = false, error = "Invalid request body. 'entries' array is required.")
+                    )
+                    return@post
+                }
+
+                val now = Instant.now().toString()
+                var inserted = 0
+                var updated = 0
+
+                for (entry in request.entries) {
+                    val phoneNumber = normalizeToE164(entry.phoneNumber)
+                    val existing = Collections.callerIds
+                        .find(Filters.eq("phoneNumber", phoneNumber))
+                        .firstOrNull()
+
+                    if (existing != null) {
+                        // Update name if it changed
+                        Collections.callerIds.updateOne(
+                            Filters.eq("phoneNumber", phoneNumber),
+                            Updates.combine(
+                                Updates.set("name", entry.name),
+                                Updates.set("lastUpdated", now)
+                            )
+                        )
+                        updated++
+                    } else {
+                        val doc = Document()
+                            .append("_id", ObjectId().toString())
+                            .append("phoneNumber", phoneNumber)
+                            .append("name", entry.name)
+                            .append("spamScore", entry.spamScore)
+                            .append("reportCount", entry.reportCount)
+                            .append("category", entry.category)
+                            .append("lastUpdated", now)
+                        Collections.callerIds.insertOne(doc)
+                        inserted++
+                    }
+                }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse<Unit>(
+                        success = true,
+                        message = "Caller IDs synced: $inserted new, $updated updated."
+                    )
+                )
+            }
+
             // ── POST /api/caller-id/report ──────────────────────────────
             post("/report") {
                 val request = try {
