@@ -26,12 +26,12 @@ class AppContainer(context: Context) {
     val userRepository = UserRepository(database.userDao(), database.adminUserDao())
     val deviceRepository = DeviceRepository(database.deviceDao(), database.ipLogDao())
     val contactRepository = ContactRepository(database.contactDao())
-    val callerIdRepository = CallerIdRepository(database.callerIdDao(), database.contactDao(), database.userDao())
+    val contactAliasDao = database.contactAliasDao()
+    val callerIdRepository = CallerIdRepository(database.callerIdDao(), database.contactDao(), database.userDao(), contactAliasDao)
     val stolenReportRepository = StolenReportRepository(database.stolenReportDao())
     val alarmRepository = AlarmRepository(database.alarmLogDao())
     val blockedNumberRepository = BlockedNumberRepository(database.blockedNumberDao())
     val smsRepository = SmsRepository(database.smsSpamDao(), callerIdRepository, blockedNumberRepository)
-    val contactAliasDao = database.contactAliasDao()
 
     suspend fun seedDatabaseIfEmpty() {
         if (database.userDao().count() == 0) {

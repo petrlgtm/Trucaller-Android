@@ -1,18 +1,21 @@
 package com.byron.trucaller.data.repository
 
 import com.byron.trucaller.data.dao.CallerIdDao
+import com.byron.trucaller.data.dao.ContactAliasDao
 import com.byron.trucaller.data.dao.ContactDao
 import com.byron.trucaller.data.dao.UserDao
 import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.Contact
 import com.byron.trucaller.data.model.SpamCategory
 import com.byron.trucaller.service.ApiClient
+import com.byron.trucaller.util.PhoneUtils
 import kotlinx.coroutines.flow.Flow
 
 class CallerIdRepository(
     private val callerIdDao: CallerIdDao,
     private val contactDao: ContactDao,
-    private val userDao: UserDao
+    private val userDao: UserDao,
+    private val contactAliasDao: ContactAliasDao
 ) {
     fun getAllEntries(): Flow<List<CallerIdEntry>> = callerIdDao.getAll()
     fun searchEntries(query: String): Flow<List<CallerIdEntry>> = callerIdDao.search(query)
@@ -31,12 +34,7 @@ class CallerIdRepository(
      * return their name.
      */
     suspend fun lookupNumber(rawQuery: String): LookupResult {
-        var query = rawQuery.replace(" ", "").replace("-", "")
-        if (query.startsWith("+256")) query = query.substring(4)
-        else if (query.startsWith("256")) query = query.substring(3)
-        else if (query.startsWith("0")) query = query.substring(1)
-
-        val fullPhone = "+256$query"
+        val fullPhone = PhoneUtils.normalizePhone(rawQuery)
 
         // 1. Check caller ID database
         val callerIdEntry = callerIdDao.getByPhone(fullPhone)
@@ -80,7 +78,30 @@ class CallerIdRepository(
             )
         }
 
-        // 4. Remote API fallback — query the backend for community-sourced caller ID
+        // 4. Check contact aliases — user-assigned or imported alternate names for this number
+        val aliases = contactAliasDao.getAliasesByPhoneOnce(fullPhone)
+        if (aliases.isNotEmpty()) {
+            val sourcePriority = listOf("user", "contact_book", "whatsapp", "caller_id")
+            val bestAlias = aliases.sortedBy { alias ->
+                val idx = sourcePriority.indexOf(alias.source)
+                if (idx == -1) sourcePriority.size else idx
+            }.first()
+            return LookupResult(
+                callerIdEntry = CallerIdEntry(
+                    id = "alias-${bestAlias.id}",
+                    phoneNumber = bestAlias.phoneNumber,
+                    name = bestAlias.name,
+                    spamScore = 0,
+                    reportCount = 0,
+                    category = SpamCategory.SAFE,
+                    lastUpdated = bestAlias.addedAt
+                ),
+                contactMatch = null,
+                source = "alias"
+            )
+        }
+
+        // 5. Remote API fallback — query the backend for community-sourced caller ID
         try {
             val result = ApiClient.lookupCallerId(fullPhone)
             if (result.success && result.data != null) {
