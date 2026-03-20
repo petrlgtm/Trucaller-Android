@@ -11,16 +11,21 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.CallLogEntry
 import com.byron.trucaller.data.model.CallType
+import com.byron.trucaller.data.preferences.UserPreferences
+import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.util.CallLogReader
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 class CallLogViewModel(
     application: Application,
-    private val callerIdRepository: CallerIdRepository
+    private val callerIdRepository: CallerIdRepository,
+    private val blockedNumberRepository: BlockedNumberRepository,
+    private val userPreferences: UserPreferences
 ) : AndroidViewModel(application) {
 
     private val _callLogEntries = MutableStateFlow<List<CallLogEntry>>(emptyList())
@@ -56,14 +61,24 @@ class CallLogViewModel(
     private suspend fun enrichWithCallerIdData(entry: CallLogEntry): CallLogEntry {
         return try {
             val lookup = callerIdRepository.lookupNumber(entry.phoneNumber)
+
+            // Check if the number is blocked by the current user
+            val userId = userPreferences.loggedInUserId.first()
+            val blocked = if (userId != null) {
+                blockedNumberRepository.isBlocked(userId, entry.phoneNumber)
+            } else {
+                entry.callType == CallType.BLOCKED || entry.callType == CallType.REJECTED
+            }
+
             if (lookup.callerIdEntry != null) {
                 entry.copy(
                     name = entry.name ?: lookup.callerIdEntry.name,
                     isSpam = lookup.callerIdEntry.spamScore > 30,
-                    spamScore = lookup.callerIdEntry.spamScore
+                    spamScore = lookup.callerIdEntry.spamScore,
+                    isBlocked = blocked
                 )
             } else {
-                entry
+                entry.copy(isBlocked = blocked)
             }
         } catch (_: Exception) {
             entry
@@ -87,6 +102,9 @@ class CallLogViewModel(
             CallLogFilter.INCOMING -> all.filter { it.callType == CallType.INCOMING }
             CallLogFilter.OUTGOING -> all.filter { it.callType == CallType.OUTGOING }
             CallLogFilter.MISSED -> all.filter { it.callType == CallType.MISSED }
+            CallLogFilter.BLOCKED -> all.filter {
+                it.callType == CallType.BLOCKED || it.callType == CallType.REJECTED || it.isBlocked
+            }
         }
 
         return if (query.isBlank()) {
@@ -109,7 +127,9 @@ class CallLogViewModel(
                 val app = this[APPLICATION_KEY] as TruCallerApplication
                 CallLogViewModel(
                     app,
-                    app.container.callerIdRepository
+                    app.container.callerIdRepository,
+                    app.container.blockedNumberRepository,
+                    app.container.userPreferences
                 )
             }
         }
@@ -117,5 +137,5 @@ class CallLogViewModel(
 }
 
 enum class CallLogFilter {
-    ALL, INCOMING, OUTGOING, MISSED
+    ALL, INCOMING, OUTGOING, MISSED, BLOCKED
 }

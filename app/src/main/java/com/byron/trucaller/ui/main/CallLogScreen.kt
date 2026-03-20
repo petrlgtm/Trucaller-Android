@@ -187,12 +187,16 @@ fun CallLogScreen(
                     CallLogFilter.INCOMING -> Color(0xFF4CAF50)
                     CallLogFilter.OUTGOING -> Color(0xFF42A5F5)
                     CallLogFilter.MISSED -> colorScheme.error
+                    CallLogFilter.BLOCKED -> Color(0xFF757575)
                 }
                 val count = when (filter) {
                     CallLogFilter.ALL -> callLogEntries.size
                     CallLogFilter.INCOMING -> callLogEntries.count { it.callType == CallType.INCOMING }
                     CallLogFilter.OUTGOING -> callLogEntries.count { it.callType == CallType.OUTGOING }
                     CallLogFilter.MISSED -> callLogEntries.count { it.callType == CallType.MISSED }
+                    CallLogFilter.BLOCKED -> callLogEntries.count {
+                        it.callType == CallType.BLOCKED || it.callType == CallType.REJECTED || it.isBlocked
+                    }
                 }
 
                 FilterChip(
@@ -217,7 +221,7 @@ fun CallLogScreen(
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = chipColor,
-                        selectedLabelColor = if (filter == CallLogFilter.MISSED) colorScheme.onError else colorScheme.onPrimary,
+                        selectedLabelColor = if (filter == CallLogFilter.MISSED || filter == CallLogFilter.BLOCKED) colorScheme.onError else colorScheme.onPrimary,
                         containerColor = colorScheme.surfaceVariant,
                         labelColor = colorScheme.onSurface.copy(alpha = 0.7f)
                     ),
@@ -264,6 +268,7 @@ fun CallLogScreen(
                         CallLogFilter.INCOMING -> Pair("No incoming calls", "Incoming calls will appear here.")
                         CallLogFilter.OUTGOING -> Pair("No outgoing calls", "Outgoing calls will appear here.")
                         CallLogFilter.MISSED -> Pair("No missed calls", "You haven't missed any calls. Nice!")
+                        CallLogFilter.BLOCKED -> Pair("No blocked calls", "Calls from blocked numbers will appear here.")
                     }
                     EmptyStateView(
                         title = emptyTitle,
@@ -625,6 +630,15 @@ private fun CallLogItem(
                 }
 
                 Spacer(modifier = Modifier.weight(1f))
+
+                // Blocked badge
+                if (entry.isBlocked) {
+                    TruCallerBadge(
+                        text = "Blocked",
+                        type = BadgeType.Spam,
+                        icon = Icons.Default.Block
+                    )
+                }
 
                 // Spam badge using TruCallerBadge
                 if (entry.isSpam && entry.spamScore > 30) {

@@ -8,7 +8,8 @@ data class CallLogEntry(
     val duration: Long,  // seconds
     val timestamp: Long, // millis
     val isSpam: Boolean = false,
-    val spamScore: Int = 0
+    val spamScore: Int = 0,
+    val isBlocked: Boolean = false
 )
 
 enum class CallType {
