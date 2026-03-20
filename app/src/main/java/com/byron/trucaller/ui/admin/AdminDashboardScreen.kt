@@ -20,18 +20,21 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -48,9 +51,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.byron.trucaller.data.model.AlarmLog
+import com.byron.trucaller.data.model.AlarmType
+import com.byron.trucaller.data.model.StolenReport
+import com.byron.trucaller.ui.components.EmptyStateIcon
+import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.components.TruCallerHeader
 import com.byron.trucaller.ui.theme.Spacing
@@ -60,6 +69,33 @@ import com.byron.trucaller.viewmodel.ContactsViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.concurrent.TimeUnit
+
+// ── Activity Type ────────────────────────────────────────────────────────────
+
+/** Represents the type of an admin dashboard activity event. */
+enum class AdminActivityType {
+    STOLEN_REPORT,
+    ALARM_TRIGGERED,
+    LOCATION_REQUEST,
+    DEVICE_LOCKED
+}
+
+/**
+ * A unified activity item that merges different event sources (stolen reports,
+ * alarm logs) into a single sortable model for the Recent Activity feed.
+ */
+private data class AdminActivityItem(
+    val id: String,
+    val type: AdminActivityType,
+    val title: String,
+    val subtitle: String,
+    val timestamp: String,
+    val navigationRoute: String
+)
 
 @Composable
 fun AdminDashboardScreen(
@@ -78,13 +114,21 @@ fun AdminDashboardScreen(
     val pendingAlarms by alarmViewModel.pendingCount.collectAsState(initial = 0)
     val userCount by deviceViewModel.userCount.collectAsState(initial = 0)
 
+    // Build unified activity feed from stolen reports + alarm logs
+    val recentActivity = remember(reports, alarmLogs) {
+        buildRecentActivityList(reports, alarmLogs)
+    }
+
     // Staggered entrance animation state
     var statsVisible by remember { mutableStateOf(false) }
+    var activityVisible by remember { mutableStateOf(false) }
     var menuVisible by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         delay(150)
         statsVisible = true
+        delay(200)
+        activityVisible = true
         delay(200)
         menuVisible = true
     }
@@ -179,6 +223,58 @@ fun AdminDashboardScreen(
                         targetValue = pendingAlarms,
                         accentColor = colorScheme.primary
                     )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.lg))
+
+            // Recent Activity
+            AnimatedVisibility(
+                visible = activityVisible,
+                enter = fadeIn(animationSpec = tween(400, delayMillis = 50)) +
+                        slideInVertically(
+                            animationSpec = tween(400, delayMillis = 50),
+                            initialOffsetY = { it / 6 }
+                        )
+            ) {
+                Column {
+                    Text(
+                        "Recent Activity",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    if (recentActivity.isEmpty()) {
+                        TruCallerCard {
+                            EmptyStateView(
+                                title = "No activity yet",
+                                subtitle = "Recent stolen reports, alarm triggers, and other events will appear here.",
+                                icon = EmptyStateIcon.GENERIC,
+                                modifier = Modifier.height(200.dp)
+                            )
+                        }
+                    } else {
+                        TruCallerCard {
+                            Column {
+                                recentActivity.forEachIndexed { index, item ->
+                                    RecentActivityRow(
+                                        item = item,
+                                        onClick = {
+                                            navController.navigate(item.navigationRoute)
+                                        }
+                                    )
+                                    if (index < recentActivity.lastIndex) {
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(horizontal = Spacing.md),
+                                            color = colorScheme.outlineVariant.copy(alpha = 0.4f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -337,5 +433,142 @@ private fun AdminMenuItem(
             tint = colorScheme.onSurfaceVariant,
             modifier = Modifier.size(20.dp)
         )
+    }
+}
+
+// ── Recent Activity Row ──────────────────────────────────────────────────────
+
+@Composable
+private fun RecentActivityRow(
+    item: AdminActivityItem,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    val (icon, iconColor) = when (item.type) {
+        AdminActivityType.STOLEN_REPORT -> Icons.Default.Warning to colorScheme.error
+        AdminActivityType.ALARM_TRIGGERED -> Icons.Default.NotificationsActive to Color(0xFFFF9800)
+        AdminActivityType.LOCATION_REQUEST -> Icons.Default.LocationOn to Color(0xFF2196F3)
+        AdminActivityType.DEVICE_LOCKED -> Icons.Default.Lock to Color(0xFF9C27B0)
+    }
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(horizontal = Spacing.md, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(iconColor.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, null, tint = iconColor, modifier = Modifier.size(18.dp))
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                item.title,
+                fontWeight = FontWeight.Medium,
+                fontSize = 14.sp,
+                color = colorScheme.onSurface,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                item.subtitle,
+                fontSize = 12.sp,
+                color = colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            formatRelativeTime(item.timestamp),
+            fontSize = 11.sp,
+            color = colorScheme.onSurfaceVariant,
+            maxLines = 1
+        )
+    }
+}
+
+// ── Activity List Builder ────────────────────────────────────────────────────
+
+/**
+ * Merges stolen reports and alarm logs into a unified activity feed,
+ * sorted by timestamp descending, limited to the 10 most recent items.
+ */
+private fun buildRecentActivityList(
+    reports: List<StolenReport>,
+    alarmLogs: List<AlarmLog>
+): List<AdminActivityItem> {
+    val reportItems = reports.map { report ->
+        AdminActivityItem(
+            id = report.id,
+            type = AdminActivityType.STOLEN_REPORT,
+            title = "Stolen device reported",
+            subtitle = "Device ${report.deviceId.take(12)}... - ${report.status.name.lowercase().replaceFirstChar { it.uppercase() }}",
+            timestamp = report.reportedAt,
+            navigationRoute = "admin_stolen_reports"
+        )
+    }
+
+    val alarmItems = alarmLogs.map { log ->
+        val (type, title) = when (log.type) {
+            AlarmType.REMOTE_ALARM -> AdminActivityType.ALARM_TRIGGERED to "Alarm triggered"
+            AlarmType.LOCATION_REQUEST -> AdminActivityType.LOCATION_REQUEST to "Location requested"
+            AlarmType.LOCK_DEVICE -> AdminActivityType.DEVICE_LOCKED to "Device lock triggered"
+        }
+        AdminActivityItem(
+            id = log.id,
+            type = type,
+            title = title,
+            subtitle = "By ${log.triggeredByName} - ${log.result.name.lowercase().replaceFirstChar { it.uppercase() }}",
+            timestamp = log.triggeredAt,
+            navigationRoute = "admin_alarm_logs"
+        )
+    }
+
+    return (reportItems + alarmItems)
+        .sortedByDescending { it.timestamp }
+        .take(10)
+}
+
+// ── Relative Time Formatter ──────────────────────────────────────────────────
+
+/**
+ * Converts an ISO-8601 timestamp string to a human-readable relative time
+ * (e.g., "2h ago", "3d ago", "Just now").
+ */
+private fun formatRelativeTime(isoTimestamp: String): String {
+    return try {
+        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        val date = format.parse(isoTimestamp) ?: return isoTimestamp
+        val now = Date()
+        val diffMs = now.time - date.time
+
+        if (diffMs < 0) return "Just now"
+
+        val minutes = TimeUnit.MILLISECONDS.toMinutes(diffMs)
+        val hours = TimeUnit.MILLISECONDS.toHours(diffMs)
+        val days = TimeUnit.MILLISECONDS.toDays(diffMs)
+        val weeks = days / 7
+
+        when {
+            minutes < 1 -> "Just now"
+            minutes < 60 -> "${minutes}m ago"
+            hours < 24 -> "${hours}h ago"
+            days < 7 -> "${days}d ago"
+            weeks < 4 -> "${weeks}w ago"
+            else -> {
+                val displayFormat = SimpleDateFormat("MMM d", Locale.US)
+                displayFormat.format(date)
+            }
+        }
+    } catch (_: Exception) {
+        isoTimestamp
     }
 }
