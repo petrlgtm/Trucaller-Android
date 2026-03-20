@@ -1,5 +1,6 @@
 package com.byron.trucaller.ui.admin
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -13,18 +14,28 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -41,14 +52,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.byron.trucaller.data.model.Device
 import com.byron.trucaller.data.model.DeviceStatus
 import com.byron.trucaller.ui.components.BadgeType
-import com.byron.trucaller.ui.components.EmptyStateIcon
-import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.ShimmerLoadingCard
 import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerButton
@@ -59,6 +69,7 @@ import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
+import com.byron.trucaller.viewmodel.StolenReportViewModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -67,20 +78,51 @@ fun AdminDeviceDetailScreen(
     deviceId: String,
     deviceViewModel: DeviceViewModel,
     alarmViewModel: AlarmViewModel,
-    authViewModel: AuthViewModel
+    authViewModel: AuthViewModel,
+    stolenReportViewModel: StolenReportViewModel
 ) {
     var device by remember { mutableStateOf<Device?>(null) }
     var showAlarmDialog by remember { mutableStateOf(false) }
+    var showLockConfirmDialog by remember { mutableStateOf(false) }
+    var showStolenPromptDialog by remember { mutableStateOf(false) }
+    var showAutoResolvedDialog by remember { mutableStateOf(false) }
 
     val alarmPlaying by alarmViewModel.alarmPlaying.collectAsState()
     val adminUser by authViewModel.adminUser.collectAsState()
+    val actionMessage by alarmViewModel.actionMessage.collectAsState()
+    val statusUpdating by deviceViewModel.statusUpdating.collectAsState()
+    val deviceStatusMessage by deviceViewModel.statusMessage.collectAsState()
     val ipLogs by deviceViewModel.getIpLogs(deviceId).collectAsState(initial = emptyList())
     val alarmLogs by alarmViewModel.getLogsByDevice(deviceId).collectAsState(initial = emptyList())
 
+    val snackbarHostState = remember { SnackbarHostState() }
     val colorScheme = MaterialTheme.colorScheme
+
+    // Show alarm action result via snackbar
+    LaunchedEffect(actionMessage) {
+        actionMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            alarmViewModel.clearActionMessage()
+        }
+    }
+
+    // Show device status change result via snackbar
+    LaunchedEffect(deviceStatusMessage) {
+        deviceStatusMessage?.let {
+            snackbarHostState.showSnackbar(it)
+            deviceViewModel.clearStatusMessage()
+        }
+    }
 
     LaunchedEffect(deviceId) {
         device = deviceViewModel.getDeviceById(deviceId)
+    }
+
+    // Refresh device after status update completes
+    LaunchedEffect(statusUpdating) {
+        if (!statusUpdating) {
+            device = deviceViewModel.getDeviceById(deviceId)
+        }
     }
 
     if (device == null) {
@@ -122,26 +164,111 @@ fun AdminDeviceDetailScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
-        TopAppBar(
-            title = {
+    if (showLockConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showLockConfirmDialog = false },
+            title = { Text("Lock Device?") },
+            text = {
                 Text(
-                    "${dev.manufacturer} ${dev.model}",
-                    fontWeight = FontWeight.Bold,
-                    color = colorScheme.onPrimary
+                    "This will immediately lock the device screen. " +
+                    "The device owner will need their PIN or password to unlock."
                 )
             },
-            navigationIcon = {
-                IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
+            confirmButton = {
+                TextButton(onClick = {
+                    showLockConfirmDialog = false
+                    val admin = adminUser
+                    if (admin != null) {
+                        alarmViewModel.lockDevice(
+                            deviceId = deviceId,
+                            triggeredBy = admin.id,
+                            triggeredByName = admin.name,
+                            triggeredByRole = "admin"
+                        )
+                    }
+                }) {
+                    Text("Lock", color = colorScheme.error)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+            dismissButton = {
+                TextButton(onClick = { showLockConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
         )
+    }
 
+    // Prompt: changing to STOLEN — optionally create a stolen report
+    if (showStolenPromptDialog) {
+        AlertDialog(
+            onDismissRequest = { showStolenPromptDialog = false },
+            title = { Text("Create Stolen Report?") },
+            text = {
+                Text(
+                    "The device has been marked as STOLEN. " +
+                    "Would you like to create a stolen report for this device?"
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    showStolenPromptDialog = false
+                    navController.navigate("admin_stolen_reports")
+                }) {
+                    Text("Create Report")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showStolenPromptDialog = false }) {
+                    Text("Skip")
+                }
+            }
+        )
+    }
+
+    // Info: auto-resolved pending stolen reports
+    if (showAutoResolvedDialog) {
+        AlertDialog(
+            onDismissRequest = { showAutoResolvedDialog = false },
+            title = { Text("Reports Auto-Resolved") },
+            text = {
+                Text(
+                    "Device status changed to ACTIVE. All pending stolen reports " +
+                    "for this device have been automatically resolved."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { showAutoResolvedDialog = false }) {
+                    Text("OK")
+                }
+            }
+        )
+    }
+
+    Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "${dev.manufacturer} ${dev.model}",
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onPrimary
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = { navController.popBackStack() }) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+            )
+        },
+        containerColor = colorScheme.background
+    ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
                 .padding(Spacing.md)
         ) {
@@ -212,24 +339,65 @@ fun AdminDeviceDetailScreen(
             Spacer(modifier = Modifier.height(Spacing.md))
 
             // Actions
-            TruCallerButton(
-                text = "Trigger Alarm",
-                onClick = {
-                    val admin = adminUser
-                    if (admin != null) {
-                        alarmViewModel.triggerAlarm(
-                            deviceId = deviceId,
-                            triggeredBy = admin.id,
-                            triggeredByName = admin.name,
-                            triggeredByRole = "admin"
-                        )
-                    }
-                    showAlarmDialog = true
-                },
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                style = TruCallerButtonStyle.Danger,
-                leadingIcon = Icons.Default.Alarm
-            )
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                TruCallerButton(
+                    text = "Alarm",
+                    onClick = {
+                        val admin = adminUser
+                        if (admin != null) {
+                            alarmViewModel.triggerAlarm(
+                                deviceId = deviceId,
+                                triggeredBy = admin.id,
+                                triggeredByName = admin.name,
+                                triggeredByRole = "admin"
+                            )
+                        }
+                        showAlarmDialog = true
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = TruCallerButtonStyle.Danger,
+                    leadingIcon = Icons.Default.Alarm
+                )
+                TruCallerButton(
+                    text = "Lock",
+                    onClick = { showLockConfirmDialog = true },
+                    modifier = Modifier.weight(1f),
+                    style = TruCallerButtonStyle.Warning,
+                    leadingIcon = Icons.Default.Lock
+                )
+                TruCallerButton(
+                    text = "Location",
+                    onClick = {
+                        val admin = adminUser
+                        if (admin != null) {
+                            alarmViewModel.requestLocation(
+                                deviceId = deviceId,
+                                triggeredBy = admin.id,
+                                triggeredByName = admin.name,
+                                triggeredByRole = "admin"
+                            )
+                        }
+                    },
+                    modifier = Modifier.weight(1f),
+                    style = TruCallerButtonStyle.Primary,
+                    leadingIcon = Icons.Default.LocationOn
+                )
+            }
+
+            // Show testing note when device is not STOLEN
+            if (dev.status != DeviceStatus.STOLEN) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Testing mode \u2014 device is not marked as stolen",
+                    fontSize = 12.sp,
+                    color = colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
 
             Spacer(modifier = Modifier.height(20.dp))
 

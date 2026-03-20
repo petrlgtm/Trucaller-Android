@@ -43,7 +43,9 @@ enum class TruCallerButtonStyle {
     /** Outlined button with primary-colored border and text. */
     Secondary,
     /** Filled button with error (red) background for destructive actions. */
-    Danger
+    Danger,
+    /** Filled button with amber/orange background for warning-level actions. */
+    Warning
 }
 
 /**
@@ -102,6 +104,12 @@ fun TruCallerButton(
             contentColor = colorScheme.onError
             disabledContainerColor = colorScheme.error.copy(alpha = 0.38f)
             disabledContentColor = colorScheme.onError.copy(alpha = 0.38f)
+        }
+        TruCallerButtonStyle.Warning -> {
+            containerColor = Color(0xFFFF8F00) // Amber 800
+            contentColor = Color.White
+            disabledContainerColor = Color(0xFFFF8F00).copy(alpha = 0.38f)
+            disabledContentColor = Color.White.copy(alpha = 0.38f)
         }
         TruCallerButtonStyle.Secondary -> {
             // Handled by OutlinedButton below; values unused but required by exhaustive when.
