@@ -1,5 +1,7 @@
 package com.byron.trucaller.ui.auth
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -10,8 +12,9 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
@@ -21,14 +24,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -52,23 +51,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Accent
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Divider
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerTextField
 import com.byron.trucaller.util.isValidPhoneInput
 import com.byron.trucaller.util.maskPhoneNumber
 import com.byron.trucaller.viewmodel.AuthViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -86,6 +80,31 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
+    val colorScheme = MaterialTheme.colorScheme
+
+    // Shake animation for error feedback
+    val shakeOffset = remember { Animatable(0f) }
+
+    LaunchedEffect(error) {
+        if (error != null) {
+            shakeOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = keyframes {
+                    durationMillis = 400
+                    0f at 0
+                    -12f at 50
+                    12f at 100
+                    -10f at 150
+                    10f at 200
+                    -6f at 250
+                    6f at 300
+                    -2f at 350
+                    0f at 400
+                }
+            )
+        }
+    }
+
     LaunchedEffect(countdown) {
         if (countdown > 0) {
             delay(1000)
@@ -96,10 +115,17 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(colorScheme.background)
+            .imePadding()
     ) {
         TopAppBar(
-            title = { Text("Reset Password", fontWeight = FontWeight.Bold, color = Color.White) },
+            title = {
+                Text(
+                    "Reset Password",
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onPrimary
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = {
                     if (step > 1 && !success) {
@@ -109,10 +135,16 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                         navController.popBackStack()
                     }
                 }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        "Back",
+                        tint = colorScheme.onPrimary
+                    )
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = colorScheme.onPrimary
+            )
         )
 
         Column(
@@ -124,52 +156,89 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
         ) {
             if (success) {
                 Spacer(modifier = Modifier.height(40.dp))
-                Text("Password Reset Successfully!", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = Success)
+                Text(
+                    "Password Reset Successfully!",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.primary
+                )
                 Spacer(modifier = Modifier.height(12.dp))
-                Text("You can now login with your new password.", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                Text(
+                    "You can now login with your new password.",
+                    color = colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    textAlign = TextAlign.Center
+                )
                 Spacer(modifier = Modifier.height(32.dp))
-                Button(
+                TruCallerButton(
+                    text = "Back to Login",
                     onClick = { navController.popBackStack() },
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Brand)
-                ) {
-                    Text("Back to Login", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                )
             } else when (step) {
                 // Step 1: Enter phone number
                 1 -> {
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text("Reset Your Password", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(
+                        "Reset Your Password",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onBackground
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Enter your phone number to receive a verification code", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    Text(
+                        "Enter your phone number to receive a verification code",
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    OutlinedTextField(
+                    TruCallerTextField(
                         value = phone,
-                        onValueChange = { if (it.length <= 9) phone = it.filter { c -> c.isDigit() }; error = null },
-                        label = { Text("Phone Number") },
-                        prefix = { Text("+256 ", color = TextSecondary) },
-                        placeholder = { Text("7XXXXXXXX") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                        onValueChange = {
+                            if (it.length <= 9) phone = it.filter { c -> c.isDigit() }
+                            error = null
+                        },
+                        label = "Phone Number",
+                        prefix = {
+                            Text(
+                                "+256 ",
+                                color = colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        },
+                        placeholder = "7XXXXXXXX",
+                        keyboardType = KeyboardType.Phone,
+                        isError = error != null,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset {
+                                IntOffset(shakeOffset.value.roundToInt(), 0)
+                            }
                     )
 
                     if (error != null) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text(error!!, color = Danger, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            error!!,
+                            color = colorScheme.error,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    Button(
+                    TruCallerButton(
+                        text = "Send Verification Code",
                         onClick = {
                             if (!isValidPhoneInput(phone)) {
                                 error = "Enter a valid 9-digit phone number"
-                                return@Button
+                                return@TruCallerButton
                             }
                             isLoading = true
                             error = null
@@ -185,34 +254,38 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Brand),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        isLoading = isLoading,
                         enabled = !isLoading
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(color = Brand, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text("Send Verification Code", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    )
                 }
 
                 // Step 2: Enter OTP
                 2 -> {
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text("Enter Verification Code", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(
+                        "Enter Verification Code",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onBackground
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("We sent a 6-digit code to", color = TextSecondary, fontSize = 14.sp)
+                    Text(
+                        "We sent a 6-digit code to",
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp
+                    )
                     Text(
                         text = maskPhoneNumber("+256$phone"),
-                        color = TextPrimary,
+                        color = colorScheme.onBackground,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold
                     )
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    // OTP boxes
+                    // OTP boxes with shake animation
                     BasicTextField(
                         value = otp,
                         onValueChange = {
@@ -222,7 +295,11 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                             }
                         },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        modifier = Modifier.focusRequester(focusRequester),
+                        modifier = Modifier
+                            .focusRequester(focusRequester)
+                            .offset {
+                                IntOffset(shakeOffset.value.roundToInt(), 0)
+                            },
                         textStyle = TextStyle(color = Color.Transparent, fontSize = 1.sp),
                         decorationBox = {
                             Row(
@@ -239,11 +316,16 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                             .height(52.dp)
                                             .border(
                                                 width = if (isFocused) 2.dp else 1.5.dp,
-                                                color = if (isFocused) Brand else if (char.isNotEmpty()) Brand else Divider,
+                                                color = when {
+                                                    error != null -> colorScheme.error
+                                                    isFocused -> colorScheme.primary
+                                                    char.isNotEmpty() -> colorScheme.primary
+                                                    else -> colorScheme.outline
+                                                },
                                                 shape = RoundedCornerShape(12.dp)
                                             )
                                             .background(
-                                                if (char.isNotEmpty()) Color(0xFF252525) else Background,
+                                                if (char.isNotEmpty()) colorScheme.surfaceVariant else colorScheme.background,
                                                 RoundedCornerShape(12.dp)
                                             ),
                                         contentAlignment = Alignment.Center
@@ -252,7 +334,7 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                             text = char,
                                             fontSize = 22.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = TextPrimary,
+                                            color = colorScheme.onBackground,
                                             textAlign = TextAlign.Center
                                         )
                                     }
@@ -267,16 +349,23 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
 
                     if (error != null) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text(error!!, color = Danger, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            error!!,
+                            color = colorScheme.error,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    Button(
+                    TruCallerButton(
+                        text = "Verify Code",
                         onClick = {
                             if (otp.length != 6) {
                                 error = "Enter all 6 digits"
-                                return@Button
+                                return@TruCallerButton
                             }
                             if (authViewModel.verifyResetOtp(otp)) {
                                 step = 3
@@ -285,13 +374,11 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                 error = "Invalid verification code"
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Brand),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
                         enabled = otp.length == 6
-                    ) {
-                        Text("Verify Code", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    }
+                    )
 
                     Spacer(modifier = Modifier.height(24.dp))
 
@@ -299,7 +386,7 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                     if (countdown > 0) {
                         Text(
                             text = "Resend code in ${countdown}s",
-                            color = TextSecondary,
+                            color = colorScheme.onSurfaceVariant,
                             fontSize = 14.sp
                         )
                     } else {
@@ -311,23 +398,30 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                 authViewModel.requestPasswordReset(phone)
                             }
                         }) {
-                            Text("Resend Code", color = Accent, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                "Resend Code",
+                                color = colorScheme.secondary,
+                                fontWeight = FontWeight.SemiBold
+                            )
                         }
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
 
-                    // Demo mode hint — only shown when Firebase is unavailable
+                    // Demo mode hint -- only shown when Firebase is unavailable
                     if (!authViewModel.isFirebaseAvailable()) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .background(Background, RoundedCornerShape(8.dp))
+                                .background(
+                                    colorScheme.surfaceVariant,
+                                    RoundedCornerShape(8.dp)
+                                )
                                 .padding(12.dp)
                         ) {
                             Text(
                                 text = "Demo Mode: Your OTP is ${authViewModel.getResetOtp() ?: "------"}",
-                                color = TextSecondary,
+                                color = colorScheme.onSurfaceVariant,
                                 fontSize = 13.sp,
                                 textAlign = TextAlign.Center,
                                 modifier = Modifier.fillMaxWidth()
@@ -339,61 +433,83 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                 // Step 3: Set new password
                 3 -> {
                     Spacer(modifier = Modifier.height(20.dp))
-                    Text("Set New Password", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text(
+                        "Set New Password",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onBackground
+                    )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text("Identity verified. Enter your new password below.", color = TextSecondary, fontSize = 14.sp, textAlign = TextAlign.Center)
+                    Text(
+                        "Identity verified. Enter your new password below.",
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center
+                    )
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    OutlinedTextField(
+                    TruCallerTextField(
                         value = newPassword,
                         onValueChange = { newPassword = it; error = null },
-                        label = { Text("New Password") },
-                        singleLine = true,
+                        label = "New Password",
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        trailingIcon = {
+                        trailingContent = {
                             IconButton(onClick = { showPassword = !showPassword }) {
                                 Icon(
                                     imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                                    contentDescription = "Toggle password"
+                                    contentDescription = "Toggle password",
+                                    tint = colorScheme.onSurfaceVariant
                                 )
                             }
                         },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                        keyboardType = KeyboardType.Password,
+                        isError = error != null && error!!.contains("6 characters", ignoreCase = true),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset {
+                                IntOffset(shakeOffset.value.roundToInt(), 0)
+                            }
                     )
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    OutlinedTextField(
+                    TruCallerTextField(
                         value = confirmPassword,
                         onValueChange = { confirmPassword = it; error = null },
-                        label = { Text("Confirm New Password") },
-                        singleLine = true,
+                        label = "Confirm New Password",
                         visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                        keyboardType = KeyboardType.Password,
+                        isError = error != null && error!!.contains("match", ignoreCase = true),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .offset {
+                                IntOffset(shakeOffset.value.roundToInt(), 0)
+                            }
                     )
 
                     if (error != null) {
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text(error!!, color = Danger, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+                        Text(
+                            error!!,
+                            color = colorScheme.error,
+                            fontSize = 14.sp,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
 
                     Spacer(modifier = Modifier.height(32.dp))
 
-                    Button(
+                    TruCallerButton(
+                        text = "Reset Password",
                         onClick = {
                             if (newPassword.length < 6) {
                                 error = "Password must be at least 6 characters"
-                                return@Button
+                                return@TruCallerButton
                             }
                             if (newPassword != confirmPassword) {
                                 error = "Passwords do not match"
-                                return@Button
+                                return@TruCallerButton
                             }
                             isLoading = true
                             error = null
@@ -407,17 +523,12 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Brand),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(52.dp),
+                        isLoading = isLoading,
                         enabled = !isLoading
-                    ) {
-                        if (isLoading) {
-                            CircularProgressIndicator(color = Brand, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                        } else {
-                            Text("Reset Password", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
+                    )
                 }
             }
         }

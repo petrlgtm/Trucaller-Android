@@ -1,8 +1,10 @@
 package com.byron.trucaller.ui.auth
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.keyframes
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
@@ -16,25 +18,22 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -47,27 +46,22 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Accent
-import com.byron.trucaller.ui.theme.AccentDark
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.BrandGold
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerTextField
 import com.byron.trucaller.util.isValidPhoneInput
 import com.byron.trucaller.viewmodel.AuthViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @Composable
 fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
@@ -77,6 +71,9 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
     var error by remember { mutableStateOf<String?>(null) }
     var isLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    // Shake animation for error feedback
+    val shakeOffset = remember { Animatable(0f) }
 
     // Staggered entrance animation
     var showLogo by remember { mutableStateOf(false) }
@@ -98,19 +95,47 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
         label = "logo_scale"
     )
 
+    val colorScheme = MaterialTheme.colorScheme
+
+    // Trigger shake animation when error changes
+    LaunchedEffect(error) {
+        if (error != null) {
+            shakeOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = keyframes {
+                    durationMillis = 400
+                    0f at 0
+                    -12f at 50
+                    12f at 100
+                    -10f at 150
+                    10f at 200
+                    -6f at 250
+                    6f at 300
+                    -2f at 350
+                    0f at 400
+                }
+            )
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    colors = listOf(BrandDark, Color(0xFF2A2A2A), Color(0xFF1A1A1A)),
+                    colors = listOf(
+                        colorScheme.onPrimary,
+                        colorScheme.surfaceVariant,
+                        colorScheme.surface
+                    ),
                     startY = 0f,
                     endY = 600f
                 )
             )
+            .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
-        // ── Dark header with gradient ─────────────────────────────────
+        // ── Dark header with gradient
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -126,7 +151,9 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                     modifier = Modifier
                         .size(88.dp)
                         .background(
-                            Brush.linearGradient(listOf(Brand, BrandGold)),
+                            Brush.linearGradient(
+                                listOf(colorScheme.primary, colorScheme.tertiary)
+                            ),
                             CircleShape
                         ),
                     contentAlignment = Alignment.Center
@@ -134,7 +161,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                     Icon(
                         imageVector = Icons.Default.Shield,
                         contentDescription = "Logo",
-                        tint = BrandDark,
+                        tint = colorScheme.onPrimary,
                         modifier = Modifier.size(48.dp)
                     )
                 }
@@ -146,18 +173,18 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                 text = "Welcome Back",
                 fontSize = 30.sp,
                 fontWeight = FontWeight.Black,
-                color = Color.White,
+                color = colorScheme.onBackground,
                 letterSpacing = (-0.5).sp
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = "Sign in to your account",
                 fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.6f)
+                color = colorScheme.onBackground.copy(alpha = 0.6f)
             )
         }
 
-        // ── Form card ─────────────────────────────────────────────────
+        // ── Form card
         AnimatedVisibility(
             visible = showForm,
             enter = slideInVertically(
@@ -169,7 +196,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
-                        Color(0xFF1A1A1A),
+                        colorScheme.surface,
                         RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)
                     )
                     .padding(horizontal = 24.dp, vertical = 32.dp)
@@ -179,27 +206,30 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                     "Phone Number",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Brand,
+                    color = colorScheme.primary,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-                OutlinedTextField(
+                TruCallerTextField(
                     value = phone,
                     onValueChange = {
                         if (it.length <= 9) phone = it.filter { c -> c.isDigit() }
                         error = null
                     },
-                    prefix = { Text("+256 ", color = TextSecondary, fontWeight = FontWeight.SemiBold) },
-                    placeholder = { Text("7XXXXXXXX") },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Brand,
-                        unfocusedBorderColor = Color(0xFF444444),
-                        focusedContainerColor = Color(0xFF252525),
-                        unfocusedContainerColor = Color(0xFF252525)
-                    )
+                    prefix = {
+                        Text(
+                            "+256 ",
+                            color = colorScheme.onSurfaceVariant,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    },
+                    placeholder = "7XXXXXXXX",
+                    keyboardType = KeyboardType.Phone,
+                    isError = error != null && error!!.contains("phone", ignoreCase = true),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset {
+                            IntOffset(shakeOffset.value.roundToInt(), 0)
+                        }
                 )
 
                 Spacer(modifier = Modifier.height(18.dp))
@@ -209,32 +239,29 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                     "Password",
                     fontSize = 13.sp,
                     fontWeight = FontWeight.SemiBold,
-                    color = Brand,
+                    color = colorScheme.primary,
                     modifier = Modifier.padding(bottom = 6.dp)
                 )
-                OutlinedTextField(
+                TruCallerTextField(
                     value = password,
                     onValueChange = { password = it; error = null },
-                    singleLine = true,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                    trailingIcon = {
+                    trailingContent = {
                         IconButton(onClick = { showPassword = !showPassword }) {
                             Icon(
                                 imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
                                 contentDescription = "Toggle password",
-                                tint = TextSecondary
+                                tint = colorScheme.onSurfaceVariant
                             )
                         }
                     },
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Brand,
-                        unfocusedBorderColor = Color(0xFF444444),
-                        focusedContainerColor = Color(0xFF252525),
-                        unfocusedContainerColor = Color(0xFF252525)
-                    )
+                    keyboardType = KeyboardType.Password,
+                    isError = error != null && error!!.contains("password", ignoreCase = true),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .offset {
+                            IntOffset(shakeOffset.value.roundToInt(), 0)
+                        }
                 )
 
                 // Forgot password
@@ -246,7 +273,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                 ) {
                     Text(
                         text = "Forgot Password?",
-                        color = Accent,
+                        color = colorScheme.secondary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable { navController.navigate("forgot_password") }
@@ -257,29 +284,33 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                 AnimatedVisibility(visible = error != null) {
                     Text(
                         text = error ?: "",
-                        color = Danger,
+                        color = colorScheme.error,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(top = 12.dp)
-                            .background(Danger.copy(alpha = 0.08f), RoundedCornerShape(8.dp))
+                            .background(
+                                colorScheme.error.copy(alpha = 0.08f),
+                                RoundedCornerShape(8.dp)
+                            )
                             .padding(10.dp)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(28.dp))
 
-                // Login button — bold yellow with black text
-                Button(
+                // Login button using TruCallerButton
+                TruCallerButton(
+                    text = "Sign In",
                     onClick = {
                         if (!isValidPhoneInput(phone)) {
                             error = "Enter a valid 9-digit phone number"
-                            return@Button
+                            return@TruCallerButton
                         }
                         if (password.length < 6) {
                             error = "Password must be at least 6 characters"
-                            return@Button
+                            return@TruCallerButton
                         }
                         isLoading = true
                         error = null
@@ -299,28 +330,9 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(54.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Brand,
-                        contentColor = BrandDark,
-                        disabledContainerColor = Brand.copy(alpha = 0.5f)
-                    ),
-                    elevation = ButtonDefaults.buttonElevation(
-                        defaultElevation = 4.dp,
-                        pressedElevation = 1.dp
-                    ),
+                    isLoading = isLoading,
                     enabled = !isLoading
-                ) {
-                    if (isLoading) {
-                        CircularProgressIndicator(
-                            color = BrandDark,
-                            modifier = Modifier.size(22.dp),
-                            strokeWidth = 2.5.dp
-                        )
-                    } else {
-                        Text("Sign In", fontSize = 16.sp, fontWeight = FontWeight.ExtraBold)
-                    }
-                }
+                )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
@@ -333,19 +345,19 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                         modifier = Modifier
                             .weight(1f)
                             .height(1.dp)
-                            .background(Color(0xFF333333))
+                            .background(colorScheme.outlineVariant)
                     )
                     Text(
                         "or",
                         modifier = Modifier.padding(horizontal = 16.dp),
-                        color = TextSecondary,
+                        color = colorScheme.onSurfaceVariant,
                         fontSize = 13.sp
                     )
                     Box(
                         modifier = Modifier
                             .weight(1f)
                             .height(1.dp)
-                            .background(Color(0xFF333333))
+                            .background(colorScheme.outlineVariant)
                     )
                 }
 
@@ -361,10 +373,14 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Text("Don't have an account? ", color = TextSecondary, fontSize = 14.sp)
+                            Text(
+                                "Don't have an account? ",
+                                color = colorScheme.onSurfaceVariant,
+                                fontSize = 14.sp
+                            )
                             Text(
                                 text = "Register",
-                                color = Accent,
+                                color = colorScheme.secondary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.clickable { navController.navigate("register") }
@@ -378,10 +394,14 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.Center
                         ) {
-                            Text("Admin? ", color = TextSecondary, fontSize = 13.sp)
+                            Text(
+                                "Admin? ",
+                                color = colorScheme.onSurfaceVariant,
+                                fontSize = 13.sp
+                            )
                             Text(
                                 text = "Login as Admin",
-                                color = AccentDark,
+                                color = colorScheme.secondary,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.clickable { navController.navigate("admin_login") }
@@ -399,19 +419,28 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(3.dp)
-                                    .background(BrandDark, RoundedCornerShape(2.dp))
+                                    .background(
+                                        colorScheme.onPrimary,
+                                        RoundedCornerShape(2.dp)
+                                    )
                             )
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(3.dp)
-                                    .background(Brand, RoundedCornerShape(2.dp))
+                                    .background(
+                                        colorScheme.primary,
+                                        RoundedCornerShape(2.dp)
+                                    )
                             )
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(3.dp)
-                                    .background(Accent, RoundedCornerShape(2.dp))
+                                    .background(
+                                        colorScheme.secondary,
+                                        RoundedCornerShape(2.dp)
+                                    )
                             )
                         }
                     }

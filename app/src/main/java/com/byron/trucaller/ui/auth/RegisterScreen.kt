@@ -1,5 +1,8 @@
 package com.byron.trucaller.ui.auth
 
+import android.app.Activity
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -9,35 +12,31 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import android.app.Activity
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -45,28 +44,23 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
-import com.byron.trucaller.ui.theme.Warning
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerTextField
 import com.byron.trucaller.util.getPasswordStrength
 import com.byron.trucaller.util.isValidPassword
 import com.byron.trucaller.util.isValidPhoneInput
 import com.byron.trucaller.viewmodel.AuthViewModel
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -85,76 +79,132 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
     val context = LocalContext.current
     val activity = context as? Activity
 
+    val colorScheme = MaterialTheme.colorScheme
+
+    // Shake animation for error feedback
+    val shakeOffset = remember { Animatable(0f) }
+
+    LaunchedEffect(error) {
+        if (error != null) {
+            shakeOffset.animateTo(
+                targetValue = 0f,
+                animationSpec = keyframes {
+                    durationMillis = 400
+                    0f at 0
+                    -12f at 50
+                    12f at 100
+                    -10f at 150
+                    10f at 200
+                    -6f at 250
+                    6f at 300
+                    -2f at 350
+                    0f at 400
+                }
+            )
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("Create Account", fontWeight = FontWeight.Bold) },
+                title = {
+                    Text(
+                        "Create Account",
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onPrimary
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            "Back",
+                            tint = colorScheme.onPrimary
+                        )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = colorScheme.onPrimary
+                )
             )
         }
     ) { innerPadding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Background)
+                .background(colorScheme.background)
                 .padding(innerPadding)
+                .imePadding()
                 .verticalScroll(rememberScrollState())
                 .padding(24.dp)
         ) {
             // Full name
-            OutlinedTextField(
+            TruCallerTextField(
                 value = fullName,
                 onValueChange = { fullName = it; error = null },
-                label = { Text("Full Name") },
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                label = "Full Name",
+                keyboardType = KeyboardType.Text,
+                isError = error != null && error!!.contains("name", ignoreCase = true),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset {
+                        IntOffset(shakeOffset.value.roundToInt(), 0)
+                    }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Phone
-            OutlinedTextField(
+            TruCallerTextField(
                 value = phone,
-                onValueChange = { if (it.length <= 9) phone = it.filter { c -> c.isDigit() }; error = null },
-                label = { Text("Phone Number") },
-                prefix = { Text("+256 ", color = TextSecondary) },
-                placeholder = { Text("7XXXXXXXX") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                onValueChange = {
+                    if (it.length <= 9) phone = it.filter { c -> c.isDigit() }
+                    error = null
+                },
+                label = "Phone Number",
+                prefix = {
+                    Text(
+                        "+256 ",
+                        color = colorScheme.onSurfaceVariant,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                },
+                placeholder = "7XXXXXXXX",
+                keyboardType = KeyboardType.Phone,
+                isError = error != null && error!!.contains("phone", ignoreCase = true),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset {
+                        IntOffset(shakeOffset.value.roundToInt(), 0)
+                    }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
 
             // Password
-            OutlinedTextField(
+            TruCallerTextField(
                 value = password,
                 onValueChange = { password = it; error = null },
-                label = { Text("Password") },
-                singleLine = true,
+                label = "Password",
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
-                trailingIcon = {
+                trailingContent = {
                     IconButton(onClick = { showPassword = !showPassword }) {
                         Icon(
                             imageVector = if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
-                            contentDescription = "Toggle"
+                            contentDescription = "Toggle password",
+                            tint = colorScheme.onSurfaceVariant
                         )
                     }
                 },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                keyboardType = KeyboardType.Password,
+                isError = error != null && error!!.contains("password", ignoreCase = true)
+                        && !error!!.contains("match", ignoreCase = true),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset {
+                        IntOffset(shakeOffset.value.roundToInt(), 0)
+                    }
             )
 
             // Password strength bar
@@ -162,9 +212,9 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                 Spacer(modifier = Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val barColor = when (strength) {
-                        "weak" -> Danger
-                        "medium" -> Warning
-                        else -> Success
+                        "weak" -> colorScheme.error
+                        "medium" -> colorScheme.tertiary
+                        else -> MaterialTheme.colorScheme.primary
                     }
                     val barWidth = when (strength) {
                         "weak" -> 0.33f
@@ -175,7 +225,10 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                         modifier = Modifier
                             .weight(1f)
                             .height(4.dp)
-                            .background(Color(0xFF333333), RoundedCornerShape(2.dp))
+                            .background(
+                                colorScheme.outlineVariant,
+                                RoundedCornerShape(2.dp)
+                            )
                     ) {
                         Box(
                             modifier = Modifier
@@ -197,22 +250,28 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
             Spacer(modifier = Modifier.height(16.dp))
 
             // Confirm password
-            OutlinedTextField(
+            TruCallerTextField(
                 value = confirmPassword,
                 onValueChange = { confirmPassword = it; error = null },
-                label = { Text("Confirm Password") },
-                singleLine = true,
+                label = "Confirm Password",
                 visualTransformation = PasswordVisualTransformation(),
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(12.dp),
-                colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                keyboardType = KeyboardType.Password,
+                isError = error != null && error!!.contains("match", ignoreCase = true),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .offset {
+                        IntOffset(shakeOffset.value.roundToInt(), 0)
+                    }
             )
 
             // Error
             if (error != null) {
                 Spacer(modifier = Modifier.height(12.dp))
-                Text(text = error!!, color = Danger, fontSize = 14.sp)
+                Text(
+                    text = error!!,
+                    color = colorScheme.error,
+                    fontSize = 14.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -227,7 +286,10 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                 Checkbox(
                     checked = consentChecked,
                     onCheckedChange = { consentChecked = it },
-                    colors = CheckboxDefaults.colors(checkedColor = BrandDark)
+                    colors = CheckboxDefaults.colors(
+                        checkedColor = colorScheme.primary,
+                        checkmarkColor = colorScheme.onPrimary
+                    )
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Column {
@@ -235,12 +297,12 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                         "I agree to the Terms of Service",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold,
-                        color = TextPrimary
+                        color = colorScheme.onSurface
                     )
                     Text(
                         "By creating an account, I consent to TruCaller collecting my phone number, contacts, and device information for caller identification, anti-theft protection, and central backup services. My data will be stored securely and used only for app functionality.",
                         fontSize = 12.sp,
-                        color = TextSecondary,
+                        color = colorScheme.onSurfaceVariant,
                         lineHeight = 16.sp
                     )
                 }
@@ -248,8 +310,9 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
 
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Register button
-            Button(
+            // Register button using TruCallerButton
+            TruCallerButton(
+                text = "Create Account",
                 onClick = {
                     when {
                         fullName.isBlank() -> error = "Full name is required"
@@ -265,7 +328,10 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                                 isLoading = false
                                 if (success) {
                                     if (authViewModel.isFirebaseAvailable() && activity != null) {
-                                        authViewModel.phoneAuthManager.sendVerificationCode(phone, activity)
+                                        authViewModel.phoneAuthManager.sendVerificationCode(
+                                            phone,
+                                            activity
+                                        )
                                         navController.navigate("otp/$phone")
                                     } else {
                                         // Demo mode fallback
@@ -285,16 +351,9 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Brand),
+                isLoading = isLoading,
                 enabled = !isLoading && consentChecked
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(color = Brand, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    Text("Create Account", fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                }
-            }
+            )
         }
     }
 }
