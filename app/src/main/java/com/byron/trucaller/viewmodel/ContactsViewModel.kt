@@ -197,6 +197,19 @@ class ContactsViewModel(
                                 )
                             )
                         }
+                    } else {
+                        // Contact exists under a different userId (e.g. re-registration).
+                        // Claim it for the current user.
+                        contactRepository.updateContact(
+                            existing.copy(
+                                userId = userId,
+                                name = pc.name,
+                                email = pc.email ?: existing.email,
+                                syncedAt = now,
+                                isBackedUp = true
+                            )
+                        )
+                        count++
                     }
                 }
                 count
