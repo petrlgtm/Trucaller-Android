@@ -1,7 +1,15 @@
 package com.byron.trucaller.ui.main
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -19,22 +27,26 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,8 +57,15 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import android.app.Activity
+import android.app.role.RoleManager
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -54,22 +73,18 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Inactive
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
+import com.byron.trucaller.ui.components.TruCallerAvatar
+import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.CardGradientEnd
+import com.byron.trucaller.ui.theme.CardGradientStart
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.DeviceAdminHelper
 import com.byron.trucaller.util.formatPhoneNumber
 import com.byron.trucaller.util.formatRelativeTime
-import com.byron.trucaller.util.getInitials
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 
@@ -78,6 +93,7 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
     val authState by authViewModel.authState.collectAsState()
     val user = authState.user ?: return
 
+    val colorScheme = MaterialTheme.colorScheme
     val context = LocalContext.current
     val activity = context as? Activity
 
@@ -90,6 +106,21 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
     var disablePassword by remember { mutableStateOf("") }
     var disableError by remember { mutableStateOf<String?>(null) }
     var isProtectionActive by remember { mutableStateOf(DeviceAdminHelper.isAdminActive(context)) }
+
+    val roleManager = remember { context.getSystemService(Context.ROLE_SERVICE) as RoleManager }
+    var isDefaultDialer by remember { mutableStateOf(roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) }
+
+    val avatarPickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.PickVisualMedia()
+    ) { uri ->
+        if (uri != null) authViewModel.updateAvatar(uri)
+    }
+
+    val dialerRoleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        isDefaultDialer = roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
+    }
 
     LaunchedEffect(user.id) {
         deviceViewModel.loadUserDevice(user.id)
@@ -115,13 +146,15 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         "To disable protection, you must enter your account password.",
-                        color = TextSecondary,
+                        color = colorScheme.onSurfaceVariant,
                         fontSize = 13.sp
                     )
                 }
             },
             confirmButton = {
-                TextButton(onClick = { showProtectionDialog = false }) { Text("OK", color = Brand) }
+                TextButton(onClick = { showProtectionDialog = false }) {
+                    Text("OK", color = colorScheme.primary)
+                }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -129,7 +162,7 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     showDisableProtectionDialog = true
                     disablePassword = ""
                     disableError = null
-                }) { Text("Disable Protection", color = Danger) }
+                }) { Text("Disable Protection", color = colorScheme.error) }
             }
         )
     }
@@ -148,7 +181,7 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                         "Enter your account password to disable device protection. " +
                                 "This will allow the app to be uninstalled.",
                         fontSize = 13.sp,
-                        color = TextSecondary
+                        color = colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     OutlinedTextField(
@@ -160,12 +193,17 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525)),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colorScheme.primary,
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedContainerColor = colorScheme.surfaceVariant,
+                            unfocusedContainerColor = colorScheme.surfaceVariant
+                        ),
                         isError = disableError != null
                     )
                     if (disableError != null) {
                         Spacer(modifier = Modifier.height(4.dp))
-                        Text(disableError!!, color = Danger, fontSize = 12.sp)
+                        Text(disableError!!, color = colorScheme.error, fontSize = 12.sp)
                     }
                 }
             },
@@ -184,9 +222,9 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                             disableError = null
                         }
                     },
-                    colors = ButtonDefaults.buttonColors(containerColor = Danger)
+                    colors = ButtonDefaults.buttonColors(containerColor = colorScheme.error)
                 ) {
-                    Text("Disable Protection", color = Color.White)
+                    Text("Disable Protection", color = colorScheme.onError)
                 }
             },
             dismissButton = {
@@ -211,7 +249,7 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     rootNavController.navigate("login") {
                         popUpTo(0) { inclusive = true }
                     }
-                }) { Text("Logout", color = Danger) }
+                }) { Text("Logout", color = colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
@@ -222,199 +260,346 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(colorScheme.background)
             .verticalScroll(rememberScrollState())
     ) {
-        // Profile header
+        // Profile header with gradient
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(BrandDark)
-                .padding(24.dp),
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            CardGradientStart,
+                            CardGradientEnd,
+                            colorScheme.background
+                        )
+                    )
+                )
+                .padding(vertical = Spacing.lg, horizontal = Spacing.md),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier = Modifier
-                        .size(80.dp)
-                        .background(Color.White.copy(alpha = 0.2f), CircleShape),
+                        .clickable {
+                            avatarPickerLauncher.launch(
+                                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
+                            )
+                        },
                     contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        getInitials(user.fullName),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 28.sp
+                    TruCallerAvatar(
+                        name = user.fullName,
+                        size = 80.dp,
+                        imageUri = user.avatarUrl,
+                        contentDesc = "Profile photo"
                     )
+                    // Camera icon overlay
+                    Box(
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .size(24.dp)
+                            .background(colorScheme.primary, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Edit,
+                            contentDescription = "Change photo",
+                            tint = colorScheme.onPrimary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
-                Spacer(modifier = Modifier.height(12.dp))
-                Text(user.fullName, color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
-                Text(formatPhoneNumber(user.phoneNumber), color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                if (user.avatarUrl != null) {
+                    TextButton(onClick = { authViewModel.removeAvatar() }) {
+                        Text(
+                            "Remove Photo",
+                            color = colorScheme.onSurface.copy(alpha = 0.7f),
+                            fontSize = 12.sp
+                        )
+                    }
+                } else {
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                Text(
+                    user.fullName,
+                    color = colorScheme.onSurface,
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    formatPhoneNumber(user.phoneNumber),
+                    color = colorScheme.onSurface.copy(alpha = 0.7f),
+                    fontSize = 14.sp
+                )
             }
         }
 
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Menu card
-            Card(
+        Column(modifier = Modifier.padding(Spacing.md)) {
+            // Menu card using TruCallerCard
+            TruCallerCard(
                 modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                elevation = 1.dp,
+                containerColor = colorScheme.surfaceVariant
             ) {
-                Column {
-                    // Device Info
-                    ProfileMenuItem(
-                        icon = Icons.Default.PhoneAndroid,
-                        title = "Device Info",
-                        iconColor = Brand,
-                        onClick = { showDeviceInfo = !showDeviceInfo }
-                    )
-                    if (showDeviceInfo && userDevice != null) {
-                        val device = userDevice!!
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Background)
-                                .padding(horizontal = 16.dp, vertical = 12.dp)
-                        ) {
-                            InfoRow("Model", "${device.manufacturer} ${device.model}")
-                            InfoRow("OS", device.osVersion)
-                            InfoRow("Device ID", device.deviceId)
-                            InfoRow("Status", device.status.name)
-                            InfoRow("Last IP", device.lastIp)
-                            InfoRow("Last Seen", formatRelativeTime(device.lastSeen))
-                        }
+                // Device Info (expandable)
+                ProfileMenuItem(
+                    icon = Icons.Default.PhoneAndroid,
+                    title = "Device Info",
+                    iconColor = colorScheme.primary,
+                    isExpandable = true,
+                    isExpanded = showDeviceInfo,
+                    onClick = { showDeviceInfo = !showDeviceInfo }
+                )
+                AnimatedVisibility(
+                    visible = showDeviceInfo && userDevice != null,
+                    enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
+                    exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(200))
+                ) {
+                    val device = userDevice!!
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(colorScheme.background.copy(alpha = 0.5f))
+                            .padding(vertical = 12.dp)
+                    ) {
+                        InfoRow("Model", "${device.manufacturer} ${device.model}")
+                        InfoRow("OS", device.osVersion)
+                        InfoRow("Device ID", device.deviceId)
+                        InfoRow("Status", device.status.name)
+                        InfoRow("Last IP", device.lastIp)
+                        InfoRow("Last Seen", formatRelativeTime(device.lastSeen))
                     }
-                    HorizontalDivider(color = Color(0xFF333333))
+                }
+                HorizontalDivider(color = colorScheme.outlineVariant)
 
-                    // IP History
-                    ProfileMenuItem(
-                        icon = Icons.Default.LocationOn,
-                        title = "IP History",
-                        iconColor = Brand,
-                        onClick = { showIpHistory = !showIpHistory }
-                    )
-                    if (showIpHistory && sortedIpLogs.isNotEmpty()) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Background)
-                                .padding(horizontal = 16.dp, vertical = 8.dp)
-                        ) {
-                            sortedIpLogs.forEach { log ->
-                                Row(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(vertical = 6.dp)
-                                ) {
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            log.ipAddress,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 13.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = TextPrimary
-                                        )
-                                        Text(
-                                            "${log.isp} - ${log.city}",
-                                            fontSize = 12.sp,
-                                            color = TextSecondary
-                                        )
-                                    }
-                                    Column(horizontalAlignment = Alignment.End) {
-                                        Text(
-                                            formatRelativeTime(log.timestamp),
-                                            fontSize = 11.sp,
-                                            color = Inactive
-                                        )
-                                        Text(
-                                            if (log.networkType == "wifi") "WiFi" else "Mobile",
-                                            fontSize = 11.sp,
-                                            color = if (log.networkType == "wifi") Success else com.byron.trucaller.ui.theme.Warning
-                                        )
-                                    }
+                // IP History (expandable)
+                ProfileMenuItem(
+                    icon = Icons.Default.LocationOn,
+                    title = "IP History",
+                    iconColor = colorScheme.primary,
+                    isExpandable = true,
+                    isExpanded = showIpHistory,
+                    onClick = { showIpHistory = !showIpHistory }
+                )
+                AnimatedVisibility(
+                    visible = showIpHistory && sortedIpLogs.isNotEmpty(),
+                    enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
+                    exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(200))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(colorScheme.background.copy(alpha = 0.5f))
+                            .padding(vertical = Spacing.sm)
+                    ) {
+                        sortedIpLogs.forEach { log ->
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp)
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        log.ipAddress,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "${log.isp} - ${log.city}",
+                                        fontSize = 12.sp,
+                                        color = colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Column(horizontalAlignment = Alignment.End) {
+                                    Text(
+                                        formatRelativeTime(log.timestamp),
+                                        fontSize = 11.sp,
+                                        color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                    )
+                                    Text(
+                                        if (log.networkType == "wifi") "WiFi" else "Mobile",
+                                        fontSize = 11.sp,
+                                        color = if (log.networkType == "wifi") {
+                                            Color(0xFF4CAF50)
+                                        } else {
+                                            colorScheme.primary
+                                        }
+                                    )
                                 }
                             }
                         }
                     }
-                    HorizontalDivider(color = Color(0xFF333333))
+                }
+                HorizontalDivider(color = colorScheme.outlineVariant)
 
-                    // Security
-                    ProfileMenuItem(
-                        icon = Icons.Default.Lock,
-                        title = "Security",
-                        iconColor = Brand,
-                        onClick = { rootNavController.navigate("security") }
-                    )
-                    HorizontalDivider(color = Color(0xFF333333))
+                // Security
+                ProfileMenuItem(
+                    icon = Icons.Default.Lock,
+                    title = "Security",
+                    iconColor = colorScheme.primary,
+                    onClick = { rootNavController.navigate("security") }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
 
-                    // Device Protection
-                    ProfileMenuItem(
-                        icon = Icons.Default.Shield,
-                        title = if (isProtectionActive) "Device Protection (ON)" else "Device Protection (OFF)",
-                        iconColor = if (isProtectionActive) Brand else Inactive,
-                        onClick = {
-                            isProtectionActive = DeviceAdminHelper.isAdminActive(context)
-                            if (isProtectionActive) {
-                                showProtectionDialog = true
-                            } else {
-                                activity?.let {
-                                    DeviceAdminHelper.requestAdminPermission(it)
-                                    // Will be refreshed next time user taps
-                                }
+                // Device Protection
+                ProfileMenuItem(
+                    icon = Icons.Default.Shield,
+                    title = if (isProtectionActive) "Device Protection (ON)" else "Device Protection (OFF)",
+                    iconColor = if (isProtectionActive) colorScheme.primary else colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    onClick = {
+                        isProtectionActive = DeviceAdminHelper.isAdminActive(context)
+                        if (isProtectionActive) {
+                            showProtectionDialog = true
+                        } else {
+                            activity?.let {
+                                DeviceAdminHelper.requestAdminPermission(it)
                             }
                         }
-                    )
-                    HorizontalDivider(color = Color(0xFF333333))
+                    }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
 
-                    // Report stolen
-                    ProfileMenuItem(
-                        icon = Icons.Default.Warning,
-                        title = "Report Device Stolen",
-                        iconColor = Danger,
-                        titleColor = Danger,
-                        onClick = { rootNavController.navigate("report_stolen") }
-                    )
-                    HorizontalDivider(color = Color(0xFF333333))
+                // Default Phone App
+                ProfileMenuItem(
+                    icon = Icons.Default.Phone,
+                    title = if (isDefaultDialer) "Default Phone App (Active)" else "Set as Default Phone App",
+                    iconColor = if (isDefaultDialer) Color(0xFF4CAF50) else colorScheme.primary,
+                    onClick = {
+                        if (!isDefaultDialer) {
+                            val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+                            dialerRoleLauncher.launch(intent)
+                        }
+                    }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
 
-                    // About
-                    ProfileMenuItem(
-                        icon = Icons.Default.Info,
-                        title = "About",
-                        iconColor = Brand,
-                        onClick = { showAbout = !showAbout }
-                    )
-                    if (showAbout) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Background)
-                                .padding(16.dp)
+                // Report stolen
+                ProfileMenuItem(
+                    icon = Icons.Default.Warning,
+                    title = "Report Device Stolen",
+                    iconColor = colorScheme.error,
+                    titleColor = colorScheme.error,
+                    onClick = { rootNavController.navigate("report_stolen") }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // About (expandable)
+                ProfileMenuItem(
+                    icon = Icons.Default.Info,
+                    title = "About",
+                    iconColor = colorScheme.primary,
+                    isExpandable = true,
+                    isExpanded = showAbout,
+                    onClick = { showAbout = !showAbout }
+                )
+                AnimatedVisibility(
+                    visible = showAbout,
+                    enter = expandVertically(animationSpec = tween(300)) + fadeIn(animationSpec = tween(300)),
+                    exit = shrinkVertically(animationSpec = tween(300)) + fadeOut(animationSpec = tween(200))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(colorScheme.background.copy(alpha = 0.5f))
+                            .padding(vertical = Spacing.md)
+                    ) {
+                        Text(
+                            "TruCaller v1.0.0",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "A Truecaller clone with anti-theft features. Secure your device, identify callers, and protect your data.",
+                            fontSize = 13.sp,
+                            color = colorScheme.onSurfaceVariant,
+                            lineHeight = 18.sp
+                        )
+                    }
+                }
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Logout
+                ProfileMenuItem(
+                    icon = Icons.AutoMirrored.Filled.Logout,
+                    title = "Logout",
+                    iconColor = colorScheme.error,
+                    titleColor = colorScheme.error,
+                    onClick = { showLogoutDialog = true }
+                )
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            // Version badge and check for updates
+            TruCallerCard(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = 1.dp
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            "Version 1.0.0",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 14.sp,
+                            color = colorScheme.onSurface
+                        )
+                        Text(
+                            "Build 1 - Stable",
+                            fontSize = 12.sp,
+                            color = colorScheme.onSurfaceVariant
+                        )
+                    }
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = colorScheme.primary.copy(alpha = 0.12f),
+                        modifier = Modifier.clickable { /* check for updates action */ }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("TruCaller v1.0.0", fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
-                            Spacer(modifier = Modifier.height(4.dp))
+                            Icon(
+                                Icons.Default.SystemUpdate,
+                                contentDescription = "Check for updates",
+                                tint = colorScheme.primary,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                "A Truecaller clone with anti-theft features. Secure your device, identify callers, and protect your data.",
-                                fontSize = 13.sp,
-                                color = TextSecondary,
-                                lineHeight = 18.sp
+                                "Check for Updates",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = colorScheme.primary
                             )
                         }
                     }
-                    HorizontalDivider(color = Color(0xFF333333))
-
-                    // Logout
-                    ProfileMenuItem(
-                        icon = Icons.AutoMirrored.Filled.Logout,
-                        title = "Logout",
-                        iconColor = Danger,
-                        titleColor = Danger,
-                        onClick = { showLogoutDialog = true }
-                    )
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(Spacing.sm))
+
+            // Footer text
+            Text(
+                "Made with care in Uganda",
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = Spacing.sm),
+                textAlign = TextAlign.Center,
+                fontSize = 12.sp,
+                color = colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+
+            Spacer(modifier = Modifier.height(Spacing.lg))
         }
     }
 }
@@ -423,15 +608,23 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
 private fun ProfileMenuItem(
     icon: ImageVector,
     title: String,
-    iconColor: Color = Brand,
-    titleColor: Color = TextPrimary,
+    iconColor: Color = MaterialTheme.colorScheme.primary,
+    titleColor: Color = MaterialTheme.colorScheme.onSurface,
+    isExpandable: Boolean = false,
+    isExpanded: Boolean = false,
     onClick: () -> Unit
 ) {
+    val chevronRotation by animateFloatAsState(
+        targetValue = if (isExpandable && isExpanded) 180f else 0f,
+        animationSpec = tween(durationMillis = 300),
+        label = "chevronRotation"
+    )
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable { onClick() }
-            .padding(horizontal = 16.dp, vertical = 14.dp),
+            .padding(horizontal = Spacing.md, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -450,18 +643,38 @@ private fun ProfileMenuItem(
             color = titleColor,
             modifier = Modifier.weight(1f)
         )
-        Icon(Icons.Default.ChevronRight, null, tint = Inactive, modifier = Modifier.size(20.dp))
+        Icon(
+            imageVector = if (isExpandable) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
+            contentDescription = if (isExpandable) {
+                if (isExpanded) "Collapse" else "Expand"
+            } else null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+            modifier = Modifier
+                .size(20.dp)
+                .rotate(chevronRotation)
+        )
     }
 }
 
 @Composable
 private fun InfoRow(label: String, value: String) {
+    val colorScheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 4.dp)
     ) {
-        Text(label, color = TextSecondary, fontSize = 13.sp, modifier = Modifier.width(80.dp))
-        Text(value, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Text(
+            label,
+            color = colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            modifier = Modifier.width(80.dp)
+        )
+        Text(
+            value,
+            color = colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp
+        )
     }
 }
