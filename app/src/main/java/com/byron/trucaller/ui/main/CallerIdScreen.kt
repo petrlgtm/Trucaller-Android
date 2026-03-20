@@ -2,6 +2,8 @@ package com.byron.trucaller.ui.main
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -30,8 +32,6 @@ import androidx.compose.material.icons.filled.PersonAdd
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
@@ -46,6 +46,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -60,12 +61,22 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.byron.trucaller.data.model.SpamCategory
+import com.byron.trucaller.ui.components.BadgeType
+import com.byron.trucaller.ui.components.EmptyStateIcon
+import com.byron.trucaller.ui.components.EmptyStateView
+import com.byron.trucaller.ui.components.TruCallerAvatar
+import com.byron.trucaller.ui.components.TruCallerBadge
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerButtonStyle
+import com.byron.trucaller.ui.components.TruCallerHeader
 import com.byron.trucaller.ui.theme.Background
 import com.byron.trucaller.ui.theme.Brand
 import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.SurfaceCard
 import com.byron.trucaller.ui.theme.Danger
+import com.byron.trucaller.ui.theme.Divider
 import com.byron.trucaller.ui.theme.Success
+import com.byron.trucaller.ui.theme.SurfaceCard
+import com.byron.trucaller.ui.theme.SurfaceElevated
 import com.byron.trucaller.ui.theme.TextPrimary
 import com.byron.trucaller.ui.theme.TextSecondary
 import com.byron.trucaller.ui.theme.Warning
@@ -93,6 +104,24 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
     var showEditDialog by remember { mutableStateOf(false) }
     var editName by remember { mutableStateOf("") }
 
+    // Animated spam score: starts at 0 and animates to actual value
+    var targetSpamScore by remember { mutableFloatStateOf(0f) }
+    val animatedSpamScore by animateFloatAsState(
+        targetValue = targetSpamScore,
+        animationSpec = tween(durationMillis = 800, delayMillis = 200),
+        label = "spamScoreAnimation"
+    )
+
+    // Animate spam score when entry changes
+    LaunchedEffect(entry?.phoneNumber, entry?.spamScore) {
+        targetSpamScore = if (entry != null) entry.spamScore / 100f else 0f
+    }
+
+    // Reset spam score animation target when entry is cleared
+    LaunchedEffect(entry) {
+        if (entry == null) targetSpamScore = 0f
+    }
+
     // Check blocked status when entry changes
     LaunchedEffect(entry?.phoneNumber) {
         if (entry != null && userId.isNotEmpty()) {
@@ -106,31 +135,28 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
             .background(Background)
             .verticalScroll(rememberScrollState())
     ) {
-        // Header
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(BrandDark)
-                .padding(24.dp)
-        ) {
-            Column {
-                Text("Caller ID", color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-                Text("Search any phone number", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
-            }
-        }
+        // Header - using TruCallerHeader component
+        TruCallerHeader(
+            title = "Caller ID",
+            subtitle = "Search any phone number",
+            gradientColors = listOf(BrandDark, Background),
+            titleColor = Color.White,
+            subtitleColor = Color.White.copy(alpha = 0.8f)
+        )
 
         Column(modifier = Modifier.padding(16.dp)) {
             // Action message snackbar
             if (actionMessage != null) {
                 Snackbar(
                     modifier = Modifier.padding(bottom = 8.dp),
+                    containerColor = SurfaceCard,
                     action = {
                         TextButton(onClick = { callerIdViewModel.clearActionMessage() }) {
-                            Text("OK", color = Color.White)
+                            Text("OK", color = Brand)
                         }
                     }
                 ) {
-                    Text(actionMessage!!)
+                    Text(actionMessage!!, color = TextPrimary)
                 }
             }
 
@@ -154,15 +180,20 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Brand,
-                    unfocusedBorderColor = Color(0xFF444444),
-                    focusedContainerColor = Color(0xFF252525),
-                    unfocusedContainerColor = Color(0xFF252525)
+                    unfocusedBorderColor = Divider,
+                    focusedContainerColor = SurfaceElevated,
+                    unfocusedContainerColor = SurfaceElevated
                 )
             )
 
+            // Not-found state with EmptyStateView illustration
             if (notFound) {
-                Spacer(modifier = Modifier.height(12.dp))
-                Text("No results found for this number", color = TextSecondary, fontSize = 14.sp)
+                EmptyStateView(
+                    title = "No Results Found",
+                    subtitle = "We couldn't find any information for this phone number. Try a different number or check the format.",
+                    icon = EmptyStateIcon.SEARCH,
+                    modifier = Modifier.height(280.dp)
+                )
             }
 
             // Result card
@@ -175,57 +206,42 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        // Source indicator
+                        // Source indicator using TruCallerBadge
                         val sourceLabel = when (lookupResult?.source) {
                             "registered_user" -> "Verified User"
                             "central_drive" -> "Known Contact"
                             "caller_id_db" -> "Caller ID Database"
                             else -> "Lookup Result"
                         }
-                        val sourceColor = when (lookupResult?.source) {
-                            "registered_user" -> Success
-                            "central_drive" -> Brand
-                            else -> TextSecondary
+                        val sourceBadgeType = when (lookupResult?.source) {
+                            "registered_user" -> BadgeType.Success
+                            "central_drive" -> BadgeType.Warning
+                            else -> BadgeType.Info
                         }
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Box(
-                                modifier = Modifier
-                                    .background(sourceColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                    .padding(horizontal = 10.dp, vertical = 4.dp)
-                            ) {
-                                Text(sourceLabel, color = sourceColor, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                            }
+                            TruCallerBadge(
+                                text = sourceLabel,
+                                type = sourceBadgeType
+                            )
                             if (isNumberBlocked) {
-                                Box(
-                                    modifier = Modifier
-                                        .background(Danger.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                                ) {
-                                    Text("BLOCKED", color = Danger, fontWeight = FontWeight.Bold, fontSize = 11.sp)
-                                }
+                                TruCallerBadge(
+                                    text = "BLOCKED",
+                                    type = BadgeType.Spam
+                                )
                             }
                         }
                         Spacer(modifier = Modifier.height(12.dp))
 
-                        // Caller info
+                        // Caller info with TruCallerAvatar
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(56.dp)
-                                    .background(Brand.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text(
-                                    entry.name.first().toString(),
-                                    color = Brand,
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 24.sp
-                                )
-                            }
+                            TruCallerAvatar(
+                                name = entry.name,
+                                size = 56.dp
+                            )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(entry.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
@@ -336,18 +352,18 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Spam score
+                        // Spam score with animated progress bar
                         Text("Spam Score", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextSecondary)
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             LinearProgressIndicator(
-                                progress = { entry.spamScore / 100f },
+                                progress = { animatedSpamScore },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(8.dp)
                                     .clip(RoundedCornerShape(4.dp)),
                                 color = getSpamScoreColor(entry.spamScore),
-                                trackColor = Color(0xFF333333)
+                                trackColor = Divider
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
@@ -360,52 +376,45 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
 
                         Spacer(modifier = Modifier.height(16.dp))
 
-                        // Category badge
-                        val (catLabel, catColor) = when (entry.category) {
-                            SpamCategory.SAFE -> "Safe" to Success
-                            SpamCategory.SUSPECTED_SPAM -> "Suspected Spam" to Warning
-                            SpamCategory.SPAM -> "Spam" to Color(0xFFF4511E)
-                            SpamCategory.FRAUD -> "Fraud" to Danger
+                        // Category badge using TruCallerBadge
+                        val (catLabel, catBadgeType, catColor) = when (entry.category) {
+                            SpamCategory.SAFE -> Triple("Safe", BadgeType.Success, Success)
+                            SpamCategory.SUSPECTED_SPAM -> Triple("Suspected Spam", BadgeType.Warning, Warning)
+                            SpamCategory.SPAM -> Triple("Spam", BadgeType.Spam, Color(0xFFF4511E))
+                            SpamCategory.FRAUD -> Triple("Fraud", BadgeType.Spam, Danger)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .background(catColor.copy(alpha = 0.1f), RoundedCornerShape(20.dp))
-                                    .padding(horizontal = 12.dp, vertical = 6.dp)
-                            ) {
-                                Text(catLabel, color = catColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                            }
+                            TruCallerBadge(
+                                text = catLabel,
+                                type = catBadgeType,
+                                color = catColor,
+                                backgroundColor = catColor.copy(alpha = 0.12f)
+                            )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text("${entry.reportCount} reports", color = TextSecondary, fontSize = 13.sp)
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
-                        // Action buttons row
+                        // Action buttons row using TruCallerButton
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
-                            Button(
+                            TruCallerButton(
+                                text = "Report",
                                 onClick = { callerIdViewModel.reportNumber(entry) },
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Warning),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(Icons.Default.Report, null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Report", fontSize = 13.sp)
-                            }
-                            Button(
+                                style = TruCallerButtonStyle.Primary,
+                                leadingIcon = Icons.Default.Report
+                            )
+                            TruCallerButton(
+                                text = "Save",
                                 onClick = { callerIdViewModel.saveToContacts(entry, userId) },
                                 modifier = Modifier.weight(1f),
-                                colors = ButtonDefaults.buttonColors(containerColor = Brand),
-                                shape = RoundedCornerShape(8.dp)
-                            ) {
-                                Icon(Icons.Default.PersonAdd, null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Save", fontSize = 13.sp)
-                            }
+                                style = TruCallerButtonStyle.Secondary,
+                                leadingIcon = Icons.Default.PersonAdd
+                            )
                         }
                     }
                 }
@@ -438,6 +447,11 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                     .padding(horizontal = 16.dp, vertical = 12.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
+                                TruCallerAvatar(
+                                    name = recentEntry.name,
+                                    size = 40.dp
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(recentEntry.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
                                     Text(
@@ -447,13 +461,12 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
-                                Box(
-                                    modifier = Modifier
-                                        .background(catColor.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                                ) {
-                                    Text("${recentEntry.spamScore}", color = catColor, fontWeight = FontWeight.Bold, fontSize = 12.sp)
-                                }
+                                TruCallerBadge(
+                                    text = "${recentEntry.spamScore}",
+                                    type = BadgeType.Custom,
+                                    color = catColor,
+                                    backgroundColor = catColor.copy(alpha = 0.12f)
+                                )
                             }
                         }
                     }
@@ -468,7 +481,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
     if (showEditDialog && entry != null) {
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Name", fontWeight = FontWeight.Bold) },
+            title = { Text("Edit Name", fontWeight = FontWeight.Bold, color = TextPrimary) },
             text = {
                 Column {
                     Text("Phone: ${formatPhoneNumber(entry.phoneNumber)}", fontSize = 13.sp, color = TextSecondary)
@@ -480,7 +493,12 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Brand,
+                            unfocusedBorderColor = Divider,
+                            focusedContainerColor = SurfaceElevated,
+                            unfocusedContainerColor = SurfaceElevated
+                        )
                     )
                 }
             },

@@ -3,6 +3,9 @@ package com.byron.trucaller.ui.main
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,7 +20,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -28,9 +31,6 @@ import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -44,13 +44,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -58,24 +59,22 @@ import androidx.navigation.NavController
 import com.byron.trucaller.data.model.SmsCategory
 import com.byron.trucaller.data.model.SmsMessage
 import com.byron.trucaller.data.model.SmsType
+import com.byron.trucaller.ui.components.TruCallerAvatar
 import com.byron.trucaller.ui.theme.Accent
 import com.byron.trucaller.ui.theme.Background
 import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.DangerBg
 import com.byron.trucaller.ui.theme.Inactive
 import com.byron.trucaller.ui.theme.SurfaceCard
 import com.byron.trucaller.ui.theme.SurfaceLight
 import com.byron.trucaller.ui.theme.TextPrimary
 import com.byron.trucaller.ui.theme.TextSecondary
+import com.byron.trucaller.ui.theme.TextOnYellow
 import com.byron.trucaller.ui.theme.YellowGradientEnd
 import com.byron.trucaller.ui.theme.YellowGradientStart
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
 import java.text.SimpleDateFormat
-import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -124,27 +123,16 @@ fun ConversationScreen(
             .fillMaxSize()
             .background(Background)
     ) {
-        // ── Top bar ──────────────────────────────────────────────────
+        // Top bar with consistent back button styling
         TopAppBar(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Mini avatar
-                    Box(
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(
-                                if (isSpam) Danger.copy(alpha = 0.2f) else Brand.copy(alpha = 0.2f),
-                                CircleShape
-                            ),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = displayName.take(1).uppercase(),
-                            color = if (isSpam) Danger else Brand,
-                            fontSize = 16.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    // Mini avatar using TruCallerAvatar component
+                    TruCallerAvatar(
+                        name = displayName,
+                        size = 36.dp,
+                        indicatorColor = if (isSpam) Danger else null
+                    )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
                         Text(
@@ -163,7 +151,11 @@ fun ConversationScreen(
             },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = TextPrimary)
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = TextPrimary
+                    )
                 }
             },
             actions = {
@@ -182,7 +174,7 @@ fun ConversationScreen(
             colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceCard)
         )
 
-        // ── Spam warning ─────────────────────────────────────────────
+        // Spam warning
         AnimatedVisibility(visible = isSpam) {
             Row(
                 modifier = Modifier
@@ -216,7 +208,7 @@ fun ConversationScreen(
             }
         }
 
-        // ── Action message ───────────────────────────────────────────
+        // Action message
         if (actionMessage != null) {
             Snackbar(
                 modifier = Modifier.padding(8.dp),
@@ -229,7 +221,7 @@ fun ConversationScreen(
             ) { Text(actionMessage!!, color = TextPrimary) }
         }
 
-        // ── Messages ─────────────────────────────────────────────────
+        // Messages with slide-up animation
         if (isLoading) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -246,8 +238,29 @@ fun ConversationScreen(
                     .padding(horizontal = 12.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                items(messages, key = { it.id }) { message ->
-                    MessageBubble(message)
+                itemsIndexed(messages, key = { _, msg -> msg.id }) { index, message ->
+                    // Each message bubble slides up from the bottom with a fade
+                    var visible by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) {
+                        visible = true
+                    }
+                    AnimatedVisibility(
+                        visible = visible,
+                        enter = slideInVertically(
+                            initialOffsetY = { fullHeight -> fullHeight / 3 },
+                            animationSpec = tween(
+                                durationMillis = 300,
+                                delayMillis = (index * 15).coerceAtMost(600)
+                            )
+                        ) + fadeIn(
+                            animationSpec = tween(
+                                durationMillis = 250,
+                                delayMillis = (index * 15).coerceAtMost(600)
+                            )
+                        )
+                    ) {
+                        MessageBubble(message)
+                    }
                 }
             }
         }
@@ -259,10 +272,29 @@ private fun MessageBubble(message: SmsMessage) {
     val isSent = message.type == SmsType.SENT
 
     val alignment = if (isSent) Alignment.End else Alignment.Start
+
+    // Bubble with tail/pointer shape: tighter corner on the tail side
     val shape = if (isSent) {
-        RoundedCornerShape(20.dp, 6.dp, 20.dp, 20.dp)
+        RoundedCornerShape(
+            topStart = 20.dp,
+            topEnd = 4.dp,    // Tail corner (tight)
+            bottomEnd = 20.dp,
+            bottomStart = 20.dp
+        )
     } else {
-        RoundedCornerShape(6.dp, 20.dp, 20.dp, 20.dp)
+        RoundedCornerShape(
+            topStart = 4.dp,  // Tail corner (tight)
+            topEnd = 20.dp,
+            bottomEnd = 20.dp,
+            bottomStart = 20.dp
+        )
+    }
+
+    // Gradient backgrounds using theme tokens
+    val bubbleGradient = if (isSent) {
+        Brush.linearGradient(listOf(YellowGradientStart, YellowGradientEnd))
+    } else {
+        Brush.linearGradient(listOf(SurfaceCard, SurfaceLight))
     }
 
     Column(
@@ -275,11 +307,7 @@ private fun MessageBubble(message: SmsMessage) {
             modifier = Modifier
                 .widthIn(max = 300.dp)
                 .background(
-                    brush = if (isSent) {
-                        Brush.linearGradient(listOf(YellowGradientStart, YellowGradientEnd))
-                    } else {
-                        Brush.linearGradient(listOf(SurfaceCard, SurfaceLight))
-                    },
+                    brush = bubbleGradient,
                     shape = shape
                 )
                 .padding(horizontal = 14.dp, vertical = 10.dp)
@@ -287,7 +315,7 @@ private fun MessageBubble(message: SmsMessage) {
             Column {
                 Text(
                     text = message.body,
-                    color = if (isSent) Color(0xFF1A1A1A) else TextPrimary,
+                    color = if (isSent) TextOnYellow else TextPrimary,
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 )
@@ -299,7 +327,7 @@ private fun MessageBubble(message: SmsMessage) {
                 ) {
                     Text(
                         text = SimpleDateFormat("h:mm a", Locale.US).format(Date(message.date)),
-                        color = if (isSent) Color(0xFF1A1A1A).copy(alpha = 0.6f) else Inactive,
+                        color = if (isSent) TextOnYellow.copy(alpha = 0.6f) else Inactive,
                         fontSize = 10.sp
                     )
                     if (isSent) {
@@ -308,8 +336,8 @@ private fun MessageBubble(message: SmsMessage) {
                             if (message.read) Icons.Default.DoneAll else Icons.Default.Done,
                             null,
                             modifier = Modifier.size(14.dp),
-                            tint = if (message.read) Color(0xFF1A1A1A).copy(alpha = 0.7f)
-                            else Color(0xFF1A1A1A).copy(alpha = 0.4f)
+                            tint = if (message.read) TextOnYellow.copy(alpha = 0.7f)
+                            else TextOnYellow.copy(alpha = 0.4f)
                         )
                     }
                 }
