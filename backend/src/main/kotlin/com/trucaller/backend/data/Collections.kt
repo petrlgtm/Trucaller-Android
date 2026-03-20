@@ -59,6 +59,12 @@ object Collections {
     val spamVerifications: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("spamVerifications")
 
+    val familyGroups: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("familyGroups")
+
+    val familyMembers: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("familyMembers")
+
     // ── Index creation ───────────────────────────────────────────────────
 
     /**
@@ -154,5 +160,24 @@ object Collections {
         // Index on phoneNumber for spam verification aggregation
         database.getCollection<Document>("spamVerifications")
             .createIndex(Indexes.ascending("phoneNumber"))
+
+        // Unique index on inviteCode for family groups
+        database.getCollection<Document>("familyGroups")
+            .createIndex(Indexes.ascending("inviteCode"), uniqueOption)
+
+        // Index on ownerId for family groups
+        database.getCollection<Document>("familyGroups")
+            .createIndex(Indexes.ascending("ownerId"))
+
+        // Compound index on (groupId, userId) for family members
+        database.getCollection<Document>("familyMembers")
+            .createIndex(Indexes.compoundIndex(
+                Indexes.ascending("groupId"),
+                Indexes.ascending("userId")
+            ))
+
+        // Index on userId for family members (lookup groups by user)
+        database.getCollection<Document>("familyMembers")
+            .createIndex(Indexes.ascending("userId"))
     }
 }

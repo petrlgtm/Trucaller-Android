@@ -345,6 +345,87 @@ object ApiClient {
     suspend fun updateAdminPassword(currentPassword: String, newPassword: String): ApiResult<Unit> =
         put("/api/admin/password", mapOf("currentPassword" to currentPassword, "newPassword" to newPassword))
 
+    // ── Family Group Endpoints ──────────────────────────────────────────
+
+    suspend fun createFamilyGroup(name: String, description: String? = null): ApiResult<Map<String, Any>> {
+        val body = mutableMapOf<String, Any>("name" to name)
+        description?.let { body["description"] = it }
+        return post("/api/family/create", body)
+    }
+
+    /** @deprecated Use [createFamilyGroup] with description parameter instead. */
+    suspend fun createFamilyGroup(name: String, createdBy: String): ApiResult<Map<String, Any>> =
+        post("/api/family/create", mapOf("name" to name))
+
+    suspend fun getMyFamilyGroups(): ApiResult<List<Map<String, Any>>> =
+        get("/api/family/my-groups")
+
+    /** @deprecated Use [getMyFamilyGroups] instead (JWT determines the user). */
+    suspend fun getFamilyGroups(userId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/family/my-groups")
+
+    suspend fun getFamilyGroupDetail(groupId: String): ApiResult<Map<String, Any>> =
+        get("/api/family/$groupId")
+
+    /** @deprecated Use [getFamilyGroupDetail] instead. */
+    suspend fun getFamilyGroup(groupId: String): ApiResult<Map<String, Any>> =
+        get("/api/family/$groupId")
+
+    suspend fun inviteFamilyMember(groupId: String, phoneNumber: String, role: String = "MEMBER"): ApiResult<Map<String, Any>> =
+        post("/api/family/$groupId/invite", mapOf("phoneNumber" to phoneNumber, "role" to role))
+
+    suspend fun joinFamilyGroup(inviteCode: String): ApiResult<Map<String, Any>> =
+        post("/api/family/join", mapOf("inviteCode" to inviteCode))
+
+    /** @deprecated Use [joinFamilyGroup] without userId (JWT determines the user). */
+    suspend fun joinFamilyGroup(inviteCode: String, userId: String): ApiResult<Map<String, Any>> =
+        post("/api/family/join", mapOf("inviteCode" to inviteCode))
+
+    suspend fun updateFamilyMemberRole(groupId: String, userId: String, role: String): ApiResult<Unit> =
+        put("/api/family/$groupId/members/$userId/role", mapOf("role" to role))
+
+    suspend fun removeFamilyMember(groupId: String, userId: String): ApiResult<Unit> =
+        delete("/api/family/$groupId/members/$userId")
+
+    suspend fun getFamilyGroupDevices(groupId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/family/$groupId/devices")
+
+    suspend fun sendFamilyAlert(
+        groupId: String,
+        type: String,
+        message: String? = null,
+        targetUserId: String? = null
+    ): ApiResult<Unit> {
+        val body = mutableMapOf<String, Any>("type" to type)
+        message?.let { body["message"] = it }
+        targetUserId?.let { body["targetUserId"] = it }
+        return post("/api/family/$groupId/alert", body)
+    }
+
+    /** @deprecated Use [removeFamilyMember] with the owner's own userId to delete the group. */
+    suspend fun deleteFamilyGroup(groupId: String): ApiResult<Unit> =
+        delete("/api/family/$groupId/members/self")
+
+    /** @deprecated Use [removeFamilyMember] for self-removal (leave). */
+    suspend fun leaveFamilyGroup(groupId: String, userId: String): ApiResult<Unit> =
+        delete("/api/family/$groupId/members/$userId")
+
+    /** @deprecated Use [removeFamilyMember] instead. */
+    suspend fun removeFamilyGroupMember(groupId: String, memberId: String): ApiResult<Unit> =
+        delete("/api/family/$groupId/members/$memberId")
+
+    /** @deprecated Use [updateFamilyMemberRole] with role="ADMIN" instead. */
+    suspend fun promoteFamilyGroupMember(groupId: String, memberId: String): ApiResult<Unit> =
+        put("/api/family/$groupId/members/$memberId/role", mapOf("role" to "ADMIN"))
+
+    /** @deprecated No longer supported in the new API. */
+    suspend fun updateFamilyGroup(groupId: String, name: String): ApiResult<Unit> =
+        put("/api/family/$groupId", mapOf("name" to name))
+
+    /** @deprecated No longer supported in the new API. */
+    suspend fun regenerateInviteCode(groupId: String): ApiResult<Map<String, Any>> =
+        post("/api/family/$groupId/regenerate-invite", emptyMap<String, Any>())
+
     // ── Internal HTTP methods ───────────────────────────────────────────
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> = withContext(Dispatchers.IO) {

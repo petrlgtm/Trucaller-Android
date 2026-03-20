@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -724,6 +725,15 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     title = "Call Recordings",
                     iconColor = colorScheme.primary,
                     onClick = { rootNavController.navigate("call_recordings") }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Family & Groups
+                ProfileMenuItem(
+                    icon = Icons.Default.People,
+                    title = "Family & Groups",
+                    iconColor = colorScheme.primary,
+                    onClick = { rootNavController.navigate("family_groups") }
                 )
                 HorizontalDivider(color = colorScheme.outlineVariant)
 

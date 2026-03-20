@@ -90,6 +90,9 @@ import com.byron.trucaller.ui.main.RecordingSettingsScreen
 import com.byron.trucaller.ui.main.SecurityScreen
 import com.byron.trucaller.ui.main.BlockingSchedulesScreen
 import com.byron.trucaller.ui.main.EditBlockingScheduleScreen
+import com.byron.trucaller.ui.main.FamilyGroupDetailScreen
+import com.byron.trucaller.ui.main.FamilyGroupsScreen
+import com.byron.trucaller.ui.main.JoinGroupScreen
 import com.byron.trucaller.ui.main.SmsRulesScreen
 import com.byron.trucaller.ui.stolen.GeofenceManagementScreen
 import com.byron.trucaller.ui.stolen.NetworkForensicsScreen
@@ -107,6 +110,7 @@ import com.byron.trucaller.viewmodel.GeofenceViewModel
 import com.byron.trucaller.viewmodel.NetworkForensicsViewModel
 import com.byron.trucaller.viewmodel.CallRecordingsViewModel
 import com.byron.trucaller.viewmodel.BlockingScheduleViewModel
+import com.byron.trucaller.viewmodel.FamilyGroupViewModel
 import com.byron.trucaller.viewmodel.SmsRulesViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
@@ -153,6 +157,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val callRecordingsViewModel: CallRecordingsViewModel = viewModel(factory = CallRecordingsViewModel.Factory)
     val smsRulesViewModel: SmsRulesViewModel = viewModel(factory = SmsRulesViewModel.Factory)
     val blockingScheduleViewModel: BlockingScheduleViewModel = viewModel(factory = BlockingScheduleViewModel.Factory)
+    val familyGroupViewModel: FamilyGroupViewModel = viewModel(factory = FamilyGroupViewModel.Factory)
 
     NavHost(
         navController = navController,
@@ -321,6 +326,30 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 scheduleId = scheduleId,
                 authViewModel = authViewModel,
                 blockingScheduleViewModel = blockingScheduleViewModel
+            )
+        }
+        // Family Group routes
+        composable("family_groups") {
+            FamilyGroupsScreen(
+                navController = navController,
+                authViewModel = authViewModel,
+                familyGroupViewModel = familyGroupViewModel
+            )
+        }
+        composable("family_group_detail/{groupId}") { backStackEntry ->
+            val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+            FamilyGroupDetailScreen(
+                navController = navController,
+                groupId = groupId,
+                authViewModel = authViewModel,
+                familyGroupViewModel = familyGroupViewModel
+            )
+        }
+        composable("join_family_group") {
+            JoinGroupScreen(
+                navController = navController,
+                authViewModel = authViewModel,
+                familyGroupViewModel = familyGroupViewModel
             )
         }
         // Admin routes

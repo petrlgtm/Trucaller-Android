@@ -19,6 +19,8 @@ import com.byron.trucaller.data.dao.ContactAliasDao
 import com.byron.trucaller.data.dao.GeofenceDao
 import com.byron.trucaller.data.dao.GeofenceEventDao
 import com.byron.trucaller.data.dao.CallRecordingDao
+import com.byron.trucaller.data.dao.FamilyGroupDao
+import com.byron.trucaller.data.dao.FamilyMemberDao
 import com.byron.trucaller.data.dao.SmsRuleDao
 import com.byron.trucaller.data.dao.UserDao
 import com.byron.trucaller.data.model.AdminUser
@@ -33,6 +35,8 @@ import com.byron.trucaller.data.model.GeofenceEvent
 import com.byron.trucaller.data.model.IpLog
 import com.byron.trucaller.data.model.CallRecording
 import com.byron.trucaller.data.model.ContactAlias
+import com.byron.trucaller.data.model.FamilyGroup
+import com.byron.trucaller.data.model.FamilyMember
 import com.byron.trucaller.data.model.SmsRule
 import com.byron.trucaller.data.model.SmsSpamReport
 import com.byron.trucaller.data.model.StolenReport
@@ -55,9 +59,11 @@ import com.byron.trucaller.data.model.User
         GeofenceEvent::class,
         SmsRule::class,
         CallRecording::class,
-        BlockingSchedule::class
+        BlockingSchedule::class,
+        FamilyGroup::class,
+        FamilyMember::class
     ],
-    version = 13,
+    version = 14,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -78,6 +84,8 @@ abstract class TruCallerDatabase : RoomDatabase() {
     abstract fun callRecordingDao(): CallRecordingDao
     abstract fun smsRuleDao(): SmsRuleDao
     abstract fun blockingScheduleDao(): BlockingScheduleDao
+    abstract fun familyGroupDao(): FamilyGroupDao
+    abstract fun familyMemberDao(): FamilyMemberDao
 
     companion object {
         /** Migration 9 -> 10: add trustScore and trustLevel columns to users table. */
@@ -141,6 +149,35 @@ abstract class TruCallerDatabase : RoomDatabase() {
                         daysOfWeek INTEGER NOT NULL,
                         blockType TEXT NOT NULL,
                         createdAt TEXT NOT NULL
+                    )"""
+                )
+            }
+        }
+
+        /** Migration 13 -> 14: create family_groups and family_members tables. */
+        val MIGRATION_13_14 = object : Migration(13, 14) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS family_groups (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        name TEXT NOT NULL,
+                        description TEXT NOT NULL DEFAULT '',
+                        ownerId TEXT NOT NULL,
+                        inviteCode TEXT NOT NULL,
+                        memberCount INTEGER NOT NULL DEFAULT 1,
+                        createdAt TEXT NOT NULL,
+                        maxMembers INTEGER NOT NULL DEFAULT 10
+                    )"""
+                )
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS family_members (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        groupId TEXT NOT NULL,
+                        userId TEXT NOT NULL,
+                        displayName TEXT NOT NULL,
+                        phoneNumber TEXT NOT NULL,
+                        role TEXT NOT NULL DEFAULT 'MEMBER',
+                        joinedAt TEXT NOT NULL
                     )"""
                 )
             }

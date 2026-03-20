@@ -12,6 +12,7 @@ import com.trucaller.backend.routes.callerIdRoutes
 import com.trucaller.backend.routes.contactRoutes
 import com.trucaller.backend.routes.deviceRoutes
 import com.trucaller.backend.routes.blockedRoutes
+import com.trucaller.backend.routes.familyGroupRoutes
 import com.trucaller.backend.routes.geofenceRoutes
 import com.trucaller.backend.routes.smsRoutes
 import com.trucaller.backend.routes.stolenReportRoutes
@@ -125,6 +126,7 @@ fun Application.module() {
         smsRoutes()
         blockedRoutes()
         geofenceRoutes()
+        familyGroupRoutes()
         adminRoutes()
     }
 }
