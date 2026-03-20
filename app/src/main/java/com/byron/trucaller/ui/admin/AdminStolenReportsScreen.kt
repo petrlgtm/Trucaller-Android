@@ -2,6 +2,7 @@ package com.byron.trucaller.ui.admin
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -18,7 +19,9 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -28,6 +31,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -50,6 +54,8 @@ import com.byron.trucaller.viewmodel.StolenReportViewModel
 @Composable
 fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel: StolenReportViewModel) {
     val reports by stolenReportViewModel.allReports.collectAsState(initial = emptyList())
+    val updatingReportId by stolenReportViewModel.updatingReportId.collectAsState()
+    val statusMessage by stolenReportViewModel.statusMessage.collectAsState()
     val isInitialLoad = remember { mutableStateOf(true) }
 
     if (reports.isNotEmpty() && isInitialLoad.value) {
@@ -58,6 +64,7 @@ fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel
 
     val colorScheme = MaterialTheme.colorScheme
 
+    Box(modifier = Modifier.fillMaxSize()) {
     Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
         TopAppBar(
             title = {
@@ -160,6 +167,7 @@ fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel
 
                             // Action buttons based on status
                             Spacer(modifier = Modifier.height(12.dp))
+                            val isThisUpdating = updatingReportId == report.id
                             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 when (report.status) {
                                     ReportStatus.PENDING -> {
@@ -172,7 +180,9 @@ fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel
                                                 )
                                             },
                                             style = TruCallerButtonStyle.Primary,
-                                            modifier = Modifier.height(36.dp)
+                                            modifier = Modifier.height(36.dp),
+                                            isLoading = isThisUpdating,
+                                            enabled = updatingReportId == null
                                         )
                                         TruCallerButton(
                                             text = "Reject",
@@ -183,7 +193,9 @@ fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel
                                                 )
                                             },
                                             style = TruCallerButtonStyle.Danger,
-                                            modifier = Modifier.height(36.dp)
+                                            modifier = Modifier.height(36.dp),
+                                            isLoading = isThisUpdating,
+                                            enabled = updatingReportId == null
                                         )
                                     }
                                     ReportStatus.VERIFIED -> {
@@ -196,7 +208,9 @@ fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel
                                                 )
                                             },
                                             style = TruCallerButtonStyle.Primary,
-                                            modifier = Modifier.height(36.dp)
+                                            modifier = Modifier.height(36.dp),
+                                            isLoading = isThisUpdating,
+                                            enabled = updatingReportId == null
                                         )
                                     }
                                     ReportStatus.ESCALATED -> {
@@ -209,7 +223,9 @@ fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel
                                                 )
                                             },
                                             style = TruCallerButtonStyle.Primary,
-                                            modifier = Modifier.height(36.dp)
+                                            modifier = Modifier.height(36.dp),
+                                            isLoading = isThisUpdating,
+                                            enabled = updatingReportId == null
                                         )
                                     }
                                     ReportStatus.RESOLVED -> {
@@ -229,4 +245,21 @@ fun AdminStolenReportsScreen(navController: NavController, stolenReportViewModel
             }
         }
     }
+
+    // Snackbar for status change feedback
+    statusMessage?.let { msg ->
+        Snackbar(
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(Spacing.md),
+            action = {
+                TextButton(onClick = { stolenReportViewModel.clearStatusMessage() }) {
+                    Text("OK", color = Color.White)
+                }
+            }
+        ) {
+            Text(msg)
+        }
+    }
+    } // Box
 }

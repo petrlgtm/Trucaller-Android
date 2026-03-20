@@ -41,7 +41,16 @@ class StolenReportViewModel(
     private val _reportError = MutableStateFlow<String?>(null)
     val reportError: StateFlow<String?> = _reportError.asStateFlow()
 
+    /** ID of the report currently being updated (drives button loading spinners). */
+    private val _updatingReportId = MutableStateFlow<String?>(null)
+    val updatingReportId: StateFlow<String?> = _updatingReportId.asStateFlow()
+
+    /** Transient message shown as a snackbar after a status change. */
+    private val _statusMessage = MutableStateFlow<String?>(null)
+    val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
     fun clearReportError() { _reportError.value = null }
+    fun clearStatusMessage() { _statusMessage.value = null }
 
     fun getReportsByDevice(deviceId: String): Flow<List<StolenReport>> =
         stolenReportRepository.getReportsByDevice(deviceId)
@@ -134,7 +143,48 @@ class StolenReportViewModel(
 
     fun updateReportStatus(reportId: String, newStatus: ReportStatus) {
         viewModelScope.launch {
-            stolenReportRepository.updateReportStatus(reportId, newStatus)
+            _updatingReportId.value = reportId
+            try {
+                // 1. Update locally in Room
+                stolenReportRepository.updateReportStatus(reportId, newStatus)
+
+                // 2. Sync status change to backend (fire-and-forget — failures are logged)
+                try {
+                    val result = ApiClient.updateStolenReportStatus(reportId, newStatus.name)
+                    if (result.success) {
+                        Log.d("StolenReportVM", "Status synced to backend: $reportId -> $newStatus")
+                    } else {
+                        Log.w("StolenReportVM", "Backend status sync failed: ${result.error}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("StolenReportVM", "Backend status sync error for $reportId", e)
+                }
+
+                // 3. If resolving, also trigger device recovery on backend
+                if (newStatus == ReportStatus.RESOLVED) {
+                    try {
+                        val report = stolenReportRepository.getReportById(reportId)
+                        if (report != null) {
+                            deviceRepository.updateDeviceStatus(report.deviceId, DeviceStatus.ACTIVE)
+                            val recoveryResult = ApiClient.recoverDevice(report.deviceId)
+                            if (recoveryResult.success) {
+                                Log.d("StolenReportVM", "Device recovery synced for ${report.deviceId}")
+                            } else {
+                                Log.w("StolenReportVM", "Backend device recovery failed: ${recoveryResult.error}")
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e("StolenReportVM", "Device recovery error for report $reportId", e)
+                    }
+                }
+
+                _statusMessage.value = "Report ${newStatus.name.lowercase().replaceFirstChar { it.uppercase() }}"
+            } catch (e: Exception) {
+                Log.e("StolenReportVM", "Failed to update report status for $reportId", e)
+                _statusMessage.value = "Failed to update status: ${e.message}"
+            } finally {
+                _updatingReportId.value = null
+            }
         }
     }
 
