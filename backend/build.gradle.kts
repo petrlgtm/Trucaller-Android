@@ -38,6 +38,9 @@ dependencies {
     // BCrypt for password hashing
     implementation("at.favre.lib:bcrypt:0.10.2")
 
+    // Firebase Admin SDK (FCM push notifications)
+    implementation("com.google.firebase:firebase-admin:9.4.3")
+
     // Logging
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
 

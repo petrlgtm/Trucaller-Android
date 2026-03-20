@@ -5,6 +5,7 @@ import com.trucaller.backend.auth.JwtConfig
 import com.trucaller.backend.auth.adminAuthRoutes
 import com.trucaller.backend.auth.authRoutes
 import com.trucaller.backend.data.MongoDB
+import com.trucaller.backend.service.FcmService
 import com.trucaller.backend.routes.adminRoutes
 import com.trucaller.backend.routes.alarmRoutes
 import com.trucaller.backend.routes.callerIdRoutes
@@ -77,6 +78,9 @@ fun Application.module() {
     // ── JWT Authentication ───────────────────────────────────────────────
     JwtConfig.init(environment)
     JwtConfig.configureAuth(this)
+
+    // ── Firebase Admin (FCM push) ───────────────────────────────────────
+    FcmService.initialize()
 
     // ── MongoDB connection ───────────────────────────────────────────────
     val mongoUri = environment.config.property("mongo.uri").getString()

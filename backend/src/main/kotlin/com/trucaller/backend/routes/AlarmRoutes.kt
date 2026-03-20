@@ -13,6 +13,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import com.trucaller.backend.service.FcmService
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
@@ -83,11 +84,50 @@ fun Route.alarmRoutes() {
 
             Collections.alarmLogs.insertOne(alarmDoc)
 
+            // ── Send FCM push to the target device ──────────────────────
+            val deviceDoc = Collections.devices
+                .find(Filters.eq("deviceId", request.deviceId))
+                .firstOrNull()
+            val fcmToken = deviceDoc?.getString("fcmToken")
+
+            if (fcmToken.isNullOrBlank()) {
+                // No token available — mark alarm as FAILED
+                Collections.alarmLogs.updateOne(
+                    Filters.eq("_id", logId),
+                    Document("\$set", Document("result", "FAILED"))
+                )
+                call.respond(
+                    HttpStatusCode.Created,
+                    ApiResponse<Nothing>(
+                        success = true,
+                        message = "Alarm logged but push failed: no FCM token for device"
+                    )
+                )
+                return@post
+            }
+
+            val pushSent = FcmService.sendPush(
+                fcmToken,
+                mapOf("action" to request.type)
+            )
+
+            if (!pushSent) {
+                // Push delivery failed — mark alarm as FAILED
+                Collections.alarmLogs.updateOne(
+                    Filters.eq("_id", logId),
+                    Document("\$set", Document("result", "FAILED"))
+                )
+            }
+            // If push succeeded, result stays "PENDING" (device will confirm)
+
             call.respond(
                 HttpStatusCode.Created,
                 ApiResponse<Nothing>(
                     success = true,
-                    message = "Alarm triggered successfully"
+                    message = if (pushSent)
+                        "Alarm triggered successfully"
+                    else
+                        "Alarm logged but push delivery failed"
                 )
             )
         }
