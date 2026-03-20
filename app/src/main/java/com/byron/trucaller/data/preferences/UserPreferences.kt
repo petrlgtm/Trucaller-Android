@@ -29,6 +29,7 @@ class UserPreferences(private val context: Context) {
         private val CONSENT_GIVEN = booleanPreferencesKey("consent_given")
         private val LAST_CONTACT_SYNC_TIMESTAMP = longPreferencesKey("last_contact_sync_timestamp")
         private val FCM_TOKEN_NEEDS_SYNC = booleanPreferencesKey("fcm_token_needs_sync")
+        private val DEVICE_PROTECTION_PROMPT_SHOWN = booleanPreferencesKey("device_protection_prompt_shown")
     }
 
     val autoBackup: Flow<Boolean> = context.dataStore.data.map { it[AUTO_BACKUP_KEY] ?: true }
@@ -43,6 +44,7 @@ class UserPreferences(private val context: Context) {
     val consentGiven: Flow<Boolean> = context.dataStore.data.map { it[CONSENT_GIVEN] ?: false }
     val lastContactSyncTimestamp: Flow<Long> = context.dataStore.data.map { it[LAST_CONTACT_SYNC_TIMESTAMP] ?: 0L }
     val fcmTokenNeedsSync: Flow<Boolean> = context.dataStore.data.map { it[FCM_TOKEN_NEEDS_SYNC] ?: false }
+    val deviceProtectionPromptShown: Flow<Boolean> = context.dataStore.data.map { it[DEVICE_PROTECTION_PROMPT_SHOWN] ?: false }
     val recentLookups: Flow<List<String>> = context.dataStore.data.map {
         it[RECENT_LOOKUPS]?.split(",")?.filter { s -> s.isNotEmpty() } ?: emptyList()
     }
@@ -98,6 +100,10 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setFcmTokenNeedsSync(needsSync: Boolean) {
         context.dataStore.edit { it[FCM_TOKEN_NEEDS_SYNC] = needsSync }
+    }
+
+    suspend fun setDeviceProtectionPromptShown(shown: Boolean) {
+        context.dataStore.edit { it[DEVICE_PROTECTION_PROMPT_SHOWN] = shown }
     }
 
     suspend fun addRecentLookup(entryId: String) {

@@ -106,7 +106,9 @@ fun SplashScreen(navController: NavController, authViewModel: AuthViewModel) {
         delay(300)
 
         if (currentState.isAuthenticated) {
-            navController.navigate("main") {
+            val promptShown = authViewModel.isDeviceProtectionPromptShown()
+            val destination = if (promptShown) "main" else "device_protection_prompt"
+            navController.navigate(destination) {
                 popUpTo("splash") { inclusive = true }
             }
         } else {

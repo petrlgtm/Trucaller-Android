@@ -319,7 +319,9 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                             val success = authViewModel.login(phone, password)
                             isLoading = false
                             if (success) {
-                                navController.navigate("main") {
+                                val promptShown = authViewModel.isDeviceProtectionPromptShown()
+                                val destination = if (promptShown) "main" else "device_protection_prompt"
+                                navController.navigate(destination) {
                                     popUpTo("splash") { inclusive = true }
                                 }
                             } else {

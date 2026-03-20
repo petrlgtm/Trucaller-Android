@@ -306,6 +306,14 @@ class AuthViewModel(
         return _authState.value.user?.securityPin != null
     }
 
+    suspend fun isDeviceProtectionPromptShown(): Boolean {
+        return preferences.deviceProtectionPromptShown.first()
+    }
+
+    suspend fun setDeviceProtectionPromptShown(shown: Boolean) {
+        preferences.setDeviceProtectionPromptShown(shown)
+    }
+
     fun updateAvatar(uri: Uri) {
         viewModelScope.launch {
             val user = _authState.value.user ?: return@launch

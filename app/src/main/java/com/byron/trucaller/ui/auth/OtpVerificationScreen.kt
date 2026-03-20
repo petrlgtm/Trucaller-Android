@@ -145,11 +145,8 @@ fun OtpVerificationScreen(
     LaunchedEffect(verificationSuccess) {
         if (verificationSuccess) {
             delay(1200) // Let the animation play
-            // Auto-activate Device Admin protection (user gave consent during registration)
-            if (!DeviceAdminHelper.isAdminActive(context) && activity != null) {
-                DeviceAdminHelper.requestAdminPermission(activity)
-            }
-            navController.navigate("main") {
+            // Navigate to device protection prompt for first-time setup
+            navController.navigate("device_protection_prompt") {
                 popUpTo("splash") { inclusive = true }
             }
         }

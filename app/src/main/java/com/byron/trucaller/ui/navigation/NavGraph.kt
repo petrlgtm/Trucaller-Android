@@ -72,6 +72,7 @@ import com.byron.trucaller.ui.admin.AdminStolenReportsScreen
 import com.byron.trucaller.ui.admin.AdminUserDetailScreen
 import com.byron.trucaller.ui.admin.AdminUsersScreen
 import com.byron.trucaller.ui.auth.AdminLoginScreen
+import com.byron.trucaller.ui.auth.DeviceProtectionPromptScreen
 import com.byron.trucaller.ui.auth.ForgotPasswordScreen
 import com.byron.trucaller.ui.auth.LoginScreen
 import com.byron.trucaller.ui.auth.OtpVerificationScreen
@@ -186,6 +187,12 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
         }
         composable("forgot_password") {
             ForgotPasswordScreen(navController = navController, authViewModel = authViewModel)
+        }
+        composable("device_protection_prompt") {
+            DeviceProtectionPromptScreen(
+                navController = navController,
+                authViewModel = authViewModel
+            )
         }
         composable(
             "main",
