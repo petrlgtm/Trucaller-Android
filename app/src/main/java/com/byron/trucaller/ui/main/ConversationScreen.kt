@@ -109,7 +109,9 @@ fun ConversationScreen(
     }
 
     val contactName = messages.firstOrNull()?.contactName
-    val isSpam = messages.any { it.category == SmsCategory.SPAM }
+    // Only show spam banner if the MAJORITY of messages are spam, not just one
+    val spamCount = messages.count { it.category == SmsCategory.SPAM }
+    val isSpam = messages.isNotEmpty() && spamCount > messages.size / 2
     val displayName = contactName ?: address
 
     Column(

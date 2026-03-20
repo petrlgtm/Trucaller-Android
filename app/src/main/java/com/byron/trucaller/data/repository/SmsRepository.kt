@@ -251,29 +251,30 @@ class SmsRepository(
         val promoScore = scorePromotional(lowerBody)
         val transactionalScore = scoreTransactional(lowerBody)
 
-        // Strong spam signals override everything
-        if (spamScore >= 3) return SmsCategory.SPAM
-
-        // Shortcode / alphanumeric senders are never personal
+        // Business/shortcode senders are NEVER spam — they are promotional or transactional.
+        // Only unknown phone numbers can be classified as spam from keywords.
         if (isBusinessSender) {
             return when {
-                promoScore > transactionalScore -> SmsCategory.PROMOTIONAL
+                transactionalScore > promoScore -> SmsCategory.TRANSACTIONAL
+                promoScore > 0 -> SmsCategory.PROMOTIONAL
                 transactionalScore > 0 -> SmsCategory.TRANSACTIONAL
-                spamScore > 0 -> SmsCategory.PROMOTIONAL
-                else -> SmsCategory.TRANSACTIONAL
+                else -> SmsCategory.PROMOTIONAL // Default for business senders
             }
         }
 
-        // Regular phone number senders
+        // Regular phone number senders — spam thresholds apply
         return when {
-            spamScore >= 2 -> SmsCategory.SPAM
+            spamScore >= 4 -> SmsCategory.SPAM
+            spamScore >= 3 && promoScore == 0 && transactionalScore == 0 -> SmsCategory.SPAM
             promoScore >= 3 -> SmsCategory.PROMOTIONAL
             transactionalScore >= 2 -> SmsCategory.TRANSACTIONAL
+            spamScore >= 2 -> SmsCategory.SPAM
             promoScore >= 2 && senderCategory != SmsCategory.PERSONAL -> SmsCategory.PROMOTIONAL
             else -> senderCategory
         }
     }
 
+    /** Spam score is only meaningful for personal (phone number) senders. */
     private fun scoreSpam(body: String): Int {
         var score = 0
         val spamPatterns = listOf(
