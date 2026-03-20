@@ -15,6 +15,7 @@ import com.trucaller.backend.routes.blockedRoutes
 import com.trucaller.backend.routes.familyGroupRoutes
 import com.trucaller.backend.routes.geofenceRoutes
 import com.trucaller.backend.routes.smsRoutes
+import com.trucaller.backend.routes.analyticsRoutes
 import com.trucaller.backend.routes.stolenReportRoutes
 import io.ktor.http.*
 import io.ktor.serialization.kotlinx.json.*
@@ -127,6 +128,7 @@ fun Application.module() {
         blockedRoutes()
         geofenceRoutes()
         familyGroupRoutes()
+        analyticsRoutes()
         adminRoutes()
     }
 }

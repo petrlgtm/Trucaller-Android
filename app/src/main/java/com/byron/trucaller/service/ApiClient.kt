@@ -260,6 +260,14 @@ object ApiClient {
     suspend fun getSpamNumbers(skip: Int = 0, limit: Int = 50): ApiResult<List<Map<String, Any>>> =
         get("/api/sms/spam-numbers?skip=$skip&limit=$limit")
 
+    // ── User Analytics ─────────────────────────────────────────────────
+
+    suspend fun getUserAnalytics(): ApiResult<Map<String, Any>> =
+        get("/api/analytics/me")
+
+    suspend fun getUserAnalyticsHistory(): ApiResult<List<Map<String, Any>>> =
+        get("/api/analytics/me/history")
+
     // ── Admin Endpoints ──────────────────────────────────────────────────
 
     suspend fun adminLogin(email: String, password: String): ApiResult<TokenResponse> =
