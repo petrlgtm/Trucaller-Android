@@ -14,7 +14,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +34,10 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -49,6 +52,7 @@ import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.OpenInNew
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Wifi
@@ -61,6 +65,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -91,14 +96,6 @@ import com.byron.trucaller.ui.components.TruCallerButtonStyle
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.BorderRadius
 import com.byron.trucaller.ui.theme.Spacing
-import com.byron.trucaller.ui.theme.Accent
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Divider
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.Warning
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -111,6 +108,9 @@ import java.util.Locale
 import java.util.TimeZone
 
 private enum class PendingRemoteAction { ALARM, LOCK, LOCATION }
+
+private val SuccessColor = Color(0xFF4CAF50)
+private val WarningColor = Color(0xFFFF9800)
 
 private val TIMELINE_DOT_COLORS = listOf(
     Color(0xFFE53935), Color(0xFF1565C0), Color(0xFFFB8C00), Color(0xFF43A047),
@@ -274,6 +274,39 @@ fun RemoteActionsScreen(
         label = "alarmAlpha"
     )
 
+    // Pulsing animation for STOLEN badge
+    val stolenBadgeTransition = rememberInfiniteTransition(label = "stolenBadge")
+    val stolenBadgeScale by stolenBadgeTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "stolenBadgeScale"
+    )
+    val stolenBadgeAlpha by stolenBadgeTransition.animateFloat(
+        initialValue = 0.9f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 800),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "stolenBadgeAlpha"
+    )
+
+    // Shield glow animation
+    val shieldGlowTransition = rememberInfiniteTransition(label = "shieldGlow")
+    val shieldGlowAlpha by shieldGlowTransition.animateFloat(
+        initialValue = 0.15f,
+        targetValue = 0.4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1200),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "shieldGlowAlpha"
+    )
+
     // Map visibility state for fade-in animation
     var mapVisible by remember { mutableStateOf(false) }
     LaunchedEffect(lastIpLog) {
@@ -328,23 +361,29 @@ fun RemoteActionsScreen(
                                     val isFocused = pinInput.length == index
                                     Box(
                                         modifier = Modifier
-                                            .size(48.dp)
+                                            .size(52.dp)
+                                            .shadow(
+                                                elevation = if (isFocused) 4.dp else 2.dp,
+                                                shape = RoundedCornerShape(12.dp),
+                                                ambientColor = if (isFocused) colorScheme.primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f),
+                                                spotColor = if (isFocused) colorScheme.primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f)
+                                            )
                                             .border(
                                                 if (isFocused) 2.dp else 1.5.dp,
-                                                if (isFocused || char.isNotEmpty()) Brand else Divider,
+                                                if (isFocused || char.isNotEmpty()) colorScheme.primary else colorScheme.outlineVariant,
                                                 RoundedCornerShape(12.dp)
                                             )
                                             .background(
-                                                if (char.isNotEmpty()) Color(0xFF252525) else Background,
+                                                colorScheme.surfaceContainerHighest,
                                                 RoundedCornerShape(12.dp)
                                             ),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             if (char.isNotEmpty()) "\u2022" else "",
-                                            fontSize = 22.sp,
+                                            fontSize = 24.sp,
                                             fontWeight = FontWeight.Bold,
-                                            color = TextPrimary
+                                            color = colorScheme.onSurface
                                         )
                                     }
                                 }
@@ -356,13 +395,13 @@ fun RemoteActionsScreen(
                         val remaining = ((pinCooldownUntil - currentTime) / 1000).coerceAtLeast(0)
                         Text(
                             "Too many attempts. Try again in ${remaining}s.",
-                            color = Danger,
+                            color = colorScheme.error,
                             fontSize = 13.sp,
                             textAlign = TextAlign.Center
                         )
                     } else if (pinError != null) {
                         Spacer(modifier = Modifier.height(10.dp))
-                        Text(pinError!!, color = Danger, fontSize = 13.sp, textAlign = TextAlign.Center)
+                        Text(pinError!!, color = colorScheme.error, fontSize = 13.sp, textAlign = TextAlign.Center)
                     }
                 }
             },
@@ -479,7 +518,7 @@ fun RemoteActionsScreen(
                         recoverLoading = false
                         showRecoverSuccess = true
                     }
-                }) { Text("Mark Recovered", color = Success) }
+                }) { Text("Mark Recovered", color = SuccessColor) }
             },
             dismissButton = {
                 TextButton(onClick = { showRecoverConfirm = false }) { Text("Cancel") }
@@ -506,7 +545,7 @@ fun RemoteActionsScreen(
                 .fillMaxSize()
                 .background(colorScheme.background)
         ) {
-            // Banner
+            // Banner with gradient
             TopAppBar(
                 title = {},
                 navigationIcon = {
@@ -514,32 +553,114 @@ fun RemoteActionsScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onError)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.error)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
+                modifier = Modifier.background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            colorScheme.error,
+                            colorScheme.error.copy(alpha = 0.85f)
+                        )
+                    )
+                )
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(colorScheme.error)
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                colorScheme.error.copy(alpha = 0.85f),
+                                colorScheme.error.copy(red = colorScheme.error.red * 0.7f, green = 0f, blue = 0f)
+                            )
+                        )
+                    )
                     .padding(bottom = Spacing.lg),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    // Large shield icon with glow
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier.size(120.dp)
+                    ) {
+                        // Glow effect behind the shield
+                        Box(
+                            modifier = Modifier
+                                .size(110.dp)
+                                .alpha(shieldGlowAlpha)
+                                .background(
+                                    colorScheme.onError.copy(alpha = 0.2f),
+                                    CircleShape
+                                )
+                        )
+                        Icon(
+                            Icons.Default.Shield,
+                            contentDescription = "Stolen device",
+                            tint = colorScheme.onError,
+                            modifier = Modifier.size(96.dp)
+                        )
+                        // Warning overlay on shield
+                        Icon(
+                            Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = colorScheme.error,
+                            modifier = Modifier
+                                .size(32.dp)
+                                .align(Alignment.Center)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Pulsing STOLEN badge
                     Row(
                         modifier = Modifier
-                            .background(Color.Black.copy(alpha = 0.2f), RoundedCornerShape(20.dp))
-                            .padding(horizontal = 12.dp, vertical = 6.dp),
+                            .scale(stolenBadgeScale)
+                            .alpha(stolenBadgeAlpha)
+                            .background(
+                                Color.Black.copy(alpha = 0.35f),
+                                RoundedCornerShape(24.dp)
+                            )
+                            .border(
+                                1.dp,
+                                colorScheme.onError.copy(alpha = 0.4f),
+                                RoundedCornerShape(24.dp)
+                            )
+                            .padding(horizontal = 20.dp, vertical = 8.dp),
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(Icons.Default.Warning, null, tint = colorScheme.onError, modifier = Modifier.size(14.dp))
-                        Text("STOLEN", color = colorScheme.onError, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+                        Icon(Icons.Default.Warning, null, tint = colorScheme.onError, modifier = Modifier.size(18.dp))
+                        Text(
+                            "STOLEN",
+                            color = colorScheme.onError,
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 2.sp
+                        )
                     }
-                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Spacer(modifier = Modifier.height(14.dp))
+
                     Text(
                         device?.let { "${it.manufacturer} ${it.model}" } ?: "Loading...",
                         color = colorScheme.onError, fontSize = 22.sp, fontWeight = FontWeight.Bold
                     )
                     Text("Reported $reportDate", color = colorScheme.onError.copy(alpha = 0.8f), fontSize = 14.sp)
+
+                    // IMEI / Device ID if available
+                    device?.deviceId?.let { imei ->
+                        if (imei.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                "IMEI: $imei",
+                                color = colorScheme.onError.copy(alpha = 0.65f),
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
                 }
             }
 
@@ -554,7 +675,7 @@ fun RemoteActionsScreen(
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(bottom = 12.dp)
+                            .padding(bottom = 16.dp)
                             .scale(alarmPulseScale)
                             .alpha(alarmPulseAlpha)
                             .background(colorScheme.error, RoundedCornerShape(BorderRadius.md))
@@ -579,89 +700,150 @@ fun RemoteActionsScreen(
                     }
                 }
 
-                // Remote Actions Grid: Alarm + Lock + Location
-                TruCallerCard {
-                    Text("Remote Actions", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
-                    Spacer(modifier = Modifier.height(Spacing.md))
-
-                    // Trigger Alarm
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                // Remote Actions — 3 separate cards stacked
+                // Card 1: Trigger Alarm
+                TruCallerCard(
+                    containerColor = colorScheme.error.copy(alpha = 0.08f)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
                         Box(
                             modifier = Modifier
-                                .size(44.dp)
-                                .background(colorScheme.error.copy(alpha = 0.1f), CircleShape),
+                                .size(56.dp)
+                                .background(colorScheme.error.copy(alpha = 0.15f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Alarm, null, tint = colorScheme.error, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Alarm, null, tint = colorScheme.error, modifier = Modifier.size(32.dp))
                         }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Trigger Alarm", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
-                            Text("Sound a loud alarm, even on silent", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
-                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "Trigger Alarm",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Sound a loud alarm, even on silent mode",
+                            fontSize = 13.sp,
+                            color = colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
                         TruCallerButton(
-                            text = "Trigger",
+                            text = "Trigger Alarm",
                             onClick = { requirePin(PendingRemoteAction.ALARM) },
                             style = TruCallerButtonStyle.Danger,
                             enabled = !alarmLoading && device != null && user != null,
-                            isLoading = alarmLoading
+                            isLoading = alarmLoading,
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = Icons.Default.Alarm,
+                            iconSize = 20.dp
                         )
-                    }
-
-                    HorizontalDivider(color = colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 14.dp))
-
-                    // Lock Device
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.Lock, null, tint = colorScheme.primary, modifier = Modifier.size(24.dp))
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Lock Device", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
-                            Text("Immediately lock the screen", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
-                        }
-                        TruCallerButton(
-                            text = "Lock",
-                            onClick = { requirePin(PendingRemoteAction.LOCK) },
-                            style = TruCallerButtonStyle.Primary,
-                            enabled = !lockLoading && device != null && user != null,
-                            isLoading = lockLoading
-                        )
-                    }
-
-                    HorizontalDivider(color = colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 14.dp))
-
-                    // Request Location
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(44.dp)
-                                .background(Brand.copy(alpha = 0.1f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Default.GpsFixed, null, tint = Brand, modifier = Modifier.size(24.dp))
-                        }
-                        Spacer(modifier = Modifier.width(14.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("Request Location", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
-                            Text("Refresh IP-based location data", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
-                        }
-                        TruCallerButton(
-                            text = "Refresh",
-                            onClick = { requirePin(PendingRemoteAction.LOCATION) },
-                            style = TruCallerButtonStyle.Primary,
-                            enabled = !locationLoading && device != null && user != null,
-                            isLoading = locationLoading
-                        )
+                        Spacer(modifier = Modifier.height(Spacing.sm))
                     }
                 }
 
-                Spacer(modifier = Modifier.height(Spacing.md))
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Card 2: Lock Device
+                TruCallerCard(
+                    containerColor = colorScheme.primary.copy(alpha = 0.08f)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Lock, null, tint = colorScheme.primary, modifier = Modifier.size(32.dp))
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "Lock Device",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Immediately lock the device screen",
+                            fontSize = 13.sp,
+                            color = colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        TruCallerButton(
+                            text = "Lock Device",
+                            onClick = { requirePin(PendingRemoteAction.LOCK) },
+                            style = TruCallerButtonStyle.Primary,
+                            enabled = !lockLoading && device != null && user != null,
+                            isLoading = lockLoading,
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = Icons.Default.Lock,
+                            iconSize = 20.dp
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Card 3: Request Location
+                TruCallerCard(
+                    containerColor = colorScheme.tertiary.copy(alpha = 0.08f)
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(colorScheme.tertiary.copy(alpha = 0.15f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.GpsFixed, null, tint = colorScheme.tertiary, modifier = Modifier.size(32.dp))
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(
+                            "Request Location",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 17.sp,
+                            color = colorScheme.onSurface
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Refresh IP-based location data",
+                            fontSize = 13.sp,
+                            color = colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        TruCallerButton(
+                            text = "Refresh Location",
+                            onClick = { requirePin(PendingRemoteAction.LOCATION) },
+                            style = TruCallerButtonStyle.Primary,
+                            enabled = !locationLoading && device != null && user != null,
+                            isLoading = locationLoading,
+                            modifier = Modifier.fillMaxWidth(),
+                            leadingIcon = Icons.Default.GpsFixed,
+                            iconSize = 20.dp
+                        )
+                        Spacer(modifier = Modifier.height(Spacing.sm))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Last Known Location card
                 TruCallerCard {
@@ -669,10 +851,10 @@ fun RemoteActionsScreen(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(Brand.copy(alpha = 0.1f), CircleShape),
+                                .background(colorScheme.primary.copy(alpha = 0.1f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.LocationOn, null, tint = Brand, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.LocationOn, null, tint = colorScheme.primary, modifier = Modifier.size(24.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("Last Known Location", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
@@ -711,76 +893,96 @@ fun RemoteActionsScreen(
                             visible = mapVisible,
                             enter = fadeIn(tween(600)) + scaleIn(initialScale = 0.95f, animationSpec = tween(600))
                         ) {
-                            AndroidView(
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)
-                                    .clip(RoundedCornerShape(BorderRadius.md)),
-                                factory = { ctx ->
-                                    org.osmdroid.config.Configuration.getInstance().userAgentValue = ctx.packageName
-                                    org.osmdroid.views.MapView(ctx).apply {
-                                        setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
-                                        setMultiTouchControls(true)
-                                        controller.setZoom(14.0)
-                                        controller.setCenter(org.osmdroid.util.GeoPoint(lat, lon))
-                                        // Add marker
-                                        val marker = org.osmdroid.views.overlay.Marker(this)
-                                        marker.position = org.osmdroid.util.GeoPoint(lat, lon)
-                                        marker.setAnchor(
-                                            org.osmdroid.views.overlay.Marker.ANCHOR_CENTER,
-                                            org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM
-                                        )
-                                        marker.title = "Last Known Location"
-                                        marker.snippet = "${lastIpLog.city}, ${lastIpLog.country}"
-                                        overlays.add(marker)
+                                    .clip(RoundedCornerShape(BorderRadius.md))
+                            ) {
+                                AndroidView(
+                                    modifier = Modifier.fillMaxSize(),
+                                    factory = { ctx ->
+                                        org.osmdroid.config.Configuration.getInstance().userAgentValue = ctx.packageName
+                                        org.osmdroid.views.MapView(ctx).apply {
+                                            setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                                            setMultiTouchControls(true)
+                                            controller.setZoom(14.0)
+                                            controller.setCenter(org.osmdroid.util.GeoPoint(lat, lon))
+                                            // Add marker
+                                            val marker = org.osmdroid.views.overlay.Marker(this)
+                                            marker.position = org.osmdroid.util.GeoPoint(lat, lon)
+                                            marker.setAnchor(
+                                                org.osmdroid.views.overlay.Marker.ANCHOR_CENTER,
+                                                org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM
+                                            )
+                                            marker.title = "Last Known Location"
+                                            marker.snippet = "${lastIpLog.city}, ${lastIpLog.country}"
+                                            overlays.add(marker)
+                                        }
+                                    },
+                                    update = { mapView ->
+                                        mapView.controller.setCenter(org.osmdroid.util.GeoPoint(lat, lon))
+                                        mapView.overlays.filterIsInstance<org.osmdroid.views.overlay.Marker>()
+                                            .firstOrNull()?.position = org.osmdroid.util.GeoPoint(lat, lon)
+                                        mapView.invalidate()
                                     }
-                                },
-                                update = { mapView ->
-                                    mapView.controller.setCenter(org.osmdroid.util.GeoPoint(lat, lon))
-                                    mapView.overlays.filterIsInstance<org.osmdroid.views.overlay.Marker>()
-                                        .firstOrNull()?.position = org.osmdroid.util.GeoPoint(lat, lon)
-                                    mapView.invalidate()
-                                }
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(10.dp))
-
-                        // Open in Google Maps button
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(Brand.copy(alpha = 0.05f), RoundedCornerShape(10.dp))
-                                .clickable {
-                                    val geoUri = Uri.parse(
-                                        "geo:$lat,$lon?q=$lat,$lon(Last+Known+Location)"
-                                    )
-                                    val intent = Intent(Intent.ACTION_VIEW, geoUri).apply {
-                                        setPackage("com.google.android.apps.maps")
-                                    }
-                                    if (intent.resolveActivity(context.packageManager) != null) {
-                                        context.startActivity(intent)
-                                    } else {
-                                        context.startActivity(
-                                            Intent(
-                                                Intent.ACTION_VIEW,
-                                                Uri.parse("https://www.google.com/maps?q=$lat,$lon")
+                                )
+                                // Gradient overlay for visual integration
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(40.dp)
+                                        .align(Alignment.BottomCenter)
+                                        .background(
+                                            Brush.verticalGradient(
+                                                colors = listOf(
+                                                    Color.Transparent,
+                                                    colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                                )
                                             )
                                         )
-                                    }
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(12.dp))
+
+                        // Open in Google Maps button — filled style
+                        Button(
+                            onClick = {
+                                val geoUri = Uri.parse(
+                                    "geo:$lat,$lon?q=$lat,$lon(Last+Known+Location)"
+                                )
+                                val intent = Intent(Intent.ACTION_VIEW, geoUri).apply {
+                                    setPackage("com.google.android.apps.maps")
                                 }
-                                .padding(horizontal = Spacing.md, vertical = 12.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.Center
+                                if (intent.resolveActivity(context.packageManager) != null) {
+                                    context.startActivity(intent)
+                                } else {
+                                    context.startActivity(
+                                        Intent(
+                                            Intent.ACTION_VIEW,
+                                            Uri.parse("https://www.google.com/maps?q=$lat,$lon")
+                                        )
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = colorScheme.primary,
+                                contentColor = colorScheme.onPrimary
+                            ),
+                            shape = RoundedCornerShape(12.dp)
                         ) {
-                            @Suppress("DEPRECATION")
-                            Icon(Icons.Default.OpenInNew, null, tint = Accent, modifier = Modifier.size(16.dp))
+                            Icon(Icons.Default.OpenInNew, null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(Spacing.sm))
-                            Text("Open in Google Maps", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Text("Open in Google Maps", fontWeight = FontWeight.SemiBold)
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
                                 "${String.format("%.4f", lat)}, ${String.format("%.4f", lon)}",
-                                color = colorScheme.onSurfaceVariant, fontSize = 12.sp, fontFamily = FontFamily.Monospace
+                                fontSize = 12.sp,
+                                fontFamily = FontFamily.Monospace,
+                                color = colorScheme.onPrimary.copy(alpha = 0.7f)
                             )
                         }
                     } else {
@@ -796,7 +998,7 @@ fun RemoteActionsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(Spacing.md))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // IP Trail card with animated timeline
                 TruCallerCard {
@@ -804,10 +1006,10 @@ fun RemoteActionsScreen(
                         Box(
                             modifier = Modifier
                                 .size(40.dp)
-                                .background(Brand.copy(alpha = 0.1f), CircleShape),
+                                .background(colorScheme.primary.copy(alpha = 0.1f), CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Timeline, null, tint = Brand, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Timeline, null, tint = colorScheme.primary, modifier = Modifier.size(24.dp))
                         }
                         Spacer(modifier = Modifier.width(12.dp))
                         Text("IP Trail Since Report", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
@@ -839,40 +1041,45 @@ fun RemoteActionsScreen(
                             ) {
                                 // Timeline left column with Canvas connecting line
                                 Box(
-                                    modifier = Modifier.width(24.dp),
+                                    modifier = Modifier.width(28.dp),
                                     contentAlignment = Alignment.TopCenter
                                 ) {
                                     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        // Animated dot
+                                        // Ring-style dot with index number
                                         Box(
                                             modifier = Modifier
-                                                .size(12.dp)
-                                                .background(dotColor, CircleShape)
-                                        )
-                                        // Connecting line drawn with Canvas for crisp rendering
+                                                .size(14.dp)
+                                                .border(2.dp, dotColor, CircleShape)
+                                                .background(Color.Transparent, CircleShape),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                "${index + 1}",
+                                                fontSize = 7.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = dotColor,
+                                                textAlign = TextAlign.Center
+                                            )
+                                        }
+                                        // Dashed connecting line drawn with Canvas
                                         if (!isLast) {
                                             Canvas(
                                                 modifier = Modifier
                                                     .width(2.dp)
                                                     .height(56.dp)
                                             ) {
-                                                val lineColor = Brand
+                                                val lineColor = colorScheme.primary
+                                                val dashEffect = PathEffect.dashPathEffect(
+                                                    floatArrayOf(6.dp.toPx(), 4.dp.toPx()),
+                                                    0f
+                                                )
                                                 drawLine(
-                                                    color = lineColor.copy(alpha = 0.5f),
+                                                    color = lineColor.copy(alpha = 0.4f),
                                                     start = Offset(size.width / 2, 0f),
                                                     end = Offset(size.width / 2, size.height),
-                                                    strokeWidth = 2.dp.toPx()
+                                                    strokeWidth = 1.5.dp.toPx(),
+                                                    pathEffect = dashEffect
                                                 )
-                                                // Dot accents along the line
-                                                val dotCount = 3
-                                                val segmentHeight = size.height / (dotCount + 1)
-                                                for (i in 1..dotCount) {
-                                                    drawCircle(
-                                                        color = lineColor.copy(alpha = 0.3f),
-                                                        radius = 1.5.dp.toPx(),
-                                                        center = Offset(size.width / 2, segmentHeight * i)
-                                                    )
-                                                }
                                             }
                                         }
                                     }
@@ -902,7 +1109,7 @@ fun RemoteActionsScreen(
                                         Box(
                                             modifier = Modifier
                                                 .background(
-                                                    if (isWifi) Success.copy(alpha = 0.1f) else Warning.copy(alpha = 0.1f),
+                                                    if (isWifi) SuccessColor.copy(alpha = 0.1f) else WarningColor.copy(alpha = 0.1f),
                                                     RoundedCornerShape(10.dp)
                                                 )
                                                 .padding(horizontal = Spacing.sm, vertical = 3.dp)
@@ -914,14 +1121,14 @@ fun RemoteActionsScreen(
                                                 Icon(
                                                     if (isWifi) Icons.Default.Wifi else Icons.Default.CellTower,
                                                     null,
-                                                    tint = if (isWifi) Success else Warning,
+                                                    tint = if (isWifi) SuccessColor else WarningColor,
                                                     modifier = Modifier.size(12.dp)
                                                 )
                                                 Text(
                                                     if (isWifi) "WiFi" else "Mobile",
                                                     fontSize = 11.sp,
                                                     fontWeight = FontWeight.SemiBold,
-                                                    color = if (isWifi) Success else Warning
+                                                    color = if (isWifi) SuccessColor else WarningColor
                                                 )
                                             }
                                         }
@@ -932,7 +1139,7 @@ fun RemoteActionsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(Spacing.md))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Manage Geofences button
                 TruCallerButton(
@@ -948,7 +1155,7 @@ fun RemoteActionsScreen(
                     iconSize = 22.dp
                 )
 
-                Spacer(modifier = Modifier.height(Spacing.md))
+                Spacer(modifier = Modifier.height(16.dp))
 
                 // Network Forensics button
                 TruCallerButton(
@@ -964,19 +1171,44 @@ fun RemoteActionsScreen(
                     iconSize = 22.dp
                 )
 
-                Spacer(modifier = Modifier.height(Spacing.md))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Mark as Recovered button
-                TruCallerButton(
-                    text = "Mark as Recovered",
+                // Mark as Recovered button — Success-colored outlined style
+                OutlinedButton(
                     onClick = { showRecoverConfirm = true },
-                    modifier = Modifier.fillMaxWidth(),
-                    style = TruCallerButtonStyle.Primary,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
                     enabled = !recoverLoading && device != null,
-                    isLoading = recoverLoading,
-                    leadingIcon = Icons.Default.CheckCircle,
-                    iconSize = 22.dp
-                )
+                    colors = ButtonDefaults.outlinedButtonColors(
+                        contentColor = SuccessColor
+                    ),
+                    border = BorderStroke(1.5.dp, SuccessColor),
+                    shape = RoundedCornerShape(BorderRadius.md)
+                ) {
+                    if (recoverLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = SuccessColor
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.sm))
+                    } else {
+                        Icon(
+                            Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            modifier = Modifier.size(22.dp),
+                            tint = SuccessColor
+                        )
+                        Spacer(modifier = Modifier.width(Spacing.sm))
+                    }
+                    Text(
+                        "Mark as Recovered",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        color = SuccessColor
+                    )
+                }
 
                 Spacer(modifier = Modifier.height(Spacing.xl))
             }

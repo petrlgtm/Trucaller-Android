@@ -180,8 +180,8 @@ class SmsRepository(
             return Pair(null, SmsCategory.SPAM)
         }
 
-        // Check caller ID database
-        val lookup = callerIdRepository.lookupNumber(address)
+        // Check caller ID database (local-only for speed)
+        val lookup = callerIdRepository.lookupNumberLocal(address)
         val entry = lookup.callerIdEntry
 
         if (entry != null) {
@@ -447,5 +447,27 @@ class SmsRepository(
         }
 
         return conversations.sortedByDescending { it.lastDate }
+    }
+
+    /**
+     * Build conversations from raw (unenriched) messages — used as a fallback
+     * when full enrichment times out, so the user still sees their messages.
+     */
+    fun buildConversationsRaw(messages: List<SmsMessage>): List<SmsConversation> {
+        val grouped = messages.groupBy { it.address }
+        return grouped.map { (address, msgs) ->
+            val latest = msgs.maxByOrNull { it.date } ?: msgs.first()
+            SmsConversation(
+                address = address,
+                contactName = latest.contactName,
+                lastMessage = latest.body,
+                lastDate = latest.date,
+                messageCount = msgs.size,
+                unreadCount = msgs.count { !it.read && it.type == SmsType.INBOX },
+                spamScore = 0,
+                category = SmsCategory.PERSONAL,
+                isBlocked = false
+            )
+        }.sortedByDescending { it.lastDate }
     }
 }

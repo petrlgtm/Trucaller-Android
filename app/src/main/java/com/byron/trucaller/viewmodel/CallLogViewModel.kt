@@ -48,11 +48,23 @@ class CallLogViewModel(
             _isLoading.value = true
             try {
                 val rawEntries = CallLogReader.readCallLog(context, limit = 500)
-                val enriched = rawEntries.map { entry -> enrichWithCallerIdData(entry) }
-                _callLogEntries.value = enriched.take(MAX_LIST_SIZE)
+                // Show raw entries IMMEDIATELY so the user sees data fast
+                _callLogEntries.value = rawEntries.take(MAX_LIST_SIZE)
+                _isLoading.value = false
+
+                // Enrich in background — update entries as each lookup completes
+                val enriched = rawEntries.take(MAX_LIST_SIZE).toMutableList()
+                for (i in enriched.indices) {
+                    try {
+                        val updated = enrichWithCallerIdData(enriched[i])
+                        if (updated != enriched[i]) {
+                            enriched[i] = updated
+                            _callLogEntries.value = enriched.toList()
+                        }
+                    } catch (_: Exception) { }
+                }
             } catch (e: Exception) {
                 _actionMessage.value = "Failed to load call log: ${e.message}"
-            } finally {
                 _isLoading.value = false
             }
         }
@@ -60,7 +72,8 @@ class CallLogViewModel(
 
     private suspend fun enrichWithCallerIdData(entry: CallLogEntry): CallLogEntry {
         return try {
-            val lookup = callerIdRepository.lookupNumber(entry.phoneNumber)
+            // Use fast local-only lookup — no network calls, instant results
+            val lookup = callerIdRepository.lookupNumberLocal(entry.phoneNumber)
 
             // Check if the number is blocked by the current user
             val userId = userPreferences.loggedInUserId.first()

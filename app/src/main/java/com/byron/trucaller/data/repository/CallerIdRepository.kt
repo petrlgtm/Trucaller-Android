@@ -34,9 +34,75 @@ class CallerIdRepository(
     suspend fun getEntriesByIds(ids: List<String>): List<CallerIdEntry> = callerIdDao.getByIds(ids)
 
     /**
+     * Fast local-only lookup — checks Room DB, users, contacts, and aliases
+     * but skips the backend API call. Use this for bulk operations like
+     * call log and SMS enrichment where speed matters.
+     */
+    suspend fun lookupNumberLocal(rawQuery: String): LookupResult {
+        val fullPhone = PhoneUtils.normalizePhone(rawQuery)
+
+        val callerIdEntry = callerIdDao.getByPhone(fullPhone)
+        if (callerIdEntry != null) {
+            return LookupResult(callerIdEntry = callerIdEntry, contactMatch = null, source = "caller_id_db")
+        }
+
+        val registeredUser = userDao.getByPhone(fullPhone)
+        if (registeredUser != null) {
+            return LookupResult(
+                callerIdEntry = CallerIdEntry(
+                    id = "user-${registeredUser.id}",
+                    phoneNumber = registeredUser.phoneNumber,
+                    name = registeredUser.fullName,
+                    spamScore = 0, reportCount = 0,
+                    category = SpamCategory.SAFE,
+                    lastUpdated = registeredUser.lastLogin ?: registeredUser.createdAt
+                ),
+                contactMatch = null, source = "registered_user"
+            )
+        }
+
+        val contact = contactDao.getByPhone(fullPhone)
+        if (contact != null) {
+            return LookupResult(
+                callerIdEntry = CallerIdEntry(
+                    id = "contact-${contact.id}",
+                    phoneNumber = contact.phoneNumber,
+                    name = contact.name,
+                    spamScore = 0, reportCount = 0,
+                    category = SpamCategory.SAFE,
+                    lastUpdated = contact.syncedAt
+                ),
+                contactMatch = contact, source = "central_drive"
+            )
+        }
+
+        val aliases = contactAliasDao.getAliasesByPhoneOnce(fullPhone)
+        if (aliases.isNotEmpty()) {
+            val sourcePriority = listOf("user", "contact_book", "whatsapp", "caller_id")
+            val bestAlias = aliases.sortedBy { alias ->
+                val idx = sourcePriority.indexOf(alias.source)
+                if (idx == -1) sourcePriority.size else idx
+            }.first()
+            return LookupResult(
+                callerIdEntry = CallerIdEntry(
+                    id = "alias-${bestAlias.id}",
+                    phoneNumber = bestAlias.phoneNumber,
+                    name = bestAlias.name,
+                    spamScore = 0, reportCount = 0,
+                    category = SpamCategory.SAFE,
+                    lastUpdated = bestAlias.addedAt
+                ),
+                contactMatch = null, source = "alias"
+            )
+        }
+
+        return LookupResult(callerIdEntry = null, contactMatch = null, source = "not_found")
+    }
+
+    /**
      * Central drive lookup: search caller ID DB first, then search ALL contacts
      * across all users. If a phone number belongs to any user in the system,
-     * return their name.
+     * return their name. Includes a backend API fallback (up to 5s timeout).
      */
     suspend fun lookupNumber(rawQuery: String): LookupResult {
         val fullPhone = PhoneUtils.normalizePhone(rawQuery)
