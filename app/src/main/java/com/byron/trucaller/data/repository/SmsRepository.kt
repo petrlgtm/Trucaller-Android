@@ -9,6 +9,7 @@ import com.byron.trucaller.data.model.SmsSpamReport
 import com.byron.trucaller.data.model.SmsType
 import com.byron.trucaller.data.model.SpamCategory
 import com.byron.trucaller.service.ApiClient
+import com.byron.trucaller.service.SmsPatternEngine
 import com.byron.trucaller.util.SmsReader
 import android.util.Log
 import kotlinx.coroutines.flow.Flow
@@ -194,6 +195,9 @@ class SmsRepository(
     /**
      * Classifies a message using sender analysis + body content scoring.
      * Called after lookupSender to refine the category when it's PERSONAL.
+     *
+     * Strategy: SmsPatternEngine (regex) is the primary classifier. If no
+     * regex pattern fires, fall back to the legacy keyword scorer below.
      */
     private fun classifyMessage(address: String, body: String, senderCategory: SmsCategory): SmsCategory {
         // If already SPAM from blocked/reported, keep it
@@ -206,6 +210,29 @@ class SmsRepository(
             return SmsCategory.TRANSACTIONAL
         }
 
+        // ── Primary: regex-based pattern engine ──────────────────────
+        val engineResult = SmsPatternEngine.classify(address, body)
+        if (engineResult != null && engineResult.confidence > 0f) {
+            // For business senders, never return PERSONAL
+            if (isBusinessSender && engineResult.category == SmsCategory.PERSONAL) {
+                return SmsCategory.TRANSACTIONAL
+            }
+            return engineResult.category
+        }
+
+        // ── Fallback: keyword-based scoring ──────────────────────────
+        return classifyByKeywords(body, senderCategory, isBusinessSender)
+    }
+
+    /**
+     * Legacy keyword-based classifier used as fallback when the regex engine
+     * does not produce a match.
+     */
+    private fun classifyByKeywords(
+        body: String,
+        senderCategory: SmsCategory,
+        isBusinessSender: Boolean
+    ): SmsCategory {
         val lowerBody = body.lowercase()
 
         // Score each category based on body keywords
