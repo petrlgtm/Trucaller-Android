@@ -7,6 +7,7 @@ import com.byron.trucaller.data.model.CallDirection
 import com.byron.trucaller.data.model.DeviceStatus
 import com.byron.trucaller.data.model.GeofenceTransitionType
 import com.byron.trucaller.data.model.ReportStatus
+import com.byron.trucaller.data.model.ScheduleBlockType
 import com.byron.trucaller.data.model.SpamCategory
 import com.byron.trucaller.data.model.SmsCategory
 import com.byron.trucaller.data.model.SmsRuleType
@@ -66,4 +67,9 @@ class Converters {
     } catch (_: IllegalArgumentException) {
         TrustLevel.NEW
     }
+
+    @TypeConverter
+    fun fromScheduleBlockType(type: ScheduleBlockType): String = type.name
+    @TypeConverter
+    fun toScheduleBlockType(value: String): ScheduleBlockType = ScheduleBlockType.valueOf(value)
 }

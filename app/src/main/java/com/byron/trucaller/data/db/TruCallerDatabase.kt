@@ -8,6 +8,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import com.byron.trucaller.data.dao.AdminUserDao
 import com.byron.trucaller.data.dao.AlarmLogDao
 import com.byron.trucaller.data.dao.BlockedNumberDao
+import com.byron.trucaller.data.dao.BlockingScheduleDao
 import com.byron.trucaller.data.dao.CallerIdDao
 import com.byron.trucaller.data.dao.ContactDao
 import com.byron.trucaller.data.dao.DeviceDao
@@ -23,6 +24,7 @@ import com.byron.trucaller.data.dao.UserDao
 import com.byron.trucaller.data.model.AdminUser
 import com.byron.trucaller.data.model.AlarmLog
 import com.byron.trucaller.data.model.BlockedNumber
+import com.byron.trucaller.data.model.BlockingSchedule
 import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.Contact
 import com.byron.trucaller.data.model.Device
@@ -52,9 +54,10 @@ import com.byron.trucaller.data.model.User
         Geofence::class,
         GeofenceEvent::class,
         SmsRule::class,
-        CallRecording::class
+        CallRecording::class,
+        BlockingSchedule::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -74,6 +77,7 @@ abstract class TruCallerDatabase : RoomDatabase() {
     abstract fun geofenceEventDao(): GeofenceEventDao
     abstract fun callRecordingDao(): CallRecordingDao
     abstract fun smsRuleDao(): SmsRuleDao
+    abstract fun blockingScheduleDao(): BlockingScheduleDao
 
     companion object {
         /** Migration 9 -> 10: add trustScore and trustLevel columns to users table. */
@@ -118,6 +122,25 @@ abstract class TruCallerDatabase : RoomDatabase() {
                         fileSize INTEGER NOT NULL DEFAULT 0,
                         isStarred INTEGER NOT NULL DEFAULT 0,
                         createdAt INTEGER NOT NULL DEFAULT 0
+                    )"""
+                )
+            }
+        }
+
+        /** Migration 12 -> 13: create blocking_schedules table for scheduled call blocking. */
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS blocking_schedules (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        userId TEXT NOT NULL,
+                        name TEXT NOT NULL,
+                        isActive INTEGER NOT NULL DEFAULT 1,
+                        startTimeMinutes INTEGER NOT NULL,
+                        endTimeMinutes INTEGER NOT NULL,
+                        daysOfWeek INTEGER NOT NULL,
+                        blockType TEXT NOT NULL,
+                        createdAt TEXT NOT NULL
                     )"""
                 )
             }

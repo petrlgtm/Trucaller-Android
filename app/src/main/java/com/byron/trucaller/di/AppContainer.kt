@@ -7,6 +7,7 @@ import com.byron.trucaller.data.db.DatabaseSeeder
 import com.byron.trucaller.data.preferences.UserPreferences
 import com.byron.trucaller.data.repository.AlarmRepository
 import com.byron.trucaller.data.repository.BlockedNumberRepository
+import com.byron.trucaller.data.repository.BlockingScheduleRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.data.repository.CallRecordingRepository
 import com.byron.trucaller.data.repository.ContactRepository
@@ -23,7 +24,7 @@ class AppContainer(context: Context) {
         TruCallerDatabase::class.java,
         "trucaller_database"
     )
-        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12)
+        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12, TruCallerDatabase.MIGRATION_12_13)
         .fallbackToDestructiveMigration(true)
         .build()
 
@@ -40,6 +41,7 @@ class AppContainer(context: Context) {
     val geofenceRepository = GeofenceRepository(database.geofenceDao(), database.geofenceEventDao())
     val smsRuleRepository = SmsRuleRepository(database.smsRuleDao())
     val callRecordingRepository = CallRecordingRepository(database.callRecordingDao())
+    val blockingScheduleRepository = BlockingScheduleRepository(database.blockingScheduleDao())
     val smsRepository = SmsRepository(database.smsSpamDao(), callerIdRepository, blockedNumberRepository, smsRuleRepository)
 
     suspend fun seedDatabaseIfEmpty() {

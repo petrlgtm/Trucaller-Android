@@ -5,6 +5,7 @@ import android.telecom.Call
 import android.telecom.CallScreeningService
 import android.util.Log
 import com.byron.trucaller.TruCallerApplication
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 
@@ -48,6 +49,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
         val blockedRepo = app.container.blockedNumberRepository
         val callerIdRepo = app.container.callerIdRepository
         val userPrefs = app.container.userPreferences
+        val scheduleRepo = app.container.blockingScheduleRepository
+        val contactRepo = app.container.contactRepository
 
         // onScreenCall must respond synchronously, so we use runBlocking to
         // bridge into the suspend world for Room / DataStore access.
@@ -123,11 +126,47 @@ class TruCallerCallScreeningService : CallScreeningService() {
                         return@runBlocking
                     }
                     else -> {
-                        // Low or no spam — allow the call through
-                        Log.d(TAG, "Spam score ($spamScore) for $phoneNumber — allowing call")
-                        respondToCall(callDetails, CallResponse.Builder().build())
+                        // Low or no spam — evaluate blocking schedules before allowing
+                        Log.d(TAG, "Spam score ($spamScore) for $phoneNumber — checking schedules")
                     }
                 }
+
+                // --- 4. Schedule-based blocking ---
+                if (userId != null) {
+                    val activeSchedules = scheduleRepo.getActiveSchedulesByUser(userId)
+                    if (activeSchedules.isNotEmpty()) {
+                        val contacts = contactRepo.getContactsByUser(userId).first()
+                        val decision = ScheduleEvaluator.shouldBlockCall(
+                            schedules = activeSchedules,
+                            phoneNumber = phoneNumber,
+                            contacts = contacts
+                        )
+                        if (decision.shouldBlock) {
+                            Log.d(TAG, "Schedule blocked: ${decision.reason} — rejecting $phoneNumber")
+                            val response = CallResponse.Builder()
+                                .setDisallowCall(true)
+                                .setRejectCall(true)
+                                .setSkipCallLog(false)
+                                .setSkipNotification(true)
+                                .build()
+                            respondToCall(callDetails, response)
+
+                            val lookup = callerIdRepo.lookupNumber(phoneNumber)
+                            CallNotificationHelper.showBlockedCallNotification(
+                                context = this@TruCallerCallScreeningService,
+                                callerName = lookup.callerIdEntry?.name,
+                                number = phoneNumber,
+                                spamScore = lookup.callerIdEntry?.spamScore ?: -1
+                            )
+                            return@runBlocking
+                        }
+                        Log.d(TAG, "Schedule check passed: ${decision.reason}")
+                    }
+                }
+
+                // All checks passed — allow the call through
+                Log.d(TAG, "All checks passed for $phoneNumber — allowing call")
+                respondToCall(callDetails, CallResponse.Builder().build())
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error screening call from $phoneNumber", e)
