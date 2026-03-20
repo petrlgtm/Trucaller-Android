@@ -47,6 +47,9 @@ object Collections {
     val smsSpamReports: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("smsSpamReports")
 
+    val otpRateLimits: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("otpRateLimits")
+
     // ── Index creation ───────────────────────────────────────────────────
 
     /**
@@ -100,6 +103,17 @@ object Collections {
                 Indexes.ascending("userId"),
                 Indexes.ascending("phoneNumber")
             ))
+
+        // TTL index: auto-delete OTP rate-limit entries after 1 hour
+        database.getCollection<Document>("otpRateLimits")
+            .createIndex(
+                Indexes.ascending("requestedAt"),
+                IndexOptions().expireAfter(3600, java.util.concurrent.TimeUnit.SECONDS)
+            )
+
+        // Index on phoneNumber for OTP rate-limit lookups
+        database.getCollection<Document>("otpRateLimits")
+            .createIndex(Indexes.ascending("phoneNumber"))
 
         // Index on senderNumber for SMS spam reports
         database.getCollection<Document>("smsSpamReports")

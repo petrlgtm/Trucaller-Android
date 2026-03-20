@@ -107,17 +107,48 @@ private enum class OtpValidationResult {
 }
 
 /**
+ * Finds the purpose of an existing OTP for the given phone number.
+ * Checks "registration" first, then "password_reset".
+ * Returns null if no OTP exists for either purpose.
+ */
+private suspend fun findOtpPurpose(phoneNumber: String): String? {
+    for (purpose in listOf("registration", "password_reset")) {
+        val doc = Collections.otpCodes.find(
+            Filters.and(
+                Filters.eq("phoneNumber", phoneNumber),
+                Filters.eq("purpose", purpose)
+            )
+        ).firstOrNull()
+        if (doc != null) return purpose
+    }
+    return null
+}
+
+/**
  * Rate-limits OTP requests: max [MAX_OTP_REQUESTS_PER_HOUR] per phone per hour.
+ * Uses a separate `otpRateLimits` collection to track requests independently
+ * of the `otpCodes` collection (whose documents are deleted on each new request).
  */
 private suspend fun isRateLimited(phoneNumber: String): Boolean {
     val oneHourAgo = Date.from(Instant.now().minusSeconds(3600))
-    val recentCount = Collections.otpCodes.countDocuments(
+    val recentCount = Collections.otpRateLimits.countDocuments(
         Filters.and(
             Filters.eq("phoneNumber", phoneNumber),
-            Filters.gte("expiresAt", oneHourAgo)
+            Filters.gte("requestedAt", oneHourAgo)
         )
     )
     return recentCount >= MAX_OTP_REQUESTS_PER_HOUR
+}
+
+/**
+ * Records an OTP request in the rate-limit tracking collection.
+ */
+private suspend fun recordOtpRequest(phoneNumber: String) {
+    val now = Date.from(Instant.now())
+    val doc = Document()
+        .append("phoneNumber", phoneNumber)
+        .append("requestedAt", now)
+    Collections.otpRateLimits.insertOne(doc)
 }
 
 // ── POST /api/auth/send-otp ─────────────────────────────────────────────
@@ -189,7 +220,8 @@ private fun Route.sendOtpRoute() {
             }
         }
 
-        // Generate and store OTP
+        // Record rate-limit entry and generate OTP
+        recordOtpRequest(request.phoneNumber)
         val otp = generateOtp()
         storeOtp(request.phoneNumber, otp, request.purpose)
 
@@ -228,9 +260,20 @@ private fun Route.verifyOtpRoute() {
             return@post
         }
 
-        // Try both purposes — registration first, then password_reset
-        val regResult = validateOtp(request.phoneNumber, request.code, "registration")
-        if (regResult == OtpValidationResult.VALID) {
+        // Determine which purpose has a pending OTP for this phone number,
+        // then validate only that one to avoid burning attempts on unrelated OTPs.
+        val purpose = findOtpPurpose(request.phoneNumber)
+
+        if (purpose == null) {
+            call.respond(
+                HttpStatusCode.Unauthorized,
+                ApiResponse<Unit>(success = false, error = "Invalid or expired OTP.")
+            )
+            return@post
+        }
+
+        val result = validateOtp(request.phoneNumber, request.code, purpose)
+        if (result == OtpValidationResult.VALID) {
             call.respond(
                 HttpStatusCode.OK,
                 ApiResponse<Unit>(success = true, message = "OTP verified successfully.")
@@ -238,17 +281,6 @@ private fun Route.verifyOtpRoute() {
             return@post
         }
 
-        val resetResult = validateOtp(request.phoneNumber, request.code, "password_reset")
-        if (resetResult == OtpValidationResult.VALID) {
-            call.respond(
-                HttpStatusCode.OK,
-                ApiResponse<Unit>(success = true, message = "OTP verified successfully.")
-            )
-            return@post
-        }
-
-        // Return the most informative error
-        val result = if (regResult != OtpValidationResult.NOT_FOUND) regResult else resetResult
         val errorMessage = when (result) {
             OtpValidationResult.EXPIRED -> "OTP has expired. Please request a new one."
             OtpValidationResult.MAX_ATTEMPTS -> "Too many failed attempts. Please request a new OTP."
