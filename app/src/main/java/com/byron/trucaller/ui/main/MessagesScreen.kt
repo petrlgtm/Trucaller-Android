@@ -5,13 +5,15 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -21,7 +23,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -35,27 +36,23 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Campaign
-import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Report
-import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Badge
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -65,12 +62,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -78,21 +72,16 @@ import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.byron.trucaller.data.model.SmsCategory
 import com.byron.trucaller.data.model.SmsConversation
-import com.byron.trucaller.ui.theme.Accent
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.BrandGold
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Inactive
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.SurfaceLight
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
-import com.byron.trucaller.ui.theme.Warning
-import com.byron.trucaller.ui.theme.YellowGradientEnd
-import com.byron.trucaller.ui.theme.YellowGradientStart
+import com.byron.trucaller.ui.components.AvatarIndicator
+import com.byron.trucaller.ui.components.BadgeType
+import com.byron.trucaller.ui.components.EmptyStateIcon
+import com.byron.trucaller.ui.components.EmptyStateView
+import com.byron.trucaller.ui.components.ShimmerLoadingList
+import com.byron.trucaller.ui.components.TruCallerAvatar
+import com.byron.trucaller.ui.components.TruCallerBadge
+import com.byron.trucaller.ui.components.TruCallerHeader
+import com.byron.trucaller.ui.components.TruCallerTextField
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.SmsFilter
 import com.byron.trucaller.viewmodel.SmsViewModel
@@ -102,7 +91,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun MessagesScreen(
     rootNavController: NavController,
@@ -114,6 +103,7 @@ fun MessagesScreen(
 
     val context = LocalContext.current
     val contentResolver = context.contentResolver
+    val colorScheme = MaterialTheme.colorScheme
 
     val conversations by smsViewModel.conversations.collectAsState()
     val isLoading by smsViewModel.isLoading.collectAsState()
@@ -151,109 +141,64 @@ fun MessagesScreen(
     }
 
     var showReportDialog by remember { mutableStateOf<SmsConversation?>(null) }
+    var contextMenuConversation by remember { mutableStateOf<SmsConversation?>(null) }
+    val bottomSheetState = rememberModalBottomSheetState()
 
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(colorScheme.background)
     ) {
-        // ── Premium Header with gradient ─────────────────────────────
+        // -- Header with gradient --
+        TruCallerHeader(
+            title = "Messages",
+            subtitle = "${conversations.size} conversations",
+            trailingContent = {
+                val spamCount = conversations.count { it.category == SmsCategory.SPAM }
+                if (spamCount > 0) {
+                    TruCallerBadge(
+                        text = "$spamCount spam",
+                        type = BadgeType.Spam,
+                        icon = Icons.Default.Shield
+                    )
+                }
+            }
+        )
+
+        // -- Search bar --
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(BrandDark, Color(0xFF0D0D0D))
-                    )
-                )
-                .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 12.dp)
+                .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
         ) {
-            Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            "Messages",
-                            color = Brand,
-                            fontSize = 26.sp,
-                            fontWeight = FontWeight.Black,
-                            letterSpacing = (-0.5).sp
-                        )
-                        Text(
-                            "${conversations.size} conversations",
-                            color = TextSecondary,
-                            fontSize = 13.sp
-                        )
-                    }
-                    // Spam count badge
-                    val spamCount = conversations.count { it.category == SmsCategory.SPAM }
-                    if (spamCount > 0) {
-                        Box(
-                            modifier = Modifier
-                                .background(Danger.copy(alpha = 0.15f), RoundedCornerShape(12.dp))
-                                .padding(horizontal = 12.dp, vertical = 6.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Shield, null, tint = Danger, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    "$spamCount spam",
-                                    color = Danger,
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Search bar
-                OutlinedTextField(
-                    value = searchQuery,
-                    onValueChange = { searchQuery = it },
-                    placeholder = { Text("Search messages...", color = Inactive, fontSize = 14.sp) },
-                    leadingIcon = { Icon(Icons.Default.Search, null, tint = Inactive, modifier = Modifier.size(20.dp)) },
-                    singleLine = true,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(48.dp),
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = Brand,
-                        unfocusedBorderColor = Color(0xFF333333),
-                        focusedContainerColor = SurfaceCard,
-                        unfocusedContainerColor = SurfaceCard,
-                        cursorColor = Brand,
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary
-                    ),
-                    textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp)
-                )
-            }
+            TruCallerTextField(
+                value = searchQuery,
+                onValueChange = { searchQuery = it },
+                placeholder = "Search messages...",
+                isSearch = true,
+                showClearButton = true,
+                onClear = { searchQuery = "" },
+                contentDesc = "Search messages"
+            )
         }
 
-        // ── Filter chips with scrollable row ─────────────────────────
+        // -- Filter chips with scrollable row --
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Background)
+                .background(colorScheme.background)
                 .padding(horizontal = 12.dp, vertical = 10.dp)
                 .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+            horizontalArrangement = Arrangement.spacedBy(Spacing.sm)
         ) {
             SmsFilter.entries.forEach { filter ->
                 val isSelected = selectedFilter == filter
                 val chipColor = when (filter) {
-                    SmsFilter.ALL -> Brand
-                    SmsFilter.PERSONAL -> BrandGold
-                    SmsFilter.TRANSACTIONAL -> Success
-                    SmsFilter.PROMOTIONAL -> Warning
-                    SmsFilter.SPAM -> Danger
+                    SmsFilter.ALL -> colorScheme.primary
+                    SmsFilter.PERSONAL -> Color(0xFFFFB300)
+                    SmsFilter.TRANSACTIONAL -> Color(0xFF4CAF50)
+                    SmsFilter.PROMOTIONAL -> colorScheme.primary
+                    SmsFilter.SPAM -> colorScheme.error
                 }
                 val count = when (filter) {
                     SmsFilter.ALL -> conversations.count { it.category != SmsCategory.SPAM }
@@ -278,19 +223,19 @@ fun MessagesScreen(
                                 Text(
                                     "$count",
                                     fontSize = 10.sp,
-                                    color = if (isSelected) Color(0xFF1A1A1A) else Inactive
+                                    color = if (isSelected) colorScheme.onPrimary else colorScheme.onSurface.copy(alpha = 0.5f)
                                 )
                             }
                         }
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = chipColor,
-                        selectedLabelColor = if (filter == SmsFilter.SPAM) Color.White else Color(0xFF1A1A1A),
-                        containerColor = SurfaceCard,
-                        labelColor = TextSecondary
+                        selectedLabelColor = if (filter == SmsFilter.SPAM) Color.White else colorScheme.onPrimary,
+                        containerColor = colorScheme.surfaceVariant,
+                        labelColor = colorScheme.onSurface.copy(alpha = 0.7f)
                     ),
                     border = FilterChipDefaults.filterChipBorder(
-                        borderColor = Color(0xFF333333),
+                        borderColor = colorScheme.outline,
                         selectedBorderColor = Color.Transparent,
                         enabled = true,
                         selected = isSelected
@@ -299,20 +244,20 @@ fun MessagesScreen(
             }
         }
 
-        // ── Action message ───────────────────────────────────────────
+        // -- Action message --
         if (actionMessage != null) {
             Snackbar(
                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                containerColor = SurfaceCard,
+                containerColor = colorScheme.surfaceVariant,
                 action = {
                     TextButton(onClick = { smsViewModel.clearActionMessage() }) {
-                        Text("OK", color = Brand, fontWeight = FontWeight.Bold)
+                        Text("OK", color = colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 }
-            ) { Text(actionMessage!!, color = TextPrimary) }
+            ) { Text(actionMessage!!, color = colorScheme.onSurface) }
         }
 
-        // ── Content ──────────────────────────────────────────────────
+        // -- Content --
         if (!hasSmsPermission) {
             PermissionPrompt(onGrant = {
                 permissionLauncher.launch(
@@ -320,13 +265,7 @@ fun MessagesScreen(
                 )
             })
         } else if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Brand, strokeWidth = 3.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Loading messages...", color = TextSecondary, fontSize = 13.sp)
-                }
-            }
+            ShimmerLoadingList()
         } else {
             val filtered = smsViewModel.getFilteredConversations().filter { conv ->
                 if (searchQuery.isBlank()) true
@@ -343,7 +282,18 @@ fun MessagesScreen(
                 enter = fadeIn(tween(300))
             ) {
                 if (filtered.isEmpty()) {
-                    EmptyState(selectedFilter)
+                    val (title, subtitle) = when (selectedFilter) {
+                        SmsFilter.SPAM -> "No spam messages" to "Your inbox is clean — no spam detected."
+                        SmsFilter.PERSONAL -> "No personal messages" to "Personal conversations will appear here."
+                        SmsFilter.TRANSACTIONAL -> "No transactional messages" to "Bank and service notifications will appear here."
+                        SmsFilter.PROMOTIONAL -> "No promotional messages" to "Marketing and promotional messages will appear here."
+                        SmsFilter.ALL -> "No messages found" to "Your message inbox is empty."
+                    }
+                    EmptyStateView(
+                        title = title,
+                        subtitle = subtitle,
+                        icon = EmptyStateIcon.MESSAGES
+                    )
                 } else {
                     LazyColumn(
                         modifier = Modifier.fillMaxSize(),
@@ -365,31 +315,114 @@ fun MessagesScreen(
                                     val encoded = java.net.URLEncoder.encode(conversation.address, "UTF-8")
                                     rootNavController.navigate("sms_conversation/$encoded")
                                 },
-                                onReport = { showReportDialog = conversation },
-                                onBlock = {
-                                    smsViewModel.blockSmsNumber(conversation.address, user.id, contentResolver)
-                                }
+                                onLongClick = { contextMenuConversation = conversation }
                             )
                         }
                         // Bottom padding
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item { Spacer(modifier = Modifier.height(Spacing.sm)) }
                     }
                 }
             }
         }
     }
 
-    // Report spam dialog
+    // -- Context menu bottom sheet --
+    if (contextMenuConversation != null) {
+        val conv = contextMenuConversation!!
+        ModalBottomSheet(
+            onDismissRequest = { contextMenuConversation = null },
+            sheetState = bottomSheetState,
+            containerColor = colorScheme.surface,
+            contentColor = colorScheme.onSurface
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(bottom = Spacing.lg)
+            ) {
+                // Header with contact info
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = Spacing.lg, vertical = Spacing.sm),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    val categoryColor = categoryColorFor(conv.category, colorScheme)
+                    TruCallerAvatar(
+                        name = conv.contactName ?: conv.address,
+                        size = 40.dp,
+                        indicator = AvatarIndicator.Category,
+                        indicatorColor = categoryColor
+                    )
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column {
+                        Text(
+                            text = conv.contactName ?: conv.address,
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = colorScheme.onSurface
+                        )
+                        Text(
+                            text = "${conv.messageCount} messages",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = colorScheme.onSurface.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+
+                HorizontalDivider(
+                    color = colorScheme.outline.copy(alpha = 0.3f),
+                    modifier = Modifier.padding(vertical = Spacing.sm)
+                )
+
+                // Pin action
+                BottomSheetActionItem(
+                    icon = Icons.Default.PushPin,
+                    label = "Pin conversation",
+                    iconTint = colorScheme.primary,
+                    onClick = {
+                        contextMenuConversation = null
+                    }
+                )
+
+                // Report action
+                BottomSheetActionItem(
+                    icon = Icons.Default.Report,
+                    label = "Report as spam",
+                    iconTint = colorScheme.error,
+                    onClick = {
+                        showReportDialog = conv
+                        contextMenuConversation = null
+                    }
+                )
+
+                // Block action
+                if (!conv.isBlocked) {
+                    BottomSheetActionItem(
+                        icon = Icons.Default.Block,
+                        label = "Block sender",
+                        iconTint = colorScheme.error,
+                        onClick = {
+                            smsViewModel.blockSmsNumber(conv.address, user.id, contentResolver)
+                            contextMenuConversation = null
+                        }
+                    )
+                }
+            }
+        }
+    }
+
+    // -- Report spam dialog --
     if (showReportDialog != null) {
         val conv = showReportDialog!!
         AlertDialog(
             onDismissRequest = { showReportDialog = null },
-            containerColor = SurfaceCard,
-            titleContentColor = TextPrimary,
-            textContentColor = TextSecondary,
+            containerColor = colorScheme.surface,
+            titleContentColor = colorScheme.onSurface,
+            textContentColor = colorScheme.onSurface.copy(alpha = 0.7f),
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Warning, null, tint = Danger, modifier = Modifier.size(22.dp))
+                    Icon(Icons.Default.Warning, null, tint = colorScheme.error, modifier = Modifier.size(22.dp))
                     Spacer(modifier = Modifier.width(8.dp))
                     Text("Report as Spam?", fontWeight = FontWeight.Bold)
                 }
@@ -402,22 +435,54 @@ fun MessagesScreen(
                     smsViewModel.reportAsSpam(conv.address, conv.lastMessage, user.id, contentResolver)
                     showReportDialog = null
                 }) {
-                    Text("Report Spam", color = Danger, fontWeight = FontWeight.Bold)
+                    Text("Report Spam", color = colorScheme.error, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showReportDialog = null }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = colorScheme.onSurface.copy(alpha = 0.7f))
                 }
             }
         )
     }
 }
 
-// ── Date Header ──────────────────────────────────────────────────────────
+// -- Bottom Sheet Action Item --
+
+@Composable
+private fun BottomSheetActionItem(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    iconTint: Color,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = Spacing.lg, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = iconTint,
+            modifier = Modifier.size(22.dp)
+        )
+        Spacer(modifier = Modifier.width(Spacing.md))
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface
+        )
+    }
+}
+
+// -- Date Header --
 
 @Composable
 private fun DateHeader(timestamp: Long) {
+    val colorScheme = MaterialTheme.colorScheme
     val label = formatDateHeader(timestamp)
     Row(
         modifier = Modifier
@@ -425,23 +490,24 @@ private fun DateHeader(timestamp: Long) {
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Box(modifier = Modifier.weight(1f).height(0.5.dp).background(Color(0xFF2A2A2A)))
+        Box(modifier = Modifier.weight(1f).height(0.5.dp).background(colorScheme.outline.copy(alpha = 0.3f)))
         Text(
             text = label,
-            color = Inactive,
+            color = colorScheme.onSurface.copy(alpha = 0.5f),
             fontSize = 11.sp,
             fontWeight = FontWeight.SemiBold,
             letterSpacing = 0.5.sp,
             modifier = Modifier.padding(horizontal = 12.dp)
         )
-        Box(modifier = Modifier.weight(1f).height(0.5.dp).background(Color(0xFF2A2A2A)))
+        Box(modifier = Modifier.weight(1f).height(0.5.dp).background(colorScheme.outline.copy(alpha = 0.3f)))
     }
 }
 
-// ── Permission Prompt ────────────────────────────────────────────────────
+// -- Permission Prompt --
 
 @Composable
 private fun PermissionPrompt(onGrant: () -> Unit) {
+    val colorScheme = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -452,75 +518,49 @@ private fun PermissionPrompt(onGrant: () -> Unit) {
         Box(
             modifier = Modifier
                 .size(80.dp)
-                .background(Brand.copy(alpha = 0.1f), CircleShape),
+                .background(colorScheme.primary.copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(Icons.AutoMirrored.Filled.Chat, null, modifier = Modifier.size(40.dp), tint = Brand)
+            Icon(Icons.AutoMirrored.Filled.Chat, null, modifier = Modifier.size(40.dp), tint = colorScheme.primary)
         }
         Spacer(modifier = Modifier.height(20.dp))
         Text(
             "SMS Permission Required",
             fontWeight = FontWeight.Bold,
             fontSize = 20.sp,
-            color = TextPrimary
+            color = colorScheme.onBackground
         )
         Spacer(modifier = Modifier.height(8.dp))
         Text(
             "Allow SMS access to view and manage your messages with spam protection.",
-            color = TextSecondary,
+            color = colorScheme.onBackground.copy(alpha = 0.6f),
             fontSize = 14.sp,
-            textAlign = TextAlign.Center,
+            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
             lineHeight = 20.sp
         )
         Spacer(modifier = Modifier.height(24.dp))
         TextButton(
             onClick = onGrant,
             modifier = Modifier
-                .background(Brand, RoundedCornerShape(12.dp))
+                .background(colorScheme.primary, RoundedCornerShape(12.dp))
                 .padding(horizontal = 16.dp)
         ) {
-            Text("Grant Permission", color = Color(0xFF1A1A1A), fontWeight = FontWeight.Bold, fontSize = 15.sp)
+            Text("Grant Permission", color = colorScheme.onPrimary, fontWeight = FontWeight.Bold, fontSize = 15.sp)
         }
     }
 }
 
-// ── Empty State ──────────────────────────────────────────────────────────
+// -- Conversation Item --
 
-@Composable
-private fun EmptyState(filter: SmsFilter) {
-    val (icon, message) = when (filter) {
-        SmsFilter.SPAM -> Pair(Icons.Default.Shield, "No spam messages detected")
-        SmsFilter.PERSONAL -> Pair(Icons.Default.Person, "No personal messages")
-        SmsFilter.TRANSACTIONAL -> Pair(Icons.Default.Business, "No transactional messages")
-        SmsFilter.PROMOTIONAL -> Pair(Icons.Default.Campaign, "No promotional messages")
-        SmsFilter.ALL -> Pair(Icons.AutoMirrored.Filled.Chat, "No messages found")
-    }
-    Column(
-        modifier = Modifier.fillMaxSize().padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Icon(icon, null, Modifier.size(48.dp), tint = Inactive)
-        Spacer(modifier = Modifier.height(12.dp))
-        Text(message, color = TextSecondary, fontSize = 15.sp)
-    }
-}
-
-// ── Conversation Item ────────────────────────────────────────────────────
-
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ConversationItem(
     conversation: SmsConversation,
     onClick: () -> Unit,
-    onReport: () -> Unit,
-    onBlock: () -> Unit
+    onLongClick: () -> Unit
 ) {
-    val categoryColor = when (conversation.category) {
-        SmsCategory.SPAM -> Danger
-        SmsCategory.PROMOTIONAL -> Warning
-        SmsCategory.TRANSACTIONAL -> Success
-        SmsCategory.PERSONAL -> Brand
-    }
+    val colorScheme = MaterialTheme.colorScheme
+    val categoryColor = categoryColorFor(conversation.category, colorScheme)
 
     val categoryIcon = when (conversation.category) {
         SmsCategory.SPAM -> Icons.Default.Warning
@@ -529,56 +569,25 @@ private fun ConversationItem(
         SmsCategory.PERSONAL -> Icons.Default.Person
     }
 
-    // Initials for avatar
-    val initials = (conversation.contactName ?: conversation.address)
-        .take(2)
-        .uppercase()
-        .let { if (it.firstOrNull()?.isDigit() == true || it.firstOrNull() == '+') "#" else it.take(1) }
-
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .background(if (conversation.unreadCount > 0) SurfaceCard else Color.Transparent)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+            .background(if (conversation.unreadCount > 0) colorScheme.surfaceVariant else Color.Transparent)
+            .padding(horizontal = Spacing.md, vertical = 12.dp),
         verticalAlignment = Alignment.Top
     ) {
-        // Avatar
-        Box(contentAlignment = Alignment.Center) {
-            Box(
-                modifier = Modifier
-                    .size(52.dp)
-                    .background(
-                        Brush.linearGradient(
-                            colors = when (conversation.category) {
-                                SmsCategory.SPAM -> listOf(Danger.copy(alpha = 0.2f), Danger.copy(alpha = 0.1f))
-                                SmsCategory.PROMOTIONAL -> listOf(Warning.copy(alpha = 0.2f), Warning.copy(alpha = 0.1f))
-                                SmsCategory.TRANSACTIONAL -> listOf(Success.copy(alpha = 0.2f), Success.copy(alpha = 0.1f))
-                                SmsCategory.PERSONAL -> listOf(Brand.copy(alpha = 0.2f), Brand.copy(alpha = 0.1f))
-                            }
-                        ),
-                        CircleShape
-                    ),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = initials,
-                    color = categoryColor,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold
-                )
-            }
-
-            // Category indicator dot
-            Box(
-                modifier = Modifier
-                    .size(16.dp)
-                    .offset(x = 18.dp, y = 18.dp)
-                    .background(Background, CircleShape)
-                    .padding(2.dp)
-                    .background(categoryColor, CircleShape)
-            )
-        }
+        // Avatar using TruCallerAvatar with category indicator
+        TruCallerAvatar(
+            name = conversation.contactName ?: conversation.address,
+            size = 52.dp,
+            indicator = AvatarIndicator.Category,
+            indicatorColor = categoryColor,
+            contentDesc = "${conversation.contactName ?: conversation.address} avatar"
+        )
 
         Spacer(modifier = Modifier.width(14.dp))
 
@@ -589,7 +598,7 @@ private fun ConversationItem(
                     text = conversation.contactName ?: conversation.address,
                     fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.SemiBold,
                     fontSize = 15.sp,
-                    color = TextPrimary,
+                    color = colorScheme.onSurface,
                     modifier = Modifier.weight(1f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -598,7 +607,7 @@ private fun ConversationItem(
                 Text(
                     text = formatSmsTime(conversation.lastDate),
                     fontSize = 11.sp,
-                    color = if (conversation.unreadCount > 0) Brand else Inactive,
+                    color = if (conversation.unreadCount > 0) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.5f),
                     fontWeight = if (conversation.unreadCount > 0) FontWeight.Bold else FontWeight.Normal
                 )
             }
@@ -609,7 +618,7 @@ private fun ConversationItem(
                 Text(
                     text = conversation.lastMessage,
                     fontSize = 13.sp,
-                    color = if (conversation.unreadCount > 0) TextPrimary.copy(alpha = 0.9f) else TextSecondary,
+                    color = if (conversation.unreadCount > 0) colorScheme.onSurface.copy(alpha = 0.9f) else colorScheme.onSurface.copy(alpha = 0.6f),
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                     lineHeight = 18.sp,
@@ -626,13 +635,19 @@ private fun ConversationItem(
                     if (conversation.unreadCount > 0) {
                         Box(
                             modifier = Modifier
+                                .animateContentSize(
+                                    animationSpec = spring(
+                                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                                        stiffness = Spring.StiffnessLow
+                                    )
+                                )
                                 .size(22.dp)
-                                .background(Brand, CircleShape),
+                                .background(colorScheme.primary, CircleShape),
                             contentAlignment = Alignment.Center
                         ) {
                             Text(
                                 "${conversation.unreadCount}",
-                                color = Color(0xFF1A1A1A),
+                                color = colorScheme.onPrimary,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.ExtraBold
                             )
@@ -640,49 +655,27 @@ private fun ConversationItem(
                     }
 
                     if (conversation.isBlocked) {
-                        Icon(Icons.Default.Block, null, modifier = Modifier.size(16.dp), tint = Danger)
+                        Icon(Icons.Default.Block, null, modifier = Modifier.size(16.dp), tint = colorScheme.error)
                     }
                 }
             }
 
-            // Category + actions row
+            // Category badge row (without inline action buttons)
             if (conversation.category != SmsCategory.PERSONAL || conversation.isBlocked) {
                 Spacer(modifier = Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (conversation.category != SmsCategory.PERSONAL) {
-                        Box(
-                            modifier = Modifier
-                                .background(categoryColor.copy(alpha = 0.12f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 3.dp)
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(
-                                    categoryIcon, null,
-                                    modifier = Modifier.size(11.dp),
-                                    tint = categoryColor
-                                )
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    text = conversation.category.name.lowercase().replaceFirstChar { it.uppercase() },
-                                    fontSize = 10.sp,
-                                    color = categoryColor,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 0.3.sp
-                                )
-                            }
+                        val badgeType = when (conversation.category) {
+                            SmsCategory.SPAM -> BadgeType.Spam
+                            SmsCategory.PROMOTIONAL -> BadgeType.Warning
+                            SmsCategory.TRANSACTIONAL -> BadgeType.Success
+                            SmsCategory.PERSONAL -> BadgeType.Info
                         }
-                    }
-
-                    Spacer(modifier = Modifier.weight(1f))
-
-                    // Inline action buttons
-                    IconButton(onClick = onReport, modifier = Modifier.size(28.dp)) {
-                        Icon(Icons.Default.Report, "Report", tint = Inactive, modifier = Modifier.size(16.dp))
-                    }
-                    if (!conversation.isBlocked) {
-                        IconButton(onClick = onBlock, modifier = Modifier.size(28.dp)) {
-                            Icon(Icons.Default.Block, "Block", tint = Inactive, modifier = Modifier.size(16.dp))
-                        }
+                        TruCallerBadge(
+                            text = conversation.category.name.lowercase().replaceFirstChar { it.uppercase() },
+                            type = badgeType,
+                            icon = categoryIcon
+                        )
                     }
                 }
             }
@@ -690,16 +683,26 @@ private fun ConversationItem(
     }
 
     // Subtle divider
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(start = 82.dp)
-            .height(0.5.dp)
-            .background(Color(0xFF222222))
+    HorizontalDivider(
+        modifier = Modifier.padding(start = 82.dp),
+        thickness = 0.5.dp,
+        color = colorScheme.outline.copy(alpha = 0.2f)
     )
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────
+// -- Helpers --
+
+private fun categoryColorFor(
+    category: SmsCategory,
+    colorScheme: androidx.compose.material3.ColorScheme
+): Color {
+    return when (category) {
+        SmsCategory.SPAM -> colorScheme.error
+        SmsCategory.PROMOTIONAL -> colorScheme.primary
+        SmsCategory.TRANSACTIONAL -> Color(0xFF4CAF50)
+        SmsCategory.PERSONAL -> colorScheme.primary
+    }
+}
 
 private fun formatSmsTime(timestamp: Long): String {
     val now = System.currentTimeMillis()
