@@ -117,14 +117,35 @@ fun ReportStolenScreen(
         AlertDialog(
             onDismissRequest = {},
             title = { Text("Device Reported Stolen") },
-            text = { Text("Your device has been flagged as stolen. You can now use remote actions to trigger an alarm, request location, or lock the device.") },
+            text = {
+                Column {
+                    Text("Your device has been flagged as stolen. You can now use remote actions to trigger an alarm, request location, or lock the device.")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text(
+                        "Set up geofence alerts to get notified when the device enters or leaves specific areas.",
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp
+                    )
+                }
+            },
             confirmButton = {
-                TextButton(onClick = {
-                    showSuccessDialog = false
-                    navController.navigate("remote_actions") {
-                        popUpTo("report_stolen") { inclusive = true }
-                    }
-                }) { Text("Remote Actions", color = colorScheme.error) }
+                Column {
+                    TextButton(onClick = {
+                        showSuccessDialog = false
+                        val currentDevice = device
+                        if (currentDevice != null) {
+                            navController.navigate("geofence_management/${currentDevice.id}") {
+                                popUpTo("report_stolen") { inclusive = true }
+                            }
+                        }
+                    }) { Text("Set Up Geofence Alerts", color = colorScheme.primary) }
+                    TextButton(onClick = {
+                        showSuccessDialog = false
+                        navController.navigate("remote_actions") {
+                            popUpTo("report_stolen") { inclusive = true }
+                        }
+                    }) { Text("Remote Actions", color = colorScheme.error) }
+                }
             },
             dismissButton = {
                 TextButton(onClick = {

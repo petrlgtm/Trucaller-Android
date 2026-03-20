@@ -86,6 +86,7 @@ import com.byron.trucaller.ui.main.HomeScreen
 import com.byron.trucaller.ui.main.MessagesScreen
 import com.byron.trucaller.ui.main.ProfileScreen
 import com.byron.trucaller.ui.main.SecurityScreen
+import com.byron.trucaller.ui.stolen.GeofenceManagementScreen
 import com.byron.trucaller.ui.stolen.RemoteActionsScreen
 import com.byron.trucaller.ui.stolen.ReportStolenScreen
 import com.byron.trucaller.viewmodel.AdminDashboardViewModel
@@ -96,6 +97,7 @@ import com.byron.trucaller.viewmodel.CallerIdViewModel
 import com.byron.trucaller.viewmodel.CallLogViewModel
 import com.byron.trucaller.viewmodel.ContactsViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
+import com.byron.trucaller.viewmodel.GeofenceViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
 
@@ -136,6 +138,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val adminDashboardViewModel: AdminDashboardViewModel = viewModel(factory = AdminDashboardViewModel.Factory)
     val smsViewModel: SmsViewModel = viewModel(factory = SmsViewModel.Factory)
     val callLogViewModel: CallLogViewModel = viewModel(factory = CallLogViewModel.Factory)
+    val geofenceViewModel: GeofenceViewModel = viewModel(factory = GeofenceViewModel.Factory)
 
     NavHost(
         navController = navController,
@@ -253,6 +256,14 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 deviceViewModel = deviceViewModel,
                 stolenReportViewModel = stolenReportViewModel,
                 alarmViewModel = alarmViewModel
+            )
+        }
+        composable("geofence_management/{deviceId}") { backStackEntry ->
+            val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
+            GeofenceManagementScreen(
+                navController = navController,
+                deviceId = deviceId,
+                geofenceViewModel = geofenceViewModel
             )
         }
         composable("security") {

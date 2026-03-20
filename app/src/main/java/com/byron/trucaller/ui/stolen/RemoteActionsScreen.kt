@@ -44,6 +44,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.FmdGood
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
@@ -930,6 +931,22 @@ fun RemoteActionsScreen(
                         }
                     }
                 }
+
+                Spacer(modifier = Modifier.height(Spacing.md))
+
+                // Manage Geofences button
+                TruCallerButton(
+                    text = "Manage Geofences",
+                    onClick = {
+                        val currentDevice = device ?: return@TruCallerButton
+                        navController.navigate("geofence_management/${currentDevice.id}")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TruCallerButtonStyle.Primary,
+                    enabled = device != null,
+                    leadingIcon = Icons.Default.FmdGood,
+                    iconSize = 22.dp
+                )
 
                 Spacer(modifier = Modifier.height(Spacing.md))
 
