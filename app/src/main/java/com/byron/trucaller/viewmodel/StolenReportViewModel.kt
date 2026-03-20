@@ -146,6 +146,18 @@ class StolenReportViewModel(
             reports.filter { it.status != ReportStatus.RESOLVED }.forEach { report ->
                 stolenReportRepository.updateReportStatus(report.id, ReportStatus.RESOLVED)
             }
+
+            // Best-effort sync to backend — update device status and resolve stolen reports
+            try {
+                val result = ApiClient.recoverDevice(deviceId)
+                if (result.success) {
+                    Log.d("StolenReportVM", "Device recovery synced to backend for $deviceId")
+                } else {
+                    Log.w("StolenReportVM", "Backend recovery sync failed: ${result.error}")
+                }
+            } catch (e: Exception) {
+                Log.e("StolenReportVM", "Backend recovery sync failed for device $deviceId", e)
+            }
         }
     }
 

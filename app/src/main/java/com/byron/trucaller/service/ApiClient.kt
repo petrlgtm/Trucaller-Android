@@ -164,6 +164,9 @@ object ApiClient {
     suspend fun updateStolenReportStatus(reportId: String, status: String): ApiResult<Unit> =
         put("/api/stolen/reports/$reportId/status", mapOf("status" to status))
 
+    suspend fun recoverDevice(deviceId: String): ApiResult<Unit> =
+        put("/api/devices/$deviceId/recover", mapOf("status" to "ACTIVE"))
+
     // ── SMS (additional) ───────────────────────────────────────────────
 
     suspend fun getSpamNumbers(skip: Int = 0, limit: Int = 50): ApiResult<List<Map<String, Any>>> =

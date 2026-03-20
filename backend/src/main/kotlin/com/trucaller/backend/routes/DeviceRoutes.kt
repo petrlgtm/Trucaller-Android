@@ -84,11 +84,17 @@ fun Route.deviceRoutes() {
         route("/api/devices") {
             registerDevice()
             updateFcmToken()
+            recoverDevice()
             getDevicesByUser()
             getIpLogsByDevice()
         }
     }
 }
+
+@Serializable
+data class DeviceRecoverRequest(
+    val status: String
+)
 
 // ── POST /api/devices/register ──────────────────────────────────────────
 
@@ -258,6 +264,70 @@ private fun Route.updateFcmToken() {
                 success = true,
                 data = updatedDoc.toDeviceResponse(),
                 message = "FCM token updated successfully."
+            )
+        )
+    }
+}
+
+// ── PUT /api/devices/{deviceId}/recover ──────────────────────────────────
+
+private fun Route.recoverDevice() {
+    put("/{deviceId}/recover") {
+        val userId = call.userId()
+        val deviceId = call.parameters["deviceId"]
+
+        if (deviceId.isNullOrBlank()) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Missing deviceId")
+            )
+            return@put
+        }
+
+        // Verify the device belongs to the requesting user
+        val deviceDoc = Collections.devices
+            .find(
+                Filters.and(
+                    Filters.eq("userId", userId),
+                    Filters.eq("deviceId", deviceId)
+                )
+            )
+            .firstOrNull()
+
+        if (deviceDoc == null) {
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiResponse<Unit>(
+                    success = false,
+                    error = "Device not found or does not belong to you."
+                )
+            )
+            return@put
+        }
+
+        // Update device status to ACTIVE
+        Collections.devices.updateOne(
+            Filters.and(
+                Filters.eq("userId", userId),
+                Filters.eq("deviceId", deviceId)
+            ),
+            Document("\$set", Document("status", "ACTIVE"))
+        )
+
+        // Resolve all pending stolen reports for this device
+        Collections.stolenReports.updateMany(
+            Filters.and(
+                Filters.eq("deviceId", deviceId),
+                Filters.ne("status", "RESOLVED")
+            ),
+            Document("\$set", Document("status", "RESOLVED"))
+        )
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse<Nothing>(
+                success = true,
+                message = "Device recovered and stolen reports resolved"
             )
         )
     }
