@@ -2,6 +2,7 @@ package com.byron.trucaller.data.repository
 
 import com.byron.trucaller.data.dao.AlarmLogDao
 import com.byron.trucaller.data.model.AlarmLog
+import com.byron.trucaller.data.model.AlarmResult
 import kotlinx.coroutines.flow.Flow
 
 class AlarmRepository(private val alarmLogDao: AlarmLogDao) {
@@ -11,5 +12,5 @@ class AlarmRepository(private val alarmLogDao: AlarmLogDao) {
     fun getLogCount(): Flow<Int> = alarmLogDao.countFlow()
 
     suspend fun insertLog(alarmLog: AlarmLog) = alarmLogDao.insert(alarmLog)
-    suspend fun updateResult(id: String, result: String, notes: String) = alarmLogDao.updateResult(id, result, notes)
+    suspend fun updateResult(id: String, result: AlarmResult, notes: String) = alarmLogDao.updateResult(id, result, notes)
 }

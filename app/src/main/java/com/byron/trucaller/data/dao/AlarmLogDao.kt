@@ -5,6 +5,7 @@ import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import com.byron.trucaller.data.model.AlarmLog
+import com.byron.trucaller.data.model.AlarmResult
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -22,7 +23,7 @@ interface AlarmLogDao {
     suspend fun insertAll(alarmLogs: List<AlarmLog>)
 
     @Query("UPDATE alarm_logs SET result = :result, notes = :notes WHERE id = :id")
-    suspend fun updateResult(id: String, result: String, notes: String)
+    suspend fun updateResult(id: String, result: AlarmResult, notes: String)
 
     @Query("SELECT COUNT(*) FROM alarm_logs WHERE result = 'PENDING'")
     fun getPendingCount(): Flow<Int>

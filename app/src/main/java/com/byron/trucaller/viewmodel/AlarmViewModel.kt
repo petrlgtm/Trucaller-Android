@@ -76,7 +76,7 @@ class AlarmViewModel(
                 _alarmPlaying.value = true
 
                 // Mark as SUCCESS since alarm started playing
-                alarmRepository.updateResult(logId, AlarmResult.SUCCESS.name, "Alarm sounded for 30 seconds")
+                alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Alarm sounded for 30 seconds")
 
                 // Auto-update state when alarm stops
                 viewModelScope.launch {
@@ -85,7 +85,7 @@ class AlarmViewModel(
                 }
             } catch (e: Exception) {
                 // Mark as FAILED if alarm couldn't play
-                alarmRepository.updateResult(logId, AlarmResult.FAILED.name, "Alarm failed: ${e.message}")
+                alarmRepository.updateResult(logId, AlarmResult.FAILED, "Alarm failed: ${e.message}")
                 _alarmPlaying.value = false
             }
         }
@@ -123,10 +123,10 @@ class AlarmViewModel(
                 val app = getApplication<TruCallerApplication>()
                 val regService = DeviceRegistrationService(app, deviceRepository)
                 regService.registerOrUpdateDevice(triggeredBy)
-                alarmRepository.updateResult(logId, AlarmResult.SUCCESS.name, "Location updated via IP geolocation")
+                alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Location updated via IP geolocation")
                 _actionMessage.value = "Location updated successfully"
             } catch (e: Exception) {
-                alarmRepository.updateResult(logId, AlarmResult.FAILED.name, "Location request failed: ${e.message}")
+                alarmRepository.updateResult(logId, AlarmResult.FAILED, "Location request failed: ${e.message}")
                 _actionMessage.value = "Location request failed"
             }
         }
@@ -158,14 +158,14 @@ class AlarmViewModel(
                 val app = getApplication<TruCallerApplication>()
                 val locked = DeviceAdminHelper.lockDevice(app)
                 if (locked) {
-                    alarmRepository.updateResult(logId, AlarmResult.SUCCESS.name, "Device locked successfully")
+                    alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Device locked successfully")
                     _actionMessage.value = "Device locked successfully"
                 } else {
-                    alarmRepository.updateResult(logId, AlarmResult.FAILED.name, "Device admin not active - cannot lock")
+                    alarmRepository.updateResult(logId, AlarmResult.FAILED, "Device admin not active - cannot lock")
                     _actionMessage.value = "Cannot lock: Device admin permission required"
                 }
             } catch (e: Exception) {
-                alarmRepository.updateResult(logId, AlarmResult.FAILED.name, "Lock failed: ${e.message}")
+                alarmRepository.updateResult(logId, AlarmResult.FAILED, "Lock failed: ${e.message}")
                 _actionMessage.value = "Device lock failed"
             }
         }
