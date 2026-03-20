@@ -71,13 +71,22 @@ class CallLogViewModel(
             }
 
             if (lookup.callerIdEntry != null) {
+                // High-trust sources: prefer the looked-up name over system cached name
+                val highTrustSources = setOf("caller_id_db", "registered_user", "alias")
+                val resolvedName = if (lookup.source in highTrustSources) {
+                    lookup.callerIdEntry.name ?: entry.name
+                } else {
+                    entry.name ?: lookup.callerIdEntry.name
+                }
+
                 entry.copy(
-                    name = entry.name ?: lookup.callerIdEntry.name,
+                    name = resolvedName,
                     isSpam = lookup.callerIdEntry.spamScore > 30,
                     spamScore = lookup.callerIdEntry.spamScore,
                     isBlocked = blocked
                 )
             } else {
+                // source is "not_found" — keep system cached name as-is
                 entry.copy(isBlocked = blocked)
             }
         } catch (_: Exception) {
