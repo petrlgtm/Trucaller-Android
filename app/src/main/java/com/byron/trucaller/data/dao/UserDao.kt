@@ -30,4 +30,7 @@ interface UserDao {
 
     @Query("SELECT COUNT(*) FROM users")
     fun countFlow(): Flow<Int>
+
+    @Query("UPDATE users SET isActive = :isActive WHERE id = :userId")
+    suspend fun setActive(userId: String, isActive: Boolean)
 }

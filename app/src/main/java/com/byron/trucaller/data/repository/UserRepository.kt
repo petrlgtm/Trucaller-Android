@@ -19,6 +19,9 @@ class UserRepository(
     suspend fun insertUser(user: User) = userDao.insert(user)
     suspend fun updateUser(user: User) = userDao.update(user)
 
+    suspend fun deactivateUser(userId: String) = userDao.setActive(userId, false)
+    suspend fun reactivateUser(userId: String) = userDao.setActive(userId, true)
+
     suspend fun getAdminByCredentials(email: String, password: String): AdminUser? =
         adminUserDao.getByEmailAndPassword(email, hashPassword(password))
     suspend fun getAdminById(id: String): AdminUser? = adminUserDao.getById(id)
