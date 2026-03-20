@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
@@ -26,6 +27,7 @@ class UserPreferences(private val context: Context) {
         private val WEEKLY_REPORT = booleanPreferencesKey("weekly_report")
         private val RECENT_LOOKUPS = stringPreferencesKey("recent_lookups")
         private val CONSENT_GIVEN = booleanPreferencesKey("consent_given")
+        private val LAST_CONTACT_SYNC_TIMESTAMP = longPreferencesKey("last_contact_sync_timestamp")
     }
 
     val autoBackup: Flow<Boolean> = context.dataStore.data.map { it[AUTO_BACKUP_KEY] ?: true }
@@ -38,6 +40,7 @@ class UserPreferences(private val context: Context) {
     val dailyDigest: Flow<Boolean> = context.dataStore.data.map { it[DAILY_DIGEST] ?: false }
     val weeklyReport: Flow<Boolean> = context.dataStore.data.map { it[WEEKLY_REPORT] ?: true }
     val consentGiven: Flow<Boolean> = context.dataStore.data.map { it[CONSENT_GIVEN] ?: false }
+    val lastContactSyncTimestamp: Flow<Long> = context.dataStore.data.map { it[LAST_CONTACT_SYNC_TIMESTAMP] ?: 0L }
     val recentLookups: Flow<List<String>> = context.dataStore.data.map {
         it[RECENT_LOOKUPS]?.split(",")?.filter { s -> s.isNotEmpty() } ?: emptyList()
     }
@@ -85,6 +88,10 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setConsentGiven(given: Boolean) {
         context.dataStore.edit { it[CONSENT_GIVEN] = given }
+    }
+
+    suspend fun setLastContactSyncTimestamp(timestamp: Long) {
+        context.dataStore.edit { it[LAST_CONTACT_SYNC_TIMESTAMP] = timestamp }
     }
 
     suspend fun addRecentLookup(entryId: String) {

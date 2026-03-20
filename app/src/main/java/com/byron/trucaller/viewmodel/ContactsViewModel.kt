@@ -243,10 +243,15 @@ class ContactsViewModel(
                 }
             } catch (_: Exception) { }
 
-            // Step 3c: Download contacts from backend and merge
+            // Step 3c: Download contacts from backend and merge (incremental via last sync timestamp)
             var downloadedContacts = 0
+            var updatedContacts = 0
             try {
-                val result = withContext(Dispatchers.IO) { ApiClient.syncContacts() }
+                val lastSyncMs = preferences.lastContactSyncTimestamp.first()
+                val sinceParam = if (lastSyncMs > 0L) {
+                    SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date(lastSyncMs))
+                } else null
+                val result = withContext(Dispatchers.IO) { ApiClient.syncContacts(since = sinceParam) }
                 if (result.success && result.data != null) {
                     result.data.forEach { map ->
                         val remote = BackendMappers.mapToContact(map, userId)
@@ -256,35 +261,32 @@ class ContactsViewModel(
                                 contactRepository.insertContact(remote)
                                 downloadedContacts++
                             } else if (existing.userId == userId) {
-                                contactRepository.updateContact(
-                                    existing.copy(
-                                        name = remote.name,
-                                        email = remote.email ?: existing.email,
-                                        syncedAt = now,
-                                        isBackedUp = true
+                                // Update if server version has newer data
+                                val remoteTime = remote.syncedAt
+                                val localTime = existing.syncedAt
+                                if (remoteTime > localTime || existing.name != remote.name || existing.email != remote.email) {
+                                    contactRepository.updateContact(
+                                        existing.copy(
+                                            name = remote.name,
+                                            email = remote.email ?: existing.email,
+                                            syncedAt = now,
+                                            isBackedUp = true
+                                        )
                                     )
-                                )
+                                    updatedContacts++
+                                }
                             }
                         }
                     }
                 }
+                // Store current timestamp for next incremental sync
+                preferences.setLastContactSyncTimestamp(System.currentTimeMillis())
             } catch (_: Exception) { }
 
-            // Step 3d: Download blocked numbers from backend and merge
+            // Step 3d: Bi-directional sync of blocked numbers with backend
             var downloadedBlocked = 0
             try {
-                val result = withContext(Dispatchers.IO) { ApiClient.getBlockedNumbers() }
-                if (result.success && result.data != null) {
-                    result.data.forEach { map ->
-                        val remote = BackendMappers.mapToBlockedNumber(map)
-                        if (remote.phoneNumber.isNotBlank() &&
-                            !blockedNumberRepository.isBlocked(userId, remote.phoneNumber)
-                        ) {
-                            blockedNumberRepository.blockNumber(remote.copy(userId = userId))
-                            downloadedBlocked++
-                        }
-                    }
-                }
+                downloadedBlocked = blockedNumberRepository.syncBlockedNumbers(userId)
             } catch (_: Exception) { }
 
             // Step 3e: Download spam/caller-ID data from backend and merge
@@ -316,7 +318,8 @@ class ContactsViewModel(
             } catch (_: Exception) { }
 
             val downloadSummary = listOfNotNull(
-                if (downloadedContacts > 0) "$downloadedContacts contacts" else null,
+                if (downloadedContacts > 0) "$downloadedContacts new contacts" else null,
+                if (updatedContacts > 0) "$updatedContacts updated contacts" else null,
                 if (downloadedBlocked > 0) "$downloadedBlocked blocked" else null,
                 if (downloadedSpam > 0) "$downloadedSpam spam entries" else null
             ).joinToString(", ")
