@@ -10,6 +10,7 @@ import com.byron.trucaller.data.model.SpamCategory
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.util.PhoneUtils
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withTimeoutOrNull
 
 class CallerIdRepository(
     private val callerIdDao: CallerIdDao,
@@ -101,17 +102,21 @@ class CallerIdRepository(
             )
         }
 
-        // 5. Remote API fallback — query the backend for community-sourced caller ID
+        // 5. Backend API fallback — query the server for community-sourced caller ID
         try {
-            val result = ApiClient.lookupCallerId(fullPhone)
-            if (result.success && result.data != null) {
-                val entry = BackendMappers.mapLookupToCallerIdEntry(result.data)
+            val apiResult = withTimeoutOrNull(5_000L) {
+                ApiClient.lookupCallerId(fullPhone)
+            }
+            if (apiResult != null && apiResult.success && apiResult.data != null) {
+                val entry = BackendMappers.mapLookupToCallerIdEntry(apiResult.data)
                 if (entry != null) {
                     callerIdDao.insert(entry) // Cache locally for future lookups
-                    return LookupResult(callerIdEntry = entry, contactMatch = null, source = "remote_api")
+                    return LookupResult(callerIdEntry = entry, contactMatch = null, source = "backend_api")
                 }
             }
-        } catch (_: Exception) { }
+        } catch (_: Exception) {
+            // Network error or other failure — fall through to not_found gracefully
+        }
 
         return LookupResult(callerIdEntry = null, contactMatch = null, source = "not_found")
     }
