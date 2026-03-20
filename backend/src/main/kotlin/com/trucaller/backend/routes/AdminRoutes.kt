@@ -57,6 +57,12 @@ data class AdminStatusUpdateRequest(
 )
 
 @Serializable
+data class TrustUpdateRequest(
+    val trustScore: Int? = null,
+    val trustLevel: String? = null
+)
+
+@Serializable
 data class UserWithDevices(
     val user: String,       // JSON string of user document
     val devices: List<String> // JSON strings of device documents
@@ -676,6 +682,135 @@ fun Route.adminRoutes() {
                     ApiResponse<Nothing>(
                         success = true,
                         message = "Password updated successfully"
+                    )
+                )
+            }
+
+            // ── GET /api/admin/users/{userId}/trust ───────────────────────
+            get("/users/{userId}/trust") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@get
+                }
+
+                val userId = call.parameters["userId"]
+                if (userId.isNullOrBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Missing userId")
+                    )
+                    return@get
+                }
+
+                val userDoc = Collections.users
+                    .find(Filters.eq("_id", userId))
+                    .toList()
+                    .firstOrNull()
+
+                if (userDoc == null) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        ApiResponse<Nothing>(success = false, error = "User not found")
+                    )
+                    return@get
+                }
+
+                val trustScore = userDoc.getInteger("trustScore", 0)
+                val trustLevel = userDoc.getString("trustLevel") ?: "NEW"
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse(
+                        success = true,
+                        data = mapOf("userId" to userId, "trustScore" to trustScore, "trustLevel" to trustLevel),
+                        message = "Trust info retrieved"
+                    )
+                )
+            }
+
+            // ── PUT /api/admin/users/{userId}/trust ───────────────────────
+            put("/users/{userId}/trust") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@put
+                }
+
+                val userId = call.parameters["userId"]
+                if (userId.isNullOrBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Missing userId")
+                    )
+                    return@put
+                }
+
+                val request = try {
+                    call.receive<TrustUpdateRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Invalid request body")
+                    )
+                    return@put
+                }
+
+                val updates = mutableListOf<org.bson.conversions.Bson>()
+                request.trustScore?.let {
+                    val clamped = it.coerceIn(0, 100)
+                    updates.add(Updates.set("trustScore", clamped))
+                    // Auto-derive trustLevel from score
+                    val level = when {
+                        clamped >= 100 -> "AUTHORITY"
+                        clamped >= 80 -> "VERIFIED"
+                        clamped >= 50 -> "TRUSTED"
+                        clamped >= 20 -> "BASIC"
+                        else -> "NEW"
+                    }
+                    updates.add(Updates.set("trustLevel", level))
+                }
+                request.trustLevel?.let {
+                    val validLevels = listOf("NEW", "BASIC", "TRUSTED", "VERIFIED", "AUTHORITY")
+                    if (it in validLevels) {
+                        updates.add(Updates.set("trustLevel", it))
+                    }
+                }
+
+                if (updates.isEmpty()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "No fields to update")
+                    )
+                    return@put
+                }
+
+                val result = Collections.users.updateOne(
+                    Filters.eq("_id", userId),
+                    Updates.combine(updates)
+                )
+
+                if (result.matchedCount == 0L) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        ApiResponse<Nothing>(success = false, error = "User not found")
+                    )
+                    return@put
+                }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse<Nothing>(
+                        success = true,
+                        message = "Trust level updated"
                     )
                 )
             }

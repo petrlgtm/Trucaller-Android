@@ -38,6 +38,11 @@ dependencies {
     // BCrypt for password hashing
     implementation("at.favre.lib:bcrypt:0.10.2")
 
+    // Ktor Client (outbound HTTP calls, e.g. IP geolocation)
+    implementation("io.ktor:ktor-client-core:$ktorVersion")
+    implementation("io.ktor:ktor-client-cio:$ktorVersion")
+    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
+
     // Firebase Admin SDK (FCM push notifications)
     implementation("com.google.firebase:firebase-admin:9.4.3")
 

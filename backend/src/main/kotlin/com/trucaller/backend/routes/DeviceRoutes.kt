@@ -16,6 +16,7 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
+import com.trucaller.backend.service.IpGeolocationService
 import org.bson.Document
 import org.bson.types.ObjectId
 import java.time.Instant
@@ -73,6 +74,16 @@ data class IpLogResponse(
     val timestamp: String
 )
 
+@Serializable
+data class ForensicsResponse(
+    val deviceId: String,
+    val ipLogs: List<IpLogResponse>,
+    val uniqueIsps: List<String>,
+    val uniqueCities: List<String>,
+    val uniqueCountries: List<String>,
+    val totalLogs: Int
+)
+
 // ── Routes ──────────────────────────────────────────────────────────────
 
 /**
@@ -87,6 +98,7 @@ fun Route.deviceRoutes() {
             recoverDevice()
             getDevicesByUser()
             getIpLogsByDevice()
+            getDeviceForensics()
         }
     }
 }
@@ -141,16 +153,22 @@ private fun Route.registerDevice() {
             UpdateOptions().upsert(true)
         )
 
-        // Create IpLog entry using client-provided geolocation when available
+        // Resolve geolocation: prefer client-provided data, fall back to IP lookup
+        val geo = if (request.isp != null && request.city != null && request.country != null) {
+            null // client already provided full geo data
+        } else {
+            IpGeolocationService.resolve(deviceIp)
+        }
+
         val ipLogDoc = Document()
             .append("_id", ObjectId().toString())
             .append("deviceId", request.deviceId)
             .append("ipAddress", deviceIp)
-            .append("isp", request.isp ?: "unknown")
-            .append("city", request.city ?: "unknown")
-            .append("country", request.country ?: "unknown")
-            .append("latitude", request.latitude ?: 0.0)
-            .append("longitude", request.longitude ?: 0.0)
+            .append("isp", request.isp ?: geo?.isp ?: "unknown")
+            .append("city", request.city ?: geo?.city ?: "unknown")
+            .append("country", request.country ?: geo?.country ?: "unknown")
+            .append("latitude", request.latitude ?: geo?.lat ?: 0.0)
+            .append("longitude", request.longitude ?: geo?.lon ?: 0.0)
             .append("networkType", request.networkType ?: "unknown")
             .append("timestamp", now)
 
@@ -438,6 +456,78 @@ private fun Route.getIpLogsByDevice() {
                 success = true,
                 data = logs,
                 message = "Retrieved ${logs.size} IP log(s)."
+            )
+        )
+    }
+}
+
+// ── GET /api/devices/{deviceId}/forensics ────────────────────────────
+
+private fun Route.getDeviceForensics() {
+    get("/{deviceId}/forensics") {
+        val currentUserId = call.userId()
+        val deviceId = call.parameters["deviceId"]
+
+        if (deviceId.isNullOrBlank()) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(
+                    success = false,
+                    error = "Path parameter 'deviceId' is required."
+                )
+            )
+            return@get
+        }
+
+        // Ownership check: verify the device belongs to the requesting user
+        val deviceDoc = Collections.devices
+            .find(Filters.eq("deviceId", deviceId))
+            .firstOrNull()
+
+        if (deviceDoc != null && deviceDoc.getString("userId") != currentUserId) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                ApiResponse<Unit>(success = false, error = "Access denied")
+            )
+            return@get
+        }
+
+        // Fetch all IP logs for this device, sorted newest-first
+        val docs = Collections.ipLogs
+            .find(Filters.eq("deviceId", deviceId))
+            .sort(Sorts.descending("timestamp"))
+            .toList()
+
+        val logs = docs.map { doc ->
+            IpLogResponse(
+                id = doc.getString("_id") ?: doc.getObjectId("_id").toString(),
+                deviceId = doc.getString("deviceId"),
+                ipAddress = doc.getString("ipAddress"),
+                isp = doc.getString("isp") ?: "unknown",
+                city = doc.getString("city") ?: "unknown",
+                country = doc.getString("country") ?: "unknown",
+                latitude = doc.getDouble("latitude") ?: 0.0,
+                longitude = doc.getDouble("longitude") ?: 0.0,
+                networkType = doc.getString("networkType") ?: "unknown",
+                timestamp = doc.getString("timestamp")
+            )
+        }
+
+        val forensics = ForensicsResponse(
+            deviceId = deviceId,
+            ipLogs = logs,
+            uniqueIsps = logs.map { it.isp }.distinct().filter { it != "unknown" },
+            uniqueCities = logs.map { it.city }.distinct().filter { it != "unknown" },
+            uniqueCountries = logs.map { it.country }.distinct().filter { it != "unknown" },
+            totalLogs = logs.size
+        )
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse(
+                success = true,
+                data = forensics,
+                message = "Device forensics retrieved."
             )
         )
     }

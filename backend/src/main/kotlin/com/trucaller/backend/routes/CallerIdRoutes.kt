@@ -244,15 +244,23 @@ fun Route.callerIdRoutes() {
 
                 val now = Instant.now().toString()
 
+                // Determine reporter's trust weight (higher trust = more impact)
+                val reporterId = call.userId()
+                val reporterDoc = Collections.users
+                    .find(Filters.eq("_id", reporterId))
+                    .firstOrNull()
+                val reporterTrustScore = reporterDoc?.getInteger("trustScore", 0) ?: 0
+                val trustWeight = trustWeightFromScore(reporterTrustScore)
+
                 // Check if an entry already exists
                 val existingDoc = Collections.callerIds
                     .find(Filters.eq("phoneNumber", phoneNumber))
                     .firstOrNull()
 
                 if (existingDoc != null) {
-                    // Update existing entry: increment reportCount, increase spamScore (capped at 100)
+                    // Update existing entry: increment reportCount, increase spamScore weighted by trust
                     val currentScore = existingDoc.getInteger("spamScore", 0)
-                    val newScore = minOf(currentScore + 5, 100)
+                    val newScore = minOf(currentScore + trustWeight, 100)
                     val newCategory = categoryFromScore(newScore)
 
                     Collections.callerIds.updateOne(
@@ -269,17 +277,18 @@ fun Route.callerIdRoutes() {
                         HttpStatusCode.OK,
                         ApiResponse<Unit>(
                             success = true,
-                            message = "Spam report recorded. Score updated to $newScore."
+                            message = "Spam report recorded. Score updated to $newScore (trust weight: $trustWeight)."
                         )
                     )
                 } else {
-                    // Create a new CallerIdEntry
-                    val newCategory = categoryFromScore(5)
+                    // Create a new CallerIdEntry, seeded with trust-weighted score
+                    val initialScore = trustWeight
+                    val newCategory = categoryFromScore(initialScore)
                     val newDoc = Document()
                         .append("_id", ObjectId().toString())
                         .append("phoneNumber", phoneNumber)
                         .append("name", "Unknown")
-                        .append("spamScore", 5)
+                        .append("spamScore", initialScore)
                         .append("reportCount", 1)
                         .append("category", newCategory.name)
                         .append("lastUpdated", now)
@@ -290,7 +299,7 @@ fun Route.callerIdRoutes() {
                         HttpStatusCode.OK,
                         ApiResponse<Unit>(
                             success = true,
-                            message = "Spam report recorded. New entry created."
+                            message = "Spam report recorded. New entry created (trust weight: $trustWeight)."
                         )
                     )
                 }
@@ -329,4 +338,19 @@ private fun categoryFromScore(score: Int): SpamCategory = when {
     score <= 60 -> SpamCategory.SUSPECTED_SPAM
     score <= 80 -> SpamCategory.SPAM
     else -> SpamCategory.FRAUD
+}
+
+/**
+ * Converts a user's trust score (0-100) into a spam-report weight.
+ *
+ * - 0–19  (NEW)       → +3  (minimal impact)
+ * - 20–49 (BASIC)     → +5  (standard impact)
+ * - 50–79 (TRUSTED)   → +8  (significant impact)
+ * - 80+   (VERIFIED+) → +12 (high impact)
+ */
+private fun trustWeightFromScore(trustScore: Int): Int = when {
+    trustScore < 20 -> 3
+    trustScore < 50 -> 5
+    trustScore < 80 -> 8
+    else -> 12
 }

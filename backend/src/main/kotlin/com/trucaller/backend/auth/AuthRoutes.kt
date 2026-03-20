@@ -359,6 +359,8 @@ private fun Route.registerRoute() {
             .append("passwordHash", passwordHash)
             .append("createdAt", now)
             .append("isActive", true)
+            .append("trustScore", 0)
+            .append("trustLevel", "NEW")
 
         Collections.users.insertOne(userDoc)
 
