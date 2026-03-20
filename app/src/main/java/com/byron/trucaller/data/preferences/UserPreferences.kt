@@ -40,6 +40,7 @@ class UserPreferences(private val context: Context) {
         private val RECORDING_CONSENT_MODE = stringPreferencesKey("recording_consent_mode")
         private val RECORDING_AUTO_DELETE = stringPreferencesKey("recording_auto_delete")
         private val RECORDING_STORAGE_LIMIT = stringPreferencesKey("recording_storage_limit")
+        private val RECORDING_CONSENT_SHOWN = booleanPreferencesKey("recording_consent_shown")
     }
 
     val autoBackup: Flow<Boolean> = context.dataStore.data.map { it[AUTO_BACKUP_KEY] ?: true }
@@ -64,6 +65,7 @@ class UserPreferences(private val context: Context) {
     val recordingConsentMode: Flow<String> = context.dataStore.data.map { it[RECORDING_CONSENT_MODE] ?: "ONE_PARTY" }
     val recordingAutoDelete: Flow<String> = context.dataStore.data.map { it[RECORDING_AUTO_DELETE] ?: "NEVER" }
     val recordingStorageLimit: Flow<String> = context.dataStore.data.map { it[RECORDING_STORAGE_LIMIT] ?: "MB_500" }
+    val recordingConsentShown: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_CONSENT_SHOWN] ?: false }
 
     val recentLookups: Flow<List<String>> = context.dataStore.data.map {
         it[RECENT_LOOKUPS]?.split(",")?.filter { s -> s.isNotEmpty() } ?: emptyList()
@@ -167,6 +169,10 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setRecordingStorageLimit(limit: String) {
         context.dataStore.edit { it[RECORDING_STORAGE_LIMIT] = limit }
+    }
+
+    suspend fun setRecordingConsentShown(shown: Boolean) {
+        context.dataStore.edit { it[RECORDING_CONSENT_SHOWN] = shown }
     }
 
     suspend fun clearSession() {

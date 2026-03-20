@@ -17,6 +17,8 @@ import com.byron.trucaller.data.dao.SmsSpamDao
 import com.byron.trucaller.data.dao.ContactAliasDao
 import com.byron.trucaller.data.dao.GeofenceDao
 import com.byron.trucaller.data.dao.GeofenceEventDao
+import com.byron.trucaller.data.dao.CallRecordingDao
+import com.byron.trucaller.data.dao.SmsRuleDao
 import com.byron.trucaller.data.dao.UserDao
 import com.byron.trucaller.data.model.AdminUser
 import com.byron.trucaller.data.model.AlarmLog
@@ -27,7 +29,9 @@ import com.byron.trucaller.data.model.Device
 import com.byron.trucaller.data.model.Geofence
 import com.byron.trucaller.data.model.GeofenceEvent
 import com.byron.trucaller.data.model.IpLog
+import com.byron.trucaller.data.model.CallRecording
 import com.byron.trucaller.data.model.ContactAlias
+import com.byron.trucaller.data.model.SmsRule
 import com.byron.trucaller.data.model.SmsSpamReport
 import com.byron.trucaller.data.model.StolenReport
 import com.byron.trucaller.data.model.User
@@ -46,9 +50,11 @@ import com.byron.trucaller.data.model.User
         SmsSpamReport::class,
         ContactAlias::class,
         Geofence::class,
-        GeofenceEvent::class
+        GeofenceEvent::class,
+        SmsRule::class,
+        CallRecording::class
     ],
-    version = 10,
+    version = 12,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -66,6 +72,8 @@ abstract class TruCallerDatabase : RoomDatabase() {
     abstract fun contactAliasDao(): ContactAliasDao
     abstract fun geofenceDao(): GeofenceDao
     abstract fun geofenceEventDao(): GeofenceEventDao
+    abstract fun callRecordingDao(): CallRecordingDao
+    abstract fun smsRuleDao(): SmsRuleDao
 
     companion object {
         /** Migration 9 -> 10: add trustScore and trustLevel columns to users table. */
@@ -73,6 +81,45 @@ abstract class TruCallerDatabase : RoomDatabase() {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE users ADD COLUMN trustScore INTEGER NOT NULL DEFAULT 0")
                 db.execSQL("ALTER TABLE users ADD COLUMN trustLevel TEXT NOT NULL DEFAULT 'NEW'")
+            }
+        }
+
+        /** Migration 10 -> 11: create sms_rules table for user-customizable SMS classification rules. */
+        val MIGRATION_10_11 = object : Migration(10, 11) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS sms_rules (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        userId TEXT NOT NULL,
+                        ruleType TEXT NOT NULL,
+                        pattern TEXT NOT NULL,
+                        targetCategory TEXT NOT NULL,
+                        priority INTEGER NOT NULL DEFAULT 5,
+                        isActive INTEGER NOT NULL DEFAULT 1,
+                        createdAt TEXT NOT NULL
+                    )"""
+                )
+            }
+        }
+
+        /** Migration 11 -> 12: create call_recordings table for local call recording storage. */
+        val MIGRATION_11_12 = object : Migration(11, 12) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """CREATE TABLE IF NOT EXISTS call_recordings (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        userId TEXT NOT NULL,
+                        phoneNumber TEXT NOT NULL,
+                        contactName TEXT,
+                        callDirection TEXT NOT NULL,
+                        startTime INTEGER NOT NULL,
+                        duration INTEGER NOT NULL DEFAULT 0,
+                        filePath TEXT NOT NULL,
+                        fileSize INTEGER NOT NULL DEFAULT 0,
+                        isStarred INTEGER NOT NULL DEFAULT 0,
+                        createdAt INTEGER NOT NULL DEFAULT 0
+                    )"""
+                )
             }
         }
     }

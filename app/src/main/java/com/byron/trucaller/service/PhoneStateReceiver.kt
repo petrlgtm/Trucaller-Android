@@ -5,15 +5,21 @@ import android.content.Context
 import android.content.Intent
 import android.telephony.TelephonyManager
 import android.util.Log
+import com.byron.trucaller.TruCallerApplication
+import com.byron.trucaller.data.model.CallDirection
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.runBlocking
 
 /**
  * BroadcastReceiver that listens for phone state changes (incoming/outgoing calls)
  * and shows the CallerIdOverlayService with caller information.
  *
+ * Also starts/stops [CallRecordingService] when recording is enabled in preferences.
+ *
  * States:
  * - RINGING  -> Incoming call, show caller ID overlay
- * - OFFHOOK  -> Call answered or outgoing call, show overlay if number available
- * - IDLE     -> Call ended, dismiss overlay
+ * - OFFHOOK  -> Call answered or outgoing call, start recording if enabled
+ * - IDLE     -> Call ended, dismiss overlay and stop recording
  */
 class PhoneStateReceiver : BroadcastReceiver() {
 
@@ -21,6 +27,8 @@ class PhoneStateReceiver : BroadcastReceiver() {
         private const val TAG = "PhoneStateReceiver"
         private var lastState = TelephonyManager.CALL_STATE_IDLE
         private var lastNumber: String? = null
+        private var lastDirection: CallDirection = CallDirection.INCOMING
+        private var isRecordingActive = false
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -35,6 +43,7 @@ class PhoneStateReceiver : BroadcastReceiver() {
             TelephonyManager.EXTRA_STATE_RINGING -> {
                 // Incoming call ringing
                 lastState = TelephonyManager.CALL_STATE_RINGING
+                lastDirection = CallDirection.INCOMING
                 if (!incomingNumber.isNullOrBlank()) {
                     lastNumber = incomingNumber
                     Log.d(TAG, "Incoming call from: $incomingNumber — showing overlay")
@@ -46,22 +55,73 @@ class PhoneStateReceiver : BroadcastReceiver() {
                 // Call answered or outgoing call started
                 if (lastState == TelephonyManager.CALL_STATE_IDLE) {
                     // Transition from IDLE -> OFFHOOK means outgoing call
+                    lastDirection = CallDirection.OUTGOING
                     val number = incomingNumber ?: lastNumber
                     if (!number.isNullOrBlank()) {
+                        lastNumber = number
                         Log.d(TAG, "Outgoing call to: $number — showing overlay")
                         CallerIdOverlayService.show(context, number)
                     }
                 }
                 lastState = TelephonyManager.CALL_STATE_OFFHOOK
+
+                // Start call recording if enabled
+                val number = lastNumber
+                if (!number.isNullOrBlank() && !isRecordingActive) {
+                    startRecordingIfEnabled(context, number, lastDirection)
+                }
             }
 
             TelephonyManager.EXTRA_STATE_IDLE -> {
-                // Call ended
+                // Call ended — stop recording and dismiss overlay
+                if (isRecordingActive) {
+                    Log.d(TAG, "Call ended — stopping recording")
+                    CallRecordingService.stop(context)
+                    isRecordingActive = false
+                }
                 lastState = TelephonyManager.CALL_STATE_IDLE
                 lastNumber = null
                 Log.d(TAG, "Call ended — dismissing overlay")
                 CallerIdOverlayService.dismiss(context)
             }
+        }
+    }
+
+    /**
+     * Checks user preferences and starts [CallRecordingService] if recording is enabled.
+     *
+     * The direction filter is also checked: if the user set recording to INCOMING-only or
+     * OUTGOING-only, calls in the other direction are skipped.
+     */
+    private fun startRecordingIfEnabled(context: Context, phoneNumber: String, direction: CallDirection) {
+        val app = context.applicationContext as? TruCallerApplication ?: return
+        val prefs = app.container.userPreferences
+
+        try {
+            val recordingEnabled = runBlocking { prefs.recordingEnabled.firstOrNull() ?: false }
+            if (!recordingEnabled) {
+                Log.d(TAG, "Call recording is disabled in preferences")
+                return
+            }
+
+            // Check direction filter
+            val directionPref = runBlocking { prefs.recordingDirection.firstOrNull() ?: "ALL" }
+            val shouldRecord = when (directionPref) {
+                "INCOMING" -> direction == CallDirection.INCOMING
+                "OUTGOING" -> direction == CallDirection.OUTGOING
+                else -> true // "ALL"
+            }
+
+            if (!shouldRecord) {
+                Log.d(TAG, "Call direction $direction does not match filter $directionPref — skipping recording")
+                return
+            }
+
+            Log.d(TAG, "Starting call recording for $phoneNumber (direction=$direction)")
+            CallRecordingService.start(context, phoneNumber, direction)
+            isRecordingActive = true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking recording preferences", e)
         }
     }
 }
