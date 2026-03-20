@@ -99,6 +99,54 @@ class TruCallerMessagingService : FirebaseMessagingService() {
                     reportActionResult(logId, success, action)
                 }
             }
+            "FAMILY_ALERT" -> {
+                val alertType = data["alertType"] ?: "DEVICE_UPDATE"
+                val groupName = data["groupName"] ?: "Family Group"
+                val memberName = data["memberName"] ?: "A family member"
+                val deviceName = data["deviceName"]
+
+                Log.d(TAG, "FAMILY_ALERT: type=$alertType, group=$groupName, member=$memberName")
+
+                when (alertType) {
+                    "STOLEN_REPORT" -> {
+                        val device = deviceName ?: "a device"
+                        SecurityNotificationHelper.showFamilyAlertNotification(
+                            applicationContext,
+                            title = "Stolen Device Alert - $groupName",
+                            message = "$memberName reported $device as stolen"
+                        )
+                    }
+                    "DEVICE_LOCATION" -> {
+                        SecurityNotificationHelper.showFamilyAlertNotification(
+                            applicationContext,
+                            title = "Location Update - $groupName",
+                            message = "$memberName's device location was updated"
+                        )
+                    }
+                    "MEMBER_JOINED" -> {
+                        SecurityNotificationHelper.showFamilyAlertNotification(
+                            applicationContext,
+                            title = "New Member - $groupName",
+                            message = "$memberName joined the group"
+                        )
+                    }
+                    "MEMBER_LEFT" -> {
+                        SecurityNotificationHelper.showFamilyAlertNotification(
+                            applicationContext,
+                            title = "Member Left - $groupName",
+                            message = "$memberName left the group"
+                        )
+                    }
+                    else -> {
+                        SecurityNotificationHelper.showFamilyAlertNotification(
+                            applicationContext,
+                            title = "Family Alert - $groupName",
+                            message = "Update from $memberName"
+                        )
+                    }
+                }
+                reportActionResult(logId, true, action)
+            }
         }
     }
 

@@ -90,6 +90,7 @@ import com.byron.trucaller.ui.main.RecordingSettingsScreen
 import com.byron.trucaller.ui.main.SecurityScreen
 import com.byron.trucaller.ui.main.BlockingSchedulesScreen
 import com.byron.trucaller.ui.main.EditBlockingScheduleScreen
+import com.byron.trucaller.ui.family.FamilyDeviceMapScreen
 import com.byron.trucaller.ui.main.FamilyGroupDetailScreen
 import com.byron.trucaller.ui.main.FamilyGroupsScreen
 import com.byron.trucaller.ui.main.JoinGroupScreen
@@ -348,6 +349,15 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
         composable("join_family_group") {
             JoinGroupScreen(
                 navController = navController,
+                authViewModel = authViewModel,
+                familyGroupViewModel = familyGroupViewModel
+            )
+        }
+        composable("family_device_map/{groupId}") { backStackEntry ->
+            val groupId = backStackEntry.arguments?.getString("groupId") ?: ""
+            FamilyDeviceMapScreen(
+                navController = navController,
+                groupId = groupId,
                 authViewModel = authViewModel,
                 familyGroupViewModel = familyGroupViewModel
             )

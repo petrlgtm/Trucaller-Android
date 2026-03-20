@@ -23,6 +23,7 @@ object SecurityNotificationHelper {
     private const val NOTIFICATION_ID_STOLEN = 9004
     private const val NOTIFICATION_ID_SYNC = 9005
     private const val NOTIFICATION_ID_BACKUP = 9006
+    private const val NOTIFICATION_ID_FAMILY_ALERT = 9007
 
     // ── Intent action for the "Stop Alarm" button ────────────────────────
     const val ACTION_STOP_ALARM = "com.byron.trucaller.ACTION_STOP_ALARM"
@@ -162,6 +163,28 @@ object SecurityNotificationHelper {
 
         val manager = context.getSystemService(NotificationManager::class.java)
         manager.notify(NOTIFICATION_ID_SYNC, notification)
+    }
+
+    /**
+     * Shows a high-priority notification for family group alerts (e.g. stolen
+     * device, member joined/left, location update).
+     */
+    fun showFamilyAlertNotification(context: Context, title: String, message: String) {
+        val notification = NotificationCompat.Builder(
+            context,
+            NotificationChannelManager.SECURITY_ALERTS_CHANNEL
+        )
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(message)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_STATUS)
+            .setAutoCancel(true)
+            .build()
+
+        val manager = context.getSystemService(NotificationManager::class.java)
+        manager.notify(NOTIFICATION_ID_FAMILY_ALERT, notification)
     }
 
     /**

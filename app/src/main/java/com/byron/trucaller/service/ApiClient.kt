@@ -347,15 +347,8 @@ object ApiClient {
 
     // ── Family Group Endpoints ──────────────────────────────────────────
 
-    suspend fun createFamilyGroup(name: String, description: String? = null): ApiResult<Map<String, Any>> {
-        val body = mutableMapOf<String, Any>("name" to name)
-        description?.let { body["description"] = it }
-        return post("/api/family/create", body)
-    }
-
-    /** @deprecated Use [createFamilyGroup] with description parameter instead. */
     suspend fun createFamilyGroup(name: String, createdBy: String): ApiResult<Map<String, Any>> =
-        post("/api/family/create", mapOf("name" to name))
+        post("/api/family/create", mapOf("name" to name, "createdBy" to createdBy))
 
     suspend fun getMyFamilyGroups(): ApiResult<List<Map<String, Any>>> =
         get("/api/family/my-groups")
@@ -374,12 +367,8 @@ object ApiClient {
     suspend fun inviteFamilyMember(groupId: String, phoneNumber: String, role: String = "MEMBER"): ApiResult<Map<String, Any>> =
         post("/api/family/$groupId/invite", mapOf("phoneNumber" to phoneNumber, "role" to role))
 
-    suspend fun joinFamilyGroup(inviteCode: String): ApiResult<Map<String, Any>> =
-        post("/api/family/join", mapOf("inviteCode" to inviteCode))
-
-    /** @deprecated Use [joinFamilyGroup] without userId (JWT determines the user). */
     suspend fun joinFamilyGroup(inviteCode: String, userId: String): ApiResult<Map<String, Any>> =
-        post("/api/family/join", mapOf("inviteCode" to inviteCode))
+        post("/api/family/join", mapOf("inviteCode" to inviteCode, "userId" to userId))
 
     suspend fun updateFamilyMemberRole(groupId: String, userId: String, role: String): ApiResult<Unit> =
         put("/api/family/$groupId/members/$userId/role", mapOf("role" to role))
