@@ -83,7 +83,22 @@ object SmsReader {
         limit: Int = 100
     ): List<SmsMessage> {
         val messages = mutableListOf<SmsMessage>()
-        val normalizedAddress = normalizePhoneForQuery(address)
+        // For alphanumeric senders (e.g. "MTNMobMoney"), use exact match.
+        // For numeric phone numbers, use suffix matching on last 9 digits.
+        val isAlphanumeric = address.any { it.isLetter() }
+        val selection: String
+        val selectionArgs: Array<String>
+
+        if (isAlphanumeric) {
+            // Exact match for service/brand names
+            selection = "${Telephony.Sms.ADDRESS} = ?"
+            selectionArgs = arrayOf(address)
+        } else {
+            // Suffix match for phone numbers (handles +256 vs 0 prefix differences)
+            val normalizedAddress = normalizePhoneForQuery(address)
+            selection = "${Telephony.Sms.ADDRESS} LIKE ?"
+            selectionArgs = arrayOf("%$normalizedAddress")
+        }
 
         val cursor: Cursor? = contentResolver.query(
             SMS_URI,
@@ -95,8 +110,8 @@ object SmsReader {
                 Telephony.Sms.TYPE,
                 Telephony.Sms.READ
             ),
-            "${Telephony.Sms.ADDRESS} LIKE ?",
-            arrayOf("%$normalizedAddress%"),
+            selection,
+            selectionArgs,
             "${Telephony.Sms.DATE} ASC"
         )
 

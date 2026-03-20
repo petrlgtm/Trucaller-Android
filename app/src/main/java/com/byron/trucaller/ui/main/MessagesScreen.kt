@@ -36,6 +36,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Report
@@ -405,19 +406,41 @@ fun MessagesScreen(
                     }
                 )
 
-                // Report action
-                BottomSheetActionItem(
-                    icon = Icons.Default.Report,
-                    label = "Report as spam",
-                    iconTint = colorScheme.error,
-                    onClick = {
-                        showReportDialog = conv
-                        contextMenuConversation = null
-                    }
-                )
+                // Report / Not spam action
+                if (conv.category == SmsCategory.SPAM) {
+                    BottomSheetActionItem(
+                        icon = Icons.Default.CheckCircle,
+                        label = "Not spam",
+                        iconTint = Color(0xFF4CAF50),
+                        onClick = {
+                            smsViewModel.removeFromSpam(conv.address, user.id, contentResolver)
+                            contextMenuConversation = null
+                        }
+                    )
+                } else {
+                    BottomSheetActionItem(
+                        icon = Icons.Default.Report,
+                        label = "Report as spam",
+                        iconTint = colorScheme.error,
+                        onClick = {
+                            showReportDialog = conv
+                            contextMenuConversation = null
+                        }
+                    )
+                }
 
-                // Block action
-                if (!conv.isBlocked) {
+                // Block / Unblock action
+                if (conv.isBlocked) {
+                    BottomSheetActionItem(
+                        icon = Icons.Default.CheckCircle,
+                        label = "Unblock sender",
+                        iconTint = Color(0xFF4CAF50),
+                        onClick = {
+                            smsViewModel.unblockSmsNumber(conv.address, user.id, contentResolver)
+                            contextMenuConversation = null
+                        }
+                    )
+                } else {
                     BottomSheetActionItem(
                         icon = Icons.Default.Block,
                         label = "Block sender",

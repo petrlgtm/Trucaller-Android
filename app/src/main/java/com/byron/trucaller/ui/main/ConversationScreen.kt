@@ -27,14 +27,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Shield
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -49,7 +50,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -59,22 +62,12 @@ import androidx.navigation.NavController
 import com.byron.trucaller.data.model.SmsCategory
 import com.byron.trucaller.data.model.SmsMessage
 import com.byron.trucaller.data.model.SmsType
+import com.byron.trucaller.ui.components.ShimmerLoadingList
 import com.byron.trucaller.ui.components.TruCallerAvatar
-import com.byron.trucaller.ui.theme.Accent
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Inactive
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.SurfaceLight
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
-import com.byron.trucaller.ui.theme.TextOnYellow
-import com.byron.trucaller.ui.theme.YellowGradientEnd
-import com.byron.trucaller.ui.theme.YellowGradientStart
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -88,6 +81,7 @@ fun ConversationScreen(
 ) {
     val authState by authViewModel.authState.collectAsState()
     val user = authState.user ?: return
+    val colorScheme = MaterialTheme.colorScheme
 
     val context = LocalContext.current
     val contentResolver = context.contentResolver
@@ -121,17 +115,16 @@ fun ConversationScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(colorScheme.background)
     ) {
-        // Top bar with consistent back button styling
+        // Top bar
         TopAppBar(
             title = {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Mini avatar using TruCallerAvatar component
                     TruCallerAvatar(
                         name = displayName,
                         size = 36.dp,
-                        indicatorColor = if (isSpam) Danger else null
+                        indicatorColor = if (isSpam) colorScheme.error else null
                     )
                     Spacer(modifier = Modifier.width(12.dp))
                     Column {
@@ -139,12 +132,12 @@ fun ConversationScreen(
                             displayName,
                             fontWeight = FontWeight.Bold,
                             fontSize = 16.sp,
-                            color = TextPrimary
+                            color = colorScheme.onSurface
                         )
                         Text(
                             "${messages.size} messages",
                             fontSize = 11.sp,
-                            color = TextSecondary
+                            color = colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -154,112 +147,121 @@ fun ConversationScreen(
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = "Back",
-                        tint = TextPrimary
+                        tint = colorScheme.onSurface
                     )
                 }
             },
             actions = {
-                IconButton(onClick = {
-                    val lastMsg = messages.lastOrNull()?.body ?: ""
-                    smsViewModel.reportAsSpam(address, lastMsg, user.id, contentResolver)
-                }) {
-                    Icon(Icons.Default.Report, "Report", tint = Brand)
+                if (isSpam) {
+                    // Remove from spam action
+                    IconButton(onClick = {
+                        smsViewModel.removeFromSpam(address, user.id, contentResolver)
+                    }) {
+                        Icon(Icons.Default.CheckCircle, "Not spam", tint = Color(0xFF4CAF50))
+                    }
+                } else {
+                    // Report as spam action
+                    IconButton(onClick = {
+                        val lastMsg = messages.lastOrNull()?.body ?: ""
+                        smsViewModel.reportAsSpam(address, lastMsg, user.id, contentResolver)
+                    }) {
+                        Icon(Icons.Default.Report, "Report", tint = colorScheme.primary)
+                    }
                 }
                 IconButton(onClick = {
                     smsViewModel.blockSmsNumber(address, user.id, contentResolver)
                 }) {
-                    Icon(Icons.Default.Block, "Block", tint = Accent)
+                    Icon(Icons.Default.Block, "Block", tint = colorScheme.error)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceCard)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.surface)
         )
 
-        // Spam warning
+        // Spam warning banner
         AnimatedVisibility(visible = isSpam) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Danger.copy(alpha = 0.08f))
+                    .background(colorScheme.error.copy(alpha = 0.08f))
                     .padding(14.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
                     modifier = Modifier
                         .size(28.dp)
-                        .background(Danger.copy(alpha = 0.15f), CircleShape),
+                        .background(colorScheme.error.copy(alpha = 0.15f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Default.Shield, null, tint = Danger, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Default.Shield, null, tint = colorScheme.error, modifier = Modifier.size(16.dp))
                 }
                 Spacer(modifier = Modifier.width(10.dp))
                 Column {
-                    Text(
-                        "Spam Detected",
-                        color = Danger,
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        "This sender has been reported as spam",
-                        color = Danger.copy(alpha = 0.7f),
-                        fontSize = 11.sp
-                    )
+                    Text("Spam Detected", color = colorScheme.error, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    Text("This sender has been reported as spam", color = colorScheme.error.copy(alpha = 0.7f), fontSize = 11.sp)
                 }
             }
         }
 
-        // Action message
+        // Action message snackbar
         if (actionMessage != null) {
             Snackbar(
                 modifier = Modifier.padding(8.dp),
-                containerColor = SurfaceCard,
+                containerColor = colorScheme.surfaceVariant,
                 action = {
                     TextButton(onClick = { smsViewModel.clearActionMessage() }) {
-                        Text("OK", color = Brand, fontWeight = FontWeight.Bold)
+                        Text("OK", color = colorScheme.primary, fontWeight = FontWeight.Bold)
                     }
                 }
-            ) { Text(actionMessage!!, color = TextPrimary) }
+            ) { Text(actionMessage!!, color = colorScheme.onSurface) }
         }
 
-        // Messages with slide-up animation
+        // Messages
         if (isLoading) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    CircularProgressIndicator(color = Brand, strokeWidth = 3.dp)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Text("Loading...", color = TextSecondary, fontSize = 13.sp)
-                }
-            }
+            ShimmerLoadingList()
         } else {
             LazyColumn(
                 state = listState,
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(horizontal = 12.dp, vertical = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(4.dp)
+                verticalArrangement = Arrangement.spacedBy(2.dp)
             ) {
+                // Group messages by date and add date headers
+                var lastDateLabel = ""
                 itemsIndexed(messages, key = { _, msg -> msg.id }) { index, message ->
-                    // Each message bubble slides up from the bottom with a fade
-                    var visible by remember { mutableStateOf(false) }
-                    LaunchedEffect(Unit) {
-                        visible = true
+                    val dateLabel = formatMessageDate(message.date)
+                    if (dateLabel != lastDateLabel) {
+                        lastDateLabel = dateLabel
+                        // Date separator
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 8.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                dateLabel,
+                                modifier = Modifier
+                                    .background(colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(12.dp))
+                                    .padding(horizontal = 12.dp, vertical = 4.dp),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
+
+                    // Animated message bubble
+                    var visible by remember { mutableStateOf(false) }
+                    LaunchedEffect(Unit) { visible = true }
                     AnimatedVisibility(
                         visible = visible,
                         enter = slideInVertically(
-                            initialOffsetY = { fullHeight -> fullHeight / 3 },
-                            animationSpec = tween(
-                                durationMillis = 300,
-                                delayMillis = (index * 15).coerceAtMost(600)
-                            )
-                        ) + fadeIn(
-                            animationSpec = tween(
-                                durationMillis = 250,
-                                delayMillis = (index * 15).coerceAtMost(600)
-                            )
-                        )
+                            initialOffsetY = { it / 4 },
+                            animationSpec = tween(250, delayMillis = (index * 10).coerceAtMost(300))
+                        ) + fadeIn(tween(200, delayMillis = (index * 10).coerceAtMost(300)))
                     ) {
-                        MessageBubble(message)
+                        MessageBubble(message, colorScheme)
                     }
                 }
             }
@@ -268,34 +270,28 @@ fun ConversationScreen(
 }
 
 @Composable
-private fun MessageBubble(message: SmsMessage) {
+private fun MessageBubble(
+    message: SmsMessage,
+    colorScheme: androidx.compose.material3.ColorScheme
+) {
     val isSent = message.type == SmsType.SENT
 
     val alignment = if (isSent) Alignment.End else Alignment.Start
 
-    // Bubble with tail/pointer shape: tighter corner on the tail side
     val shape = if (isSent) {
-        RoundedCornerShape(
-            topStart = 20.dp,
-            topEnd = 4.dp,    // Tail corner (tight)
-            bottomEnd = 20.dp,
-            bottomStart = 20.dp
-        )
+        RoundedCornerShape(topStart = 18.dp, topEnd = 4.dp, bottomEnd = 18.dp, bottomStart = 18.dp)
     } else {
-        RoundedCornerShape(
-            topStart = 4.dp,  // Tail corner (tight)
-            topEnd = 20.dp,
-            bottomEnd = 20.dp,
-            bottomStart = 20.dp
-        )
+        RoundedCornerShape(topStart = 4.dp, topEnd = 18.dp, bottomEnd = 18.dp, bottomStart = 18.dp)
     }
 
-    // Gradient backgrounds using theme tokens
-    val bubbleGradient = if (isSent) {
-        Brush.linearGradient(listOf(YellowGradientStart, YellowGradientEnd))
+    val bubbleColor = if (isSent) {
+        colorScheme.primary
     } else {
-        Brush.linearGradient(listOf(SurfaceCard, SurfaceLight))
+        colorScheme.surfaceVariant
     }
+
+    val textColor = if (isSent) colorScheme.onPrimary else colorScheme.onSurface
+    val timeColor = if (isSent) colorScheme.onPrimary.copy(alpha = 0.6f) else colorScheme.onSurfaceVariant
 
     Column(
         modifier = Modifier
@@ -306,16 +302,14 @@ private fun MessageBubble(message: SmsMessage) {
         Box(
             modifier = Modifier
                 .widthIn(max = 300.dp)
-                .background(
-                    brush = bubbleGradient,
-                    shape = shape
-                )
+                .clip(shape)
+                .background(bubbleColor)
                 .padding(horizontal = 14.dp, vertical = 10.dp)
         ) {
             Column {
                 Text(
                     text = message.body,
-                    color = if (isSent) TextOnYellow else TextPrimary,
+                    color = textColor,
                     fontSize = 14.sp,
                     lineHeight = 20.sp
                 )
@@ -327,7 +321,7 @@ private fun MessageBubble(message: SmsMessage) {
                 ) {
                     Text(
                         text = SimpleDateFormat("h:mm a", Locale.US).format(Date(message.date)),
-                        color = if (isSent) TextOnYellow.copy(alpha = 0.6f) else Inactive,
+                        color = timeColor,
                         fontSize = 10.sp
                     )
                     if (isSent) {
@@ -336,12 +330,28 @@ private fun MessageBubble(message: SmsMessage) {
                             if (message.read) Icons.Default.DoneAll else Icons.Default.Done,
                             null,
                             modifier = Modifier.size(14.dp),
-                            tint = if (message.read) TextOnYellow.copy(alpha = 0.7f)
-                            else TextOnYellow.copy(alpha = 0.4f)
+                            tint = if (message.read) colorScheme.onPrimary.copy(alpha = 0.7f)
+                            else colorScheme.onPrimary.copy(alpha = 0.4f)
                         )
                     }
                 }
             }
         }
+    }
+}
+
+private fun formatMessageDate(timestamp: Long): String {
+    val cal = Calendar.getInstance()
+    cal.set(Calendar.HOUR_OF_DAY, 0)
+    cal.set(Calendar.MINUTE, 0)
+    cal.set(Calendar.SECOND, 0)
+    cal.set(Calendar.MILLISECOND, 0)
+    val todayStart = cal.timeInMillis
+    val yesterdayStart = todayStart - 24 * 60 * 60 * 1000L
+
+    return when {
+        timestamp >= todayStart -> "Today"
+        timestamp >= yesterdayStart -> "Yesterday"
+        else -> SimpleDateFormat("EEE, MMM d", Locale.US).format(Date(timestamp))
     }
 }

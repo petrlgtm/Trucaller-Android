@@ -12,8 +12,10 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,24 +39,33 @@ import androidx.compose.material.icons.automirrored.filled.PhoneMissed
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallReceived
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Snackbar
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +74,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -89,13 +102,14 @@ import com.byron.trucaller.ui.components.TruCallerTextField
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.CallLogFilter
 import com.byron.trucaller.viewmodel.CallLogViewModel
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CallLogScreen(
     rootNavController: NavController,
@@ -103,6 +117,7 @@ fun CallLogScreen(
 ) {
     val context = LocalContext.current
     val colorScheme = MaterialTheme.colorScheme
+    val scope = rememberCoroutineScope()
 
     val callLogEntries by callLogViewModel.callLogEntries.collectAsState()
     val isLoading by callLogViewModel.isLoading.collectAsState()
@@ -119,6 +134,12 @@ fun CallLogScreen(
 
     var showContent by remember { mutableStateOf(false) }
     var showOverflowMenu by remember { mutableStateOf(false) }
+
+    // Action sheet state
+    var selectedEntry by remember { mutableStateOf<CallLogEntry?>(null) }
+    var showActionSheet by remember { mutableStateOf(false) }
+    val sheetState = rememberModalBottomSheetState()
+    val snackbarHostState = remember { SnackbarHostState() }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -138,11 +159,23 @@ fun CallLogScreen(
         showContent = true
     }
 
+    // Show Snackbar when actionMessage changes
+    LaunchedEffect(actionMessage) {
+        if (actionMessage != null) {
+            snackbarHostState.showSnackbar(actionMessage!!)
+            callLogViewModel.clearActionMessage()
+        }
+    }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .testTag("call_log_screen")
+    ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
-            .testTag("call_log_screen")
     ) {
         // -- Premium Header with gradient --
         val missedCount by remember { derivedStateOf { callLogEntries.count { it.callType == CallType.MISSED } } }
@@ -282,19 +315,6 @@ fun CallLogScreen(
             }
         }
 
-        // -- Action message --
-        if (actionMessage != null) {
-            Snackbar(
-                modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                containerColor = colorScheme.surfaceVariant,
-                action = {
-                    TextButton(onClick = { callLogViewModel.clearActionMessage() }) {
-                        Text("OK", color = colorScheme.primary, fontWeight = FontWeight.Bold)
-                    }
-                }
-            ) { Text(actionMessage!!, color = colorScheme.onSurface) }
-        }
-
         // -- Content --
         if (!hasCallLogPermission) {
             CallLogPermissionPrompt(onGrant = {
@@ -370,6 +390,10 @@ fun CallLogScreen(
                                         val encoded = java.net.URLEncoder.encode(entry.phoneNumber, "UTF-8")
                                         rootNavController.navigate("caller_id_lookup/$encoded")
                                     },
+                                    onLongPress = {
+                                        selectedEntry = entry
+                                        showActionSheet = true
+                                    },
                                     onCall = {
                                         val intent = Intent(Intent.ACTION_DIAL).apply {
                                             data = Uri.parse("tel:${entry.phoneNumber}")
@@ -387,6 +411,152 @@ fun CallLogScreen(
                         item { Spacer(modifier = Modifier.height(8.dp)) }
                     }
                 }
+            }
+        }
+    } // end Column
+
+        // -- Snackbar at bottom --
+        SnackbarHost(
+            hostState = snackbarHostState,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp),
+            snackbar = { data ->
+                Snackbar(
+                    snackbarData = data,
+                    containerColor = colorScheme.surfaceVariant,
+                    contentColor = colorScheme.onSurface,
+                    actionColor = colorScheme.primary
+                )
+            }
+        )
+
+    } // end Box
+
+    // -- Action Bottom Sheet --
+    if (showActionSheet && selectedEntry != null) {
+        val entry = selectedEntry!!
+        val displayName = entry.name ?: entry.phoneNumber
+
+        ModalBottomSheet(
+            onDismissRequest = {
+                showActionSheet = false
+                selectedEntry = null
+            },
+            sheetState = sheetState,
+            containerColor = colorScheme.surface,
+            tonalElevation = 2.dp
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(bottom = 24.dp)
+            ) {
+                // Header
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onSurface,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                )
+
+                if (entry.name != null) {
+                    Text(
+                        text = entry.phoneNumber,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colorScheme.onSurface.copy(alpha = 0.6f),
+                        modifier = Modifier.padding(horizontal = 24.dp)
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Block / Unblock
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = if (entry.isBlocked) "Unblock number" else "Block number",
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = if (entry.isBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
+                            contentDescription = null,
+                            tint = if (entry.isBlocked) Color(0xFF4CAF50) else colorScheme.error
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            showActionSheet = false
+                            selectedEntry = null
+                        }
+                        if (entry.isBlocked) {
+                            callLogViewModel.unblockNumber(entry.phoneNumber, entry.name, context)
+                        } else {
+                            callLogViewModel.blockNumber(entry.phoneNumber, entry.name, context)
+                        }
+                    }
+                )
+
+                // Spam / Remove from spam
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = if (entry.isSpam) "Remove from spam" else "Report as spam",
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = if (entry.isSpam) Icons.Default.CheckCircle else Icons.Default.Warning,
+                            contentDescription = null,
+                            tint = if (entry.isSpam) Color(0xFF4CAF50) else Color(0xFFFFA000)
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            showActionSheet = false
+                            selectedEntry = null
+                        }
+                        if (entry.isSpam) {
+                            callLogViewModel.removeFromSpam(entry.phoneNumber, entry.name)
+                        } else {
+                            callLogViewModel.reportSpam(entry.phoneNumber, entry.name)
+                        }
+                    }
+                )
+
+                // View caller ID
+                ListItem(
+                    headlineContent = {
+                        Text(
+                            text = "View caller ID",
+                            fontWeight = FontWeight.Medium
+                        )
+                    },
+                    leadingContent = {
+                        Icon(
+                            imageVector = Icons.Default.Person,
+                            contentDescription = null,
+                            tint = colorScheme.primary
+                        )
+                    },
+                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                    modifier = Modifier.clickable {
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            showActionSheet = false
+                            selectedEntry = null
+                        }
+                        val encoded = java.net.URLEncoder.encode(entry.phoneNumber, "UTF-8")
+                        rootNavController.navigate("caller_id_lookup/$encoded")
+                    }
+                )
             }
         }
     }
@@ -489,6 +659,7 @@ private fun CallLogPermissionPrompt(onGrant: () -> Unit) {
 private fun SwipeableCallLogItem(
     entry: CallLogEntry,
     onClick: () -> Unit,
+    onLongPress: () -> Unit,
     onCall: () -> Unit,
     onBlock: () -> Unit
 ) {
@@ -575,17 +746,20 @@ private fun SwipeableCallLogItem(
     ) {
         CallLogItem(
             entry = entry,
-            onClick = onClick
+            onClick = onClick,
+            onLongPress = onLongPress
         )
     }
 }
 
 // -- Call Log Item --
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CallLogItem(
     entry: CallLogEntry,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    onLongPress: () -> Unit
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
@@ -618,7 +792,10 @@ private fun CallLogItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongPress
+            )
             .background(
                 if (entry.callType == CallType.MISSED) colorScheme.surfaceVariant else colorScheme.background
             )

@@ -9,12 +9,17 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.byron.trucaller.TruCallerApplication
+import com.byron.trucaller.data.model.BlockedNumber
 import com.byron.trucaller.data.model.CallLogEntry
 import com.byron.trucaller.data.model.CallType
+import com.byron.trucaller.data.model.SpamCategory
 import com.byron.trucaller.data.preferences.UserPreferences
 import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.util.CallLogReader
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -132,6 +137,90 @@ class CallLogViewModel(
                 (entry.name?.lowercase()?.contains(query) == true) ||
                     entry.phoneNumber.contains(query)
             }
+        }
+    }
+
+    fun blockNumber(phoneNumber: String, name: String?, context: Context) {
+        viewModelScope.launch {
+            val userId = userPreferences.loggedInUserId.first() ?: return@launch
+            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+            blockedNumberRepository.blockNumber(
+                BlockedNumber(
+                    id = "blk-${System.currentTimeMillis()}",
+                    userId = userId,
+                    phoneNumber = phoneNumber,
+                    name = name ?: phoneNumber,
+                    reason = "Blocked from call log",
+                    blockedAt = now
+                )
+            )
+            _actionMessage.value = "${name ?: phoneNumber} blocked"
+            loadCallLog(context)
+        }
+    }
+
+    fun unblockNumber(phoneNumber: String, name: String?, context: Context) {
+        viewModelScope.launch {
+            val userId = userPreferences.loggedInUserId.first() ?: return@launch
+            blockedNumberRepository.unblockNumber(userId, phoneNumber)
+            _actionMessage.value = "${name ?: phoneNumber} unblocked"
+            loadCallLog(context)
+        }
+    }
+
+    fun reportSpam(phoneNumber: String, name: String?) {
+        viewModelScope.launch {
+            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+            val existing = callerIdRepository.getByPhone(phoneNumber)
+            if (existing != null) {
+                val newScore = minOf(existing.spamScore + 10, 100)
+                callerIdRepository.updateEntry(existing.copy(
+                    spamScore = newScore,
+                    reportCount = existing.reportCount + 1,
+                    category = when {
+                        newScore >= 80 -> SpamCategory.FRAUD
+                        newScore >= 60 -> SpamCategory.SPAM
+                        newScore >= 30 -> SpamCategory.SUSPECTED_SPAM
+                        else -> SpamCategory.SAFE
+                    },
+                    lastUpdated = now
+                ))
+            } else {
+                callerIdRepository.insertEntry(
+                    com.byron.trucaller.data.model.CallerIdEntry(
+                        id = "cid-call-${System.currentTimeMillis()}",
+                        phoneNumber = phoneNumber,
+                        name = name ?: "Unknown",
+                        spamScore = 30,
+                        reportCount = 1,
+                        category = SpamCategory.SUSPECTED_SPAM,
+                        lastUpdated = now
+                    )
+                )
+            }
+            // Update local entries to reflect spam status
+            _callLogEntries.value = _callLogEntries.value.map { entry ->
+                if (entry.phoneNumber == phoneNumber) entry.copy(isSpam = true, spamScore = 30) else entry
+            }
+            _actionMessage.value = "${name ?: phoneNumber} reported as spam"
+        }
+    }
+
+    fun removeFromSpam(phoneNumber: String, name: String?) {
+        viewModelScope.launch {
+            val existing = callerIdRepository.getByPhone(phoneNumber)
+            if (existing != null) {
+                val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+                callerIdRepository.updateEntry(existing.copy(
+                    spamScore = 0,
+                    category = SpamCategory.SAFE,
+                    lastUpdated = now
+                ))
+            }
+            _callLogEntries.value = _callLogEntries.value.map { entry ->
+                if (entry.phoneNumber == phoneNumber) entry.copy(isSpam = false, spamScore = 0) else entry
+            }
+            _actionMessage.value = "${name ?: phoneNumber} removed from spam"
         }
     }
 

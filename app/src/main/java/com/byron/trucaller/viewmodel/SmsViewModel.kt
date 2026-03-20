@@ -197,6 +197,23 @@ class SmsViewModel(
         }
     }
 
+    fun removeFromSpam(address: String, userId: String, contentResolver: ContentResolver) {
+        viewModelScope.launch {
+            // Remove CallerIdEntry spam score
+            val existing = callerIdRepository.lookupNumberLocal(address)
+            if (existing.callerIdEntry != null && existing.source == "caller_id_db") {
+                val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+                callerIdRepository.updateEntry(existing.callerIdEntry.copy(
+                    spamScore = 0,
+                    category = com.byron.trucaller.data.model.SpamCategory.SAFE,
+                    lastUpdated = now
+                ))
+            }
+            _actionMessage.value = "Removed from spam"
+            loadConversations(contentResolver, userId)
+        }
+    }
+
     fun clearActionMessage() {
         _actionMessage.value = null
     }
