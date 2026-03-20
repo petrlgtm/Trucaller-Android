@@ -12,7 +12,6 @@ import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.DeviceStatus
 import com.byron.trucaller.data.model.GeofenceEvent
 import com.byron.trucaller.data.model.GeofenceTransitionType
-import com.byron.trucaller.data.repository.DeviceRepository
 import com.google.android.gms.location.Geofence
 import com.google.android.gms.location.GeofenceStatusCodes
 import com.google.android.gms.location.GeofencingEvent

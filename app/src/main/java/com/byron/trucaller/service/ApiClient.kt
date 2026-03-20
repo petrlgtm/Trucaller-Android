@@ -239,17 +239,6 @@ object ApiClient {
     suspend fun getSpamNumbers(skip: Int = 0, limit: Int = 50): ApiResult<List<Map<String, Any>>> =
         get("/api/sms/spam-numbers?skip=$skip&limit=$limit")
 
-    // ── Geofence Endpoints ─────────────────────────────────────────────
-
-    suspend fun syncGeofenceEvent(eventData: Map<String, Any>): ApiResult<Unit> =
-        post("/api/geofences/events", eventData)
-
-    suspend fun getGeofenceEvents(deviceId: String): ApiResult<List<Map<String, Any>>> =
-        get("/api/geofences/events/$deviceId")
-
-    suspend fun getGeofences(deviceId: String): ApiResult<List<Map<String, Any>>> =
-        get("/api/geofences/$deviceId")
-
     // ── Admin Endpoints ──────────────────────────────────────────────────
 
     suspend fun adminLogin(email: String, password: String): ApiResult<TokenResponse> =
