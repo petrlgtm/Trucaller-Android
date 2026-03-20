@@ -88,6 +88,8 @@ import com.byron.trucaller.ui.main.ProfileScreen
 import com.byron.trucaller.ui.main.CallRecordingsScreen
 import com.byron.trucaller.ui.main.RecordingSettingsScreen
 import com.byron.trucaller.ui.main.SecurityScreen
+import com.byron.trucaller.ui.main.BlockingSchedulesScreen
+import com.byron.trucaller.ui.main.EditBlockingScheduleScreen
 import com.byron.trucaller.ui.main.SmsRulesScreen
 import com.byron.trucaller.ui.stolen.GeofenceManagementScreen
 import com.byron.trucaller.ui.stolen.NetworkForensicsScreen
@@ -104,6 +106,7 @@ import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.GeofenceViewModel
 import com.byron.trucaller.viewmodel.NetworkForensicsViewModel
 import com.byron.trucaller.viewmodel.CallRecordingsViewModel
+import com.byron.trucaller.viewmodel.BlockingScheduleViewModel
 import com.byron.trucaller.viewmodel.SmsRulesViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
@@ -149,6 +152,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val networkForensicsViewModel: NetworkForensicsViewModel = viewModel(factory = NetworkForensicsViewModel.Factory)
     val callRecordingsViewModel: CallRecordingsViewModel = viewModel(factory = CallRecordingsViewModel.Factory)
     val smsRulesViewModel: SmsRulesViewModel = viewModel(factory = SmsRulesViewModel.Factory)
+    val blockingScheduleViewModel: BlockingScheduleViewModel = viewModel(factory = BlockingScheduleViewModel.Factory)
 
     NavHost(
         navController = navController,
@@ -301,6 +305,22 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
             CallRecordingsScreen(
                 navController = navController,
                 callRecordingsViewModel = callRecordingsViewModel
+            )
+        }
+        composable("blocking_schedules") {
+            BlockingSchedulesScreen(
+                navController = navController,
+                authViewModel = authViewModel,
+                blockingScheduleViewModel = blockingScheduleViewModel
+            )
+        }
+        composable("edit_blocking_schedule/{scheduleId}") { backStackEntry ->
+            val scheduleId = backStackEntry.arguments?.getString("scheduleId") ?: "new"
+            EditBlockingScheduleScreen(
+                navController = navController,
+                scheduleId = scheduleId,
+                authViewModel = authViewModel,
+                blockingScheduleViewModel = blockingScheduleViewModel
             )
         }
         // Admin routes

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.DoNotDisturb
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
@@ -696,6 +697,15 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                             backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                         }
                     }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Blocking Schedules
+                ProfileMenuItem(
+                    icon = Icons.Default.DoNotDisturb,
+                    title = "Blocking Schedules",
+                    iconColor = colorScheme.primary,
+                    onClick = { rootNavController.navigate("blocking_schedules") }
                 )
                 HorizontalDivider(color = colorScheme.outlineVariant)
 
