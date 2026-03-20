@@ -28,6 +28,7 @@ class UserPreferences(private val context: Context) {
         private val RECENT_LOOKUPS = stringPreferencesKey("recent_lookups")
         private val CONSENT_GIVEN = booleanPreferencesKey("consent_given")
         private val LAST_CONTACT_SYNC_TIMESTAMP = longPreferencesKey("last_contact_sync_timestamp")
+        private val FCM_TOKEN_NEEDS_SYNC = booleanPreferencesKey("fcm_token_needs_sync")
     }
 
     val autoBackup: Flow<Boolean> = context.dataStore.data.map { it[AUTO_BACKUP_KEY] ?: true }
@@ -41,6 +42,7 @@ class UserPreferences(private val context: Context) {
     val weeklyReport: Flow<Boolean> = context.dataStore.data.map { it[WEEKLY_REPORT] ?: true }
     val consentGiven: Flow<Boolean> = context.dataStore.data.map { it[CONSENT_GIVEN] ?: false }
     val lastContactSyncTimestamp: Flow<Long> = context.dataStore.data.map { it[LAST_CONTACT_SYNC_TIMESTAMP] ?: 0L }
+    val fcmTokenNeedsSync: Flow<Boolean> = context.dataStore.data.map { it[FCM_TOKEN_NEEDS_SYNC] ?: false }
     val recentLookups: Flow<List<String>> = context.dataStore.data.map {
         it[RECENT_LOOKUPS]?.split(",")?.filter { s -> s.isNotEmpty() } ?: emptyList()
     }
@@ -92,6 +94,10 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setLastContactSyncTimestamp(timestamp: Long) {
         context.dataStore.edit { it[LAST_CONTACT_SYNC_TIMESTAMP] = timestamp }
+    }
+
+    suspend fun setFcmTokenNeedsSync(needsSync: Boolean) {
+        context.dataStore.edit { it[FCM_TOKEN_NEEDS_SYNC] = needsSync }
     }
 
     suspend fun addRecentLookup(entryId: String) {

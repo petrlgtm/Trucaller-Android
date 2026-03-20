@@ -23,10 +23,26 @@ class TruCallerMessagingService : FirebaseMessagingService() {
                 val userId = app.container.userPreferences.loggedInUserId.first()
                 if (userId != null) {
                     val device = app.container.deviceRepository.getFirstDeviceByUser(userId)
-                    device?.let { app.container.deviceRepository.updateFcmToken(it.id, token) }
+                    device?.let {
+                        // Update Room locally
+                        app.container.deviceRepository.updateFcmToken(it.id, token)
+
+                        // Sync to backend
+                        val result = ApiClient.updateFcmToken(it.deviceId, token)
+                        if (result.success) {
+                            app.container.userPreferences.setFcmTokenNeedsSync(false)
+                            Log.d(TAG, "FCM token synced to backend")
+                        } else {
+                            app.container.userPreferences.setFcmTokenNeedsSync(true)
+                            Log.w(TAG, "FCM token backend sync failed, flagged for retry: ${result.error}")
+                        }
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to update FCM token", e)
+                try {
+                    app.container.userPreferences.setFcmTokenNeedsSync(true)
+                } catch (_: Exception) { }
             }
         }
     }

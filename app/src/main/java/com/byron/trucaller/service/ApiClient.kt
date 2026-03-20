@@ -86,6 +86,9 @@ object ApiClient {
     suspend fun getDeviceIpLogs(deviceId: String): ApiResult<List<Map<String, Any>>> =
         get("/api/devices/$deviceId/ip-logs")
 
+    suspend fun updateFcmToken(deviceId: String, fcmToken: String): ApiResult<Unit> =
+        put("/api/devices/fcm-token", mapOf("deviceId" to deviceId, "fcmToken" to fcmToken))
+
     // ── Contact Endpoints ───────────────────────────────────────────────
 
     suspend fun uploadContacts(contacts: List<Map<String, Any>>): ApiResult<Unit> =
