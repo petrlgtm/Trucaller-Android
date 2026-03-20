@@ -40,6 +40,7 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.SettingsSuggest
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
+import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -694,6 +695,15 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                             backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                         }
                     }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Recording Settings
+                ProfileMenuItem(
+                    icon = Icons.Default.FiberManualRecord,
+                    title = "Recording Settings",
+                    iconColor = colorScheme.error,
+                    onClick = { rootNavController.navigate("recording_settings") }
                 )
                 HorizontalDivider(color = colorScheme.outlineVariant)
 

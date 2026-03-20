@@ -30,6 +30,16 @@ class UserPreferences(private val context: Context) {
         private val LAST_CONTACT_SYNC_TIMESTAMP = longPreferencesKey("last_contact_sync_timestamp")
         private val FCM_TOKEN_NEEDS_SYNC = booleanPreferencesKey("fcm_token_needs_sync")
         private val DEVICE_PROTECTION_PROMPT_SHOWN = booleanPreferencesKey("device_protection_prompt_shown")
+
+        // ── Call Recording Settings ────────────────────────────────────
+        private val RECORDING_CONSENT_ACCEPTED = booleanPreferencesKey("recording_consent_accepted")
+        private val RECORDING_ENABLED = booleanPreferencesKey("recording_enabled")
+        private val RECORDING_AUTO_RECORD = booleanPreferencesKey("recording_auto_record")
+        private val RECORDING_PLAY_BEEP = booleanPreferencesKey("recording_play_beep")
+        private val RECORDING_DIRECTION = stringPreferencesKey("recording_direction")
+        private val RECORDING_CONSENT_MODE = stringPreferencesKey("recording_consent_mode")
+        private val RECORDING_AUTO_DELETE = stringPreferencesKey("recording_auto_delete")
+        private val RECORDING_STORAGE_LIMIT = stringPreferencesKey("recording_storage_limit")
     }
 
     val autoBackup: Flow<Boolean> = context.dataStore.data.map { it[AUTO_BACKUP_KEY] ?: true }
@@ -45,6 +55,16 @@ class UserPreferences(private val context: Context) {
     val lastContactSyncTimestamp: Flow<Long> = context.dataStore.data.map { it[LAST_CONTACT_SYNC_TIMESTAMP] ?: 0L }
     val fcmTokenNeedsSync: Flow<Boolean> = context.dataStore.data.map { it[FCM_TOKEN_NEEDS_SYNC] ?: false }
     val deviceProtectionPromptShown: Flow<Boolean> = context.dataStore.data.map { it[DEVICE_PROTECTION_PROMPT_SHOWN] ?: false }
+    // ── Call Recording Settings (flows) ───────────────────────────────
+    val recordingConsentAccepted: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_CONSENT_ACCEPTED] ?: false }
+    val recordingEnabled: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_ENABLED] ?: false }
+    val recordingAutoRecord: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_AUTO_RECORD] ?: false }
+    val recordingPlayBeep: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_PLAY_BEEP] ?: true }
+    val recordingDirection: Flow<String> = context.dataStore.data.map { it[RECORDING_DIRECTION] ?: "ALL" }
+    val recordingConsentMode: Flow<String> = context.dataStore.data.map { it[RECORDING_CONSENT_MODE] ?: "ONE_PARTY" }
+    val recordingAutoDelete: Flow<String> = context.dataStore.data.map { it[RECORDING_AUTO_DELETE] ?: "NEVER" }
+    val recordingStorageLimit: Flow<String> = context.dataStore.data.map { it[RECORDING_STORAGE_LIMIT] ?: "MB_500" }
+
     val recentLookups: Flow<List<String>> = context.dataStore.data.map {
         it[RECENT_LOOKUPS]?.split(",")?.filter { s -> s.isNotEmpty() } ?: emptyList()
     }
@@ -114,6 +134,39 @@ class UserPreferences(private val context: Context) {
             while (current.size > 5) current.removeLast()
             prefs[RECENT_LOOKUPS] = current.joinToString(",")
         }
+    }
+
+    // ── Call Recording Settings (setters) ─────────────────────────────
+    suspend fun setRecordingConsentAccepted(accepted: Boolean) {
+        context.dataStore.edit { it[RECORDING_CONSENT_ACCEPTED] = accepted }
+    }
+
+    suspend fun setRecordingEnabled(enabled: Boolean) {
+        context.dataStore.edit { it[RECORDING_ENABLED] = enabled }
+    }
+
+    suspend fun setRecordingAutoRecord(auto: Boolean) {
+        context.dataStore.edit { it[RECORDING_AUTO_RECORD] = auto }
+    }
+
+    suspend fun setRecordingPlayBeep(play: Boolean) {
+        context.dataStore.edit { it[RECORDING_PLAY_BEEP] = play }
+    }
+
+    suspend fun setRecordingDirection(direction: String) {
+        context.dataStore.edit { it[RECORDING_DIRECTION] = direction }
+    }
+
+    suspend fun setRecordingConsentMode(mode: String) {
+        context.dataStore.edit { it[RECORDING_CONSENT_MODE] = mode }
+    }
+
+    suspend fun setRecordingAutoDelete(period: String) {
+        context.dataStore.edit { it[RECORDING_AUTO_DELETE] = period }
+    }
+
+    suspend fun setRecordingStorageLimit(limit: String) {
+        context.dataStore.edit { it[RECORDING_STORAGE_LIMIT] = limit }
     }
 
     suspend fun clearSession() {

@@ -85,6 +85,7 @@ import com.byron.trucaller.ui.main.ConversationScreen
 import com.byron.trucaller.ui.main.HomeScreen
 import com.byron.trucaller.ui.main.MessagesScreen
 import com.byron.trucaller.ui.main.ProfileScreen
+import com.byron.trucaller.ui.main.RecordingSettingsScreen
 import com.byron.trucaller.ui.main.SecurityScreen
 import com.byron.trucaller.ui.stolen.GeofenceManagementScreen
 import com.byron.trucaller.ui.stolen.NetworkForensicsScreen
@@ -279,6 +280,9 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
         }
         composable("security") {
             SecurityScreen(navController = navController, authViewModel = authViewModel)
+        }
+        composable("recording_settings") {
+            RecordingSettingsScreen(navController = navController)
         }
         // Admin routes
         composable("admin_login") {
