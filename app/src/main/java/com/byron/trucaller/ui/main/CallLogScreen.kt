@@ -67,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -141,6 +142,7 @@ fun CallLogScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
+            .testTag("call_log_screen")
     ) {
         // -- Premium Header with gradient --
         val missedCount by remember { derivedStateOf { callLogEntries.count { it.callType == CallType.MISSED } } }

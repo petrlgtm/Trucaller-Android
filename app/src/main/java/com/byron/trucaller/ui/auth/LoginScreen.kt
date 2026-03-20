@@ -51,6 +51,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -227,6 +228,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                     isError = error != null && error!!.contains("phone", ignoreCase = true),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .testTag("login_phone_input")
                         .offset {
                             IntOffset(shakeOffset.value.roundToInt(), 0)
                         }
@@ -259,6 +261,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                     isError = error != null && error!!.contains("password", ignoreCase = true),
                     modifier = Modifier
                         .fillMaxWidth()
+                        .testTag("login_password_input")
                         .offset {
                             IntOffset(shakeOffset.value.roundToInt(), 0)
                         }
@@ -289,6 +292,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                         textAlign = TextAlign.Center,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .testTag("login_error_text")
                             .padding(top = 12.dp)
                             .background(
                                 colorScheme.error.copy(alpha = 0.08f),
@@ -303,6 +307,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                 // Login button using TruCallerButton
                 TruCallerButton(
                     text = "Sign In",
+                    testTag = "login_sign_in_button",
                     onClick = {
                         if (!isValidPhoneInput(phone)) {
                             error = "Enter a valid 9-digit phone number"

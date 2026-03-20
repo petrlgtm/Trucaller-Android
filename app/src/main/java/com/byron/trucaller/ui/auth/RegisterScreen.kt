@@ -45,6 +45,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -148,6 +149,7 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                 isError = error != null && error!!.contains("name", ignoreCase = true),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("register_name_input")
                     .offset {
                         IntOffset(shakeOffset.value.roundToInt(), 0)
                     }
@@ -175,6 +177,7 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                 isError = error != null && error!!.contains("phone", ignoreCase = true),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("register_phone_input")
                     .offset {
                         IntOffset(shakeOffset.value.roundToInt(), 0)
                     }
@@ -202,6 +205,7 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                         && !error!!.contains("match", ignoreCase = true),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("register_password_input")
                     .offset {
                         IntOffset(shakeOffset.value.roundToInt(), 0)
                     }
@@ -259,6 +263,7 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                 isError = error != null && error!!.contains("match", ignoreCase = true),
                 modifier = Modifier
                     .fillMaxWidth()
+                    .testTag("register_confirm_password_input")
                     .offset {
                         IntOffset(shakeOffset.value.roundToInt(), 0)
                     }
@@ -270,7 +275,8 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                 Text(
                     text = error!!,
                     color = colorScheme.error,
-                    fontSize = 14.sp
+                    fontSize = 14.sp,
+                    modifier = Modifier.testTag("register_error_text")
                 )
             }
 
@@ -313,6 +319,7 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
             // Register button using TruCallerButton
             TruCallerButton(
                 text = "Create Account",
+                testTag = "register_create_account_button",
                 onClick = {
                     when {
                         fullName.isBlank() -> error = "Full name is required"

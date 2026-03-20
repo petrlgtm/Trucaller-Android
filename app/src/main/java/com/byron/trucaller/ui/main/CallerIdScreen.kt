@@ -59,6 +59,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -183,7 +184,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
                 keyboardActions = KeyboardActions(onDone = { callerIdViewModel.lookup(searchQuery) }),
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("caller_id_search_input"),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = Brand,

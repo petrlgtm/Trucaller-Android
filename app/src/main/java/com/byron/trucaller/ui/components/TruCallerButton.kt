@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -63,6 +64,7 @@ enum class TruCallerButtonStyle {
  * @param trailingIcon An optional icon displayed after the text.
  * @param iconSize Size of the leading/trailing icon.
  * @param contentDesc Accessibility content description. Defaults to [text].
+ * @param testTag Optional Compose testTag for UI testing.
  */
 @Composable
 fun TruCallerButton(
@@ -75,7 +77,8 @@ fun TruCallerButton(
     leadingIcon: ImageVector? = null,
     trailingIcon: ImageVector? = null,
     iconSize: Dp = 18.dp,
-    contentDesc: String = text
+    contentDesc: String = text,
+    testTag: String? = null
 ) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
@@ -124,6 +127,7 @@ fun TruCallerButton(
         .scale(scale)
         .height(48.dp)
         .semantics { this.contentDescription = contentDesc }
+        .let { mod -> if (testTag != null) mod.testTag(testTag) else mod }
 
     @Composable
     fun ButtonContent() {
