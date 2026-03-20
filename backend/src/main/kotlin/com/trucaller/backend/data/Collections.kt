@@ -56,6 +56,9 @@ object Collections {
     val geofenceEvents: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("geofenceEvents")
 
+    val spamVerifications: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("spamVerifications")
+
     // ── Index creation ───────────────────────────────────────────────────
 
     /**
@@ -140,5 +143,16 @@ object Collections {
         // Index on geofenceId for geofence events
         database.getCollection<Document>("geofenceEvents")
             .createIndex(Indexes.ascending("geofenceId"))
+
+        // Compound index on (phoneNumber, userId) for spam verifications (one vote per user per number)
+        database.getCollection<Document>("spamVerifications")
+            .createIndex(Indexes.compoundIndex(
+                Indexes.ascending("phoneNumber"),
+                Indexes.ascending("userId")
+            ))
+
+        // Index on phoneNumber for spam verification aggregation
+        database.getCollection<Document>("spamVerifications")
+            .createIndex(Indexes.ascending("phoneNumber"))
     }
 }

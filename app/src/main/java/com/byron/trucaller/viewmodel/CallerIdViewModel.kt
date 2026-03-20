@@ -51,6 +51,10 @@ class CallerIdViewModel(
     private val _isNumberBlocked = MutableStateFlow(false)
     val isNumberBlocked: StateFlow<Boolean> = _isNumberBlocked.asStateFlow()
 
+    // Community verification state
+    private val _verificationStatus = MutableStateFlow<VerificationUiState?>(null)
+    val verificationStatus: StateFlow<VerificationUiState?> = _verificationStatus.asStateFlow()
+
     init {
         loadRecentLookups()
     }
@@ -314,6 +318,53 @@ class CallerIdViewModel(
     fun clearLookup() {
         _lookupResult.value = null
         _notFound.value = false
+        _verificationStatus.value = null
+    }
+
+    /** Load community verification status for the currently displayed phone number. */
+    fun loadVerificationStatus(phoneNumber: String) {
+        viewModelScope.launch {
+            try {
+                val result = ApiClient.getSpamVerification(phoneNumber)
+                if (result.success && result.data != null) {
+                    val data = result.data
+                    _verificationStatus.value = VerificationUiState(
+                        phoneNumber = data["phoneNumber"]?.toString() ?: phoneNumber,
+                        confirmCount = (data["confirmCount"] as? Number)?.toInt() ?: 0,
+                        disputeCount = (data["disputeCount"] as? Number)?.toInt() ?: 0,
+                        communityVerified = data["communityVerified"] as? Boolean ?: false,
+                        userVote = data["userVote"]?.toString()
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to load verification status for $phoneNumber", e)
+            }
+        }
+    }
+
+    /** Submit a confirm or dispute vote for a phone number. */
+    fun verifySpam(phoneNumber: String, vote: String) {
+        viewModelScope.launch {
+            try {
+                val result = ApiClient.verifySpam(phoneNumber, vote)
+                if (result.success && result.data != null) {
+                    val data = result.data
+                    _verificationStatus.value = VerificationUiState(
+                        phoneNumber = data["phoneNumber"]?.toString() ?: phoneNumber,
+                        confirmCount = (data["confirmCount"] as? Number)?.toInt() ?: 0,
+                        disputeCount = (data["disputeCount"] as? Number)?.toInt() ?: 0,
+                        communityVerified = data["communityVerified"] as? Boolean ?: false,
+                        userVote = data["userVote"]?.toString()
+                    )
+                    _actionMessage.value = if (vote == "confirm") "Spam confirmed" else "Spam disputed"
+                } else {
+                    _actionMessage.value = result.error ?: "Verification failed"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to verify spam for $phoneNumber", e)
+                _actionMessage.value = "Verification failed: network error"
+            }
+        }
     }
 
     fun selectRecentLookup(entry: CallerIdEntry) {
@@ -340,3 +391,11 @@ class CallerIdViewModel(
         }
     }
 }
+
+data class VerificationUiState(
+    val phoneNumber: String,
+    val confirmCount: Int = 0,
+    val disputeCount: Int = 0,
+    val communityVerified: Boolean = false,
+    val userVote: String? = null
+)

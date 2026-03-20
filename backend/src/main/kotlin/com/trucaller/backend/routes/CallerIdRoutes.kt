@@ -26,6 +26,21 @@ data class SpamReportRequest(
     val reason: String? = null
 )
 
+@Serializable
+data class SpamVerifyRequest(
+    val phoneNumber: String,
+    val vote: String  // "confirm" or "dispute"
+)
+
+@Serializable
+data class VerificationStatus(
+    val phoneNumber: String,
+    val confirmCount: Int,
+    val disputeCount: Int,
+    val communityVerified: Boolean,
+    val userVote: String?     // "confirm", "dispute", or null
+)
+
 /**
  * Registers Caller ID routes under `/api/caller-id`.
  *
@@ -303,6 +318,166 @@ fun Route.callerIdRoutes() {
                         )
                     )
                 }
+            }
+
+            // ── POST /api/caller-id/verify ────────────────────────────────
+            post("/verify") {
+                val request = try {
+                    call.receive<SpamVerifyRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Unit>(
+                            success = false,
+                            error = "Invalid request body. 'phoneNumber' and 'vote' (confirm/dispute) are required."
+                        )
+                    )
+                    return@post
+                }
+
+                if (request.vote !in listOf("confirm", "dispute")) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Unit>(success = false, error = "Vote must be 'confirm' or 'dispute'.")
+                    )
+                    return@post
+                }
+
+                val phoneNumber = normalizeToE164(request.phoneNumber)
+                val voterId = call.userId()
+                val now = Instant.now().toString()
+
+                // Check if user already voted on this number
+                val existingVote = Collections.spamVerifications
+                    .find(
+                        Filters.and(
+                            Filters.eq("phoneNumber", phoneNumber),
+                            Filters.eq("userId", voterId)
+                        )
+                    )
+                    .firstOrNull()
+
+                if (existingVote != null) {
+                    // Update existing vote
+                    Collections.spamVerifications.updateOne(
+                        Filters.and(
+                            Filters.eq("phoneNumber", phoneNumber),
+                            Filters.eq("userId", voterId)
+                        ),
+                        Updates.combine(
+                            Updates.set("vote", request.vote),
+                            Updates.set("updatedAt", now)
+                        )
+                    )
+                } else {
+                    // Insert new vote
+                    val doc = Document()
+                        .append("_id", ObjectId().toString())
+                        .append("phoneNumber", phoneNumber)
+                        .append("userId", voterId)
+                        .append("vote", request.vote)
+                        .append("createdAt", now)
+                        .append("updatedAt", now)
+                    Collections.spamVerifications.insertOne(doc)
+                }
+
+                // Count votes for this phone number
+                val confirmCount = Collections.spamVerifications.countDocuments(
+                    Filters.and(
+                        Filters.eq("phoneNumber", phoneNumber),
+                        Filters.eq("vote", "confirm")
+                    )
+                ).toInt()
+                val disputeCount = Collections.spamVerifications.countDocuments(
+                    Filters.and(
+                        Filters.eq("phoneNumber", phoneNumber),
+                        Filters.eq("vote", "dispute")
+                    )
+                ).toInt()
+
+                // Mark as community verified if >=5 confirms and confirms > 2x disputes
+                val communityVerified = confirmCount >= 5 && confirmCount > disputeCount * 2
+                if (communityVerified) {
+                    Collections.callerIds.updateOne(
+                        Filters.eq("phoneNumber", phoneNumber),
+                        Updates.combine(
+                            Updates.set("communityVerified", true),
+                            Updates.set("lastUpdated", now)
+                        )
+                    )
+                }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse(
+                        success = true,
+                        data = VerificationStatus(
+                            phoneNumber = phoneNumber,
+                            confirmCount = confirmCount,
+                            disputeCount = disputeCount,
+                            communityVerified = communityVerified,
+                            userVote = request.vote
+                        ),
+                        message = "Vote recorded."
+                    )
+                )
+            }
+
+            // ── GET /api/caller-id/verify/{phoneNumber} ──────────────────
+            get("/verify/{phoneNumber}") {
+                val rawPhone = call.parameters["phoneNumber"]
+                if (rawPhone.isNullOrBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<VerificationStatus>(success = false, error = "Phone number is required.")
+                    )
+                    return@get
+                }
+
+                val phoneNumber = normalizeToE164(rawPhone)
+                val voterId = call.userId()
+
+                val confirmCount = Collections.spamVerifications.countDocuments(
+                    Filters.and(
+                        Filters.eq("phoneNumber", phoneNumber),
+                        Filters.eq("vote", "confirm")
+                    )
+                ).toInt()
+                val disputeCount = Collections.spamVerifications.countDocuments(
+                    Filters.and(
+                        Filters.eq("phoneNumber", phoneNumber),
+                        Filters.eq("vote", "dispute")
+                    )
+                ).toInt()
+
+                val userVoteDoc = Collections.spamVerifications
+                    .find(
+                        Filters.and(
+                            Filters.eq("phoneNumber", phoneNumber),
+                            Filters.eq("userId", voterId)
+                        )
+                    )
+                    .firstOrNull()
+                val userVote = userVoteDoc?.getString("vote")
+
+                val callerDoc = Collections.callerIds
+                    .find(Filters.eq("phoneNumber", phoneNumber))
+                    .firstOrNull()
+                val communityVerified = callerDoc?.getBoolean("communityVerified", false) ?: false
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse(
+                        success = true,
+                        data = VerificationStatus(
+                            phoneNumber = phoneNumber,
+                            confirmCount = confirmCount,
+                            disputeCount = disputeCount,
+                            communityVerified = communityVerified,
+                            userVote = userVote
+                        )
+                    )
+                )
             }
         }
     }

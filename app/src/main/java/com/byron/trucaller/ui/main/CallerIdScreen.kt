@@ -27,8 +27,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.PersonAdd
+import androidx.compose.material.icons.filled.Verified
+import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.filled.ThumbDown
 import androidx.compose.material.icons.filled.Report
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.AlertDialog
@@ -84,6 +88,7 @@ import com.byron.trucaller.util.formatPhoneNumber
 import com.byron.trucaller.util.getSpamScoreColor
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.CallerIdViewModel
+import com.byron.trucaller.viewmodel.VerificationUiState
 
 @Composable
 fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthViewModel) {
@@ -94,6 +99,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
     val notFound by callerIdViewModel.notFound.collectAsState()
     val actionMessage by callerIdViewModel.actionMessage.collectAsState()
     val isNumberBlocked by callerIdViewModel.isNumberBlocked.collectAsState()
+    val verificationStatus by callerIdViewModel.verificationStatus.collectAsState()
 
     val authState by authViewModel.authState.collectAsState()
     val userId = authState.user?.id ?: ""
@@ -122,10 +128,11 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
         if (entry == null) targetSpamScore = 0f
     }
 
-    // Check blocked status when entry changes
+    // Check blocked status and load verification status when entry changes
     LaunchedEffect(entry?.phoneNumber) {
         if (entry != null && userId.isNotEmpty()) {
             callerIdViewModel.checkIfBlocked(entry.phoneNumber, userId)
+            callerIdViewModel.loadVerificationStatus(entry.phoneNumber)
         }
     }
 
@@ -223,10 +230,23 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            TruCallerBadge(
-                                text = sourceLabel,
-                                type = sourceBadgeType
-                            )
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                TruCallerBadge(
+                                    text = sourceLabel,
+                                    type = sourceBadgeType
+                                )
+                                if (verificationStatus?.communityVerified == true) {
+                                    TruCallerBadge(
+                                        text = "Community Verified",
+                                        type = BadgeType.Success,
+                                        color = Color(0xFF2E7D32),
+                                        backgroundColor = Color(0xFF2E7D32).copy(alpha = 0.12f)
+                                    )
+                                }
+                            }
                             if (isNumberBlocked) {
                                 TruCallerBadge(
                                     text = "BLOCKED",
@@ -415,6 +435,60 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                 style = TruCallerButtonStyle.Secondary,
                                 leadingIcon = Icons.Default.PersonAdd
                             )
+                        }
+
+                        // Community verification section
+                        if (entry.spamScore > 0) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                "Community Verification",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = TextSecondary
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+
+                            // Vote counts
+                            val vs = verificationStatus
+                            if (vs != null) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "${vs.confirmCount} confirms",
+                                        fontSize = 12.sp,
+                                        color = Danger
+                                    )
+                                    Text(
+                                        "${vs.disputeCount} disputes",
+                                        fontSize = 12.sp,
+                                        color = Success
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                TruCallerButton(
+                                    text = if (verificationStatus?.userVote == "confirm") "Confirmed" else "Confirm Spam",
+                                    onClick = { callerIdViewModel.verifySpam(entry.phoneNumber, "confirm") },
+                                    modifier = Modifier.weight(1f),
+                                    style = if (verificationStatus?.userVote == "confirm") TruCallerButtonStyle.Primary else TruCallerButtonStyle.Secondary,
+                                    leadingIcon = Icons.Default.ThumbUp
+                                )
+                                TruCallerButton(
+                                    text = if (verificationStatus?.userVote == "dispute") "Disputed" else "Dispute",
+                                    onClick = { callerIdViewModel.verifySpam(entry.phoneNumber, "dispute") },
+                                    modifier = Modifier.weight(1f),
+                                    style = if (verificationStatus?.userVote == "dispute") TruCallerButtonStyle.Primary else TruCallerButtonStyle.Secondary,
+                                    leadingIcon = Icons.Default.ThumbDown
+                                )
+                            }
                         }
                     }
                 }
