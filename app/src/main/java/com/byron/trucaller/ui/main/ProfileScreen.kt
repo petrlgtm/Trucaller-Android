@@ -41,6 +41,7 @@ import androidx.compose.material.icons.filled.SettingsSuggest
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.FiberManualRecord
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
@@ -704,6 +705,15 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     title = "Recording Settings",
                     iconColor = colorScheme.error,
                     onClick = { rootNavController.navigate("recording_settings") }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Call Recordings
+                ProfileMenuItem(
+                    icon = Icons.Default.GraphicEq,
+                    title = "Call Recordings",
+                    iconColor = colorScheme.primary,
+                    onClick = { rootNavController.navigate("call_recordings") }
                 )
                 HorizontalDivider(color = colorScheme.outlineVariant)
 

@@ -85,8 +85,10 @@ import com.byron.trucaller.ui.main.ConversationScreen
 import com.byron.trucaller.ui.main.HomeScreen
 import com.byron.trucaller.ui.main.MessagesScreen
 import com.byron.trucaller.ui.main.ProfileScreen
+import com.byron.trucaller.ui.main.CallRecordingsScreen
 import com.byron.trucaller.ui.main.RecordingSettingsScreen
 import com.byron.trucaller.ui.main.SecurityScreen
+import com.byron.trucaller.ui.main.SmsRulesScreen
 import com.byron.trucaller.ui.stolen.GeofenceManagementScreen
 import com.byron.trucaller.ui.stolen.NetworkForensicsScreen
 import com.byron.trucaller.ui.stolen.RemoteActionsScreen
@@ -101,6 +103,8 @@ import com.byron.trucaller.viewmodel.ContactsViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.GeofenceViewModel
 import com.byron.trucaller.viewmodel.NetworkForensicsViewModel
+import com.byron.trucaller.viewmodel.CallRecordingsViewModel
+import com.byron.trucaller.viewmodel.SmsRulesViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
 
@@ -143,6 +147,8 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val callLogViewModel: CallLogViewModel = viewModel(factory = CallLogViewModel.Factory)
     val geofenceViewModel: GeofenceViewModel = viewModel(factory = GeofenceViewModel.Factory)
     val networkForensicsViewModel: NetworkForensicsViewModel = viewModel(factory = NetworkForensicsViewModel.Factory)
+    val callRecordingsViewModel: CallRecordingsViewModel = viewModel(factory = CallRecordingsViewModel.Factory)
+    val smsRulesViewModel: SmsRulesViewModel = viewModel(factory = SmsRulesViewModel.Factory)
 
     NavHost(
         navController = navController,
@@ -283,6 +289,19 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
         }
         composable("recording_settings") {
             RecordingSettingsScreen(navController = navController)
+        }
+        composable("sms_rules") {
+            SmsRulesScreen(
+                navController = navController,
+                authViewModel = authViewModel,
+                smsRulesViewModel = smsRulesViewModel
+            )
+        }
+        composable("call_recordings") {
+            CallRecordingsScreen(
+                navController = navController,
+                callRecordingsViewModel = callRecordingsViewModel
+            )
         }
         // Admin routes
         composable("admin_login") {

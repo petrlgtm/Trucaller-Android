@@ -37,10 +37,15 @@ import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CallMade
 import androidx.compose.material.icons.filled.CallReceived
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -111,6 +116,7 @@ fun CallLogScreen(
     }
 
     var showContent by remember { mutableStateOf(false) }
+    var showOverflowMenu by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -142,15 +148,53 @@ fun CallLogScreen(
             title = "Call Log",
             subtitle = "${callLogEntries.size} calls",
             gradientColors = listOf(colorScheme.surface, colorScheme.background),
-            trailingContent = if (missedCount > 0) {
-                {
-                    TruCallerBadge(
-                        text = "$missedCount missed",
-                        type = BadgeType.Spam,
-                        icon = Icons.AutoMirrored.Filled.PhoneMissed
-                    )
+            trailingContent = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (missedCount > 0) {
+                        TruCallerBadge(
+                            text = "$missedCount missed",
+                            type = BadgeType.Spam,
+                            icon = Icons.AutoMirrored.Filled.PhoneMissed
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                    }
+                    Box {
+                        IconButton(onClick = { showOverflowMenu = true }) {
+                            Icon(
+                                Icons.Default.MoreVert,
+                                contentDescription = "More options",
+                                tint = colorScheme.onSurface
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showOverflowMenu,
+                            onDismissRequest = { showOverflowMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Default.GraphicEq,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(20.dp),
+                                            tint = colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            "Recordings",
+                                            fontWeight = FontWeight.Medium
+                                        )
+                                    }
+                                },
+                                onClick = {
+                                    showOverflowMenu = false
+                                    rootNavController.navigate("call_recordings")
+                                }
+                            )
+                        }
+                    }
                 }
-            } else null
+            }
         )
 
         // -- Search bar below header --
