@@ -196,6 +196,13 @@ class SmsRepository(
         // If already SPAM from blocked/reported, keep it
         if (senderCategory == SmsCategory.SPAM) return SmsCategory.SPAM
 
+        val isBusinessSender = isShortCodeOrAlpha(address)
+
+        // Short messages (< 10 chars) from shortcode/alpha senders are likely OTP codes
+        if (isBusinessSender && body.trim().length < 10) {
+            return SmsCategory.TRANSACTIONAL
+        }
+
         val lowerBody = body.lowercase()
 
         // Score each category based on body keywords
@@ -207,8 +214,6 @@ class SmsRepository(
         if (spamScore >= 3) return SmsCategory.SPAM
 
         // Shortcode / alphanumeric senders are never personal
-        val isBusinessSender = isShortCodeOrAlpha(address)
-
         if (isBusinessSender) {
             return when {
                 promoScore > transactionalScore -> SmsCategory.PROMOTIONAL
@@ -234,6 +239,7 @@ class SmsRepository(
             // Prize / lottery scams
             "you have won", "you've won", "congratulations you", "winner",
             "lottery", "claim your prize", "selected as winner",
+            "congratulations you have won",
             // Money scams
             "free money", "earn money fast", "make money online",
             "double your money", "investment opportunity",
@@ -241,13 +247,20 @@ class SmsRepository(
             "act now", "click here immediately", "your account will be",
             "suspended", "verify immediately or",
             "urgent action required", "confirm your identity",
+            "click here to claim",
             // Nigerian/advance fee patterns
             "beneficiary", "next of kin", "inheritance",
             "million dollars", "million usd", "diplomat",
             // Mobile money scams (Uganda-specific)
             "send airtime", "wrong transfer", "mistakenly sent",
             "reverse the money", "mobile money pin",
-            "confirm withdrawal"
+            "confirm withdrawal",
+            // Uganda telecom scam patterns
+            "free data", "win airtime", "free mb", "free mbs",
+            "you have been selected to receive",
+            "claim your free airtime", "claim free data",
+            "your number has been selected", "dial to claim",
+            "send to this number to receive"
         )
         for (p in spamPatterns) {
             if (body.contains(p)) score++
@@ -304,6 +317,19 @@ class SmsRepository(
             "you have received", "sent to", "mobile money",
             "transaction id", "new balance", "withdraw",
             "float balance", "agent", "approved",
+            // M-PESA / Airtel Money / MTN MoMo specific transaction patterns
+            "m-pesa", "mpesa", "mtn momo", "mtn mobile money",
+            "airtel money", "received ugx", "sent ugx",
+            "balance ugx", "ugx", "withdraw from", "deposit to",
+            "cash in", "cash out", "transfer to", "transfer from",
+            // Uganda banks
+            "stanbic", "centenary", "dfcu", "absa", "bank of africa",
+            "postbank", "equity bank", "housing finance",
+            "standard chartered", "barclays", "orient bank",
+            // Uganda utilities & government
+            "nwsc", "umeme", "kcca", "ura",
+            "national water", "electricity", "yaka",
+            "tax payment", "prn", "payment registration number",
             // Alerts
             "alert:", "reminder:", "appointment", "scheduled",
             "password changed", "login from", "new device"
@@ -316,18 +342,42 @@ class SmsRepository(
             body.contains(Regex("code|otp|pin|verify|confirm", RegexOption.IGNORE_CASE))) {
             score += 2
         }
+        // Uganda currency amount pattern: UGX followed by amount (e.g., "UGX 50,000" or "UGX50000")
+        if (body.contains(Regex("ugx\\s?[\\d,]+"))) {
+            score++
+        }
         return score
     }
 
     /**
      * Checks if the sender address is a shortcode or alphanumeric (non-phone-number) sender.
      * These are almost always businesses.
+     *
+     * Handles various sender formats:
+     * - Pure alphanumeric: "MTN", "AIRTEL", "UMEME", "Stanbic"
+     * - Hyphenated alpha: "M-PESA", "M-SENTE"
+     * - Mixed alpha-numeric: "MTNMoMo", "AirtelMoney", "256INFO"
+     * - Short codes: "3030", "8080", "6060"
      */
     private fun isShortCodeOrAlpha(address: String): Boolean {
-        val cleaned = address.replace(Regex("[^a-zA-Z0-9+]"), "")
-        // Alphanumeric sender (e.g., "MTN", "AIRTEL", "M-PESA")
+        val trimmed = address.trim()
+
+        // Known Uganda alphanumeric senders (case-insensitive check)
+        val knownAlphaSenders = listOf(
+            "m-pesa", "mpesa", "mtn", "mtnmomo", "mtn momo",
+            "airtel", "airtelmoney", "airtel money",
+            "stanbic", "centenary", "dfcu", "absa", "postbank",
+            "bankofafrica", "bank of africa", "equity", "housingfinance",
+            "nwsc", "umeme", "kcca", "ura",
+            "safaricom", "africell", "smile", "lycamobile"
+        )
+        if (knownAlphaSenders.any { trimmed.equals(it, ignoreCase = true) }) return true
+
+        // Strip non-alphanumeric characters (except +) to check composition
+        val cleaned = trimmed.replace(Regex("[^a-zA-Z0-9+]"), "")
+        // Alphanumeric sender: contains any letter (e.g., "MTN", "M-PESA" → "MPESA", "AirtelMoney")
         if (cleaned.any { it.isLetter() }) return true
-        // Short code (4-6 digits)
+        // Short code (3-6 digits)
         val digits = cleaned.replace(Regex("[^\\d]"), "")
         if (digits.length in 3..6) return true
         return false
