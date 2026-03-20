@@ -2,23 +2,38 @@ package com.byron.trucaller.ui.navigation
 
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.automirrored.outlined.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.People
+import androidx.compose.material.icons.outlined.Person
+import androidx.compose.material.icons.outlined.Phone
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
@@ -26,11 +41,14 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.graphicsLayer
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -66,11 +84,6 @@ import com.byron.trucaller.ui.main.ProfileScreen
 import com.byron.trucaller.ui.main.SecurityScreen
 import com.byron.trucaller.ui.stolen.RemoteActionsScreen
 import com.byron.trucaller.ui.stolen.ReportStolenScreen
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.Inactive
-import com.byron.trucaller.ui.theme.Surface
-import com.byron.trucaller.ui.theme.SurfaceCard
 import com.byron.trucaller.viewmodel.AdminSettingsViewModel
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -81,12 +94,23 @@ import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
 
-sealed class TabItem(val route: String, val title: String, val icon: ImageVector) {
-    data object Home : TabItem("tab_home", "Home", Icons.Default.Home)
-    data object CallLog : TabItem("tab_call_log", "Calls", Icons.Default.Phone)
-    data object Messages : TabItem("tab_messages", "Messages", Icons.AutoMirrored.Filled.Chat)
-    data object Contacts : TabItem("tab_contacts", "Contacts", Icons.Outlined.People)
-    data object Profile : TabItem("tab_profile", "Profile", Icons.Default.Person)
+sealed class TabItem(
+    val route: String,
+    val title: String,
+    val selectedIcon: ImageVector,
+    val unselectedIcon: ImageVector
+) {
+    data object Home : TabItem("tab_home", "Home", Icons.Filled.Home, Icons.Outlined.Home)
+    data object CallLog : TabItem("tab_call_log", "Calls", Icons.Filled.Phone, Icons.Outlined.Phone)
+    data object Messages : TabItem(
+        "tab_messages", "Messages",
+        Icons.AutoMirrored.Filled.Chat, Icons.AutoMirrored.Outlined.Chat
+    )
+    data object Contacts : TabItem(
+        "tab_contacts", "Contacts",
+        Icons.Outlined.People, Icons.Outlined.People
+    )
+    data object Profile : TabItem("tab_profile", "Profile", Icons.Filled.Person, Icons.Outlined.Person)
 }
 
 val tabs = listOf(TabItem.Home, TabItem.CallLog, TabItem.Messages, TabItem.Contacts, TabItem.Profile)
@@ -299,69 +323,110 @@ fun MainScreen(
     callLogViewModel: CallLogViewModel
 ) {
     val tabNavController = rememberNavController()
+    val hapticFeedback = LocalHapticFeedback.current
 
     Scaffold(
         bottomBar = {
-            NavigationBar(
-                containerColor = SurfaceCard,
-                tonalElevation = 0.dp,
-                modifier = Modifier.shadow(
-                    elevation = 12.dp,
-                    shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
-                )
-            ) {
-                val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
-                val currentRoute = navBackStackEntry?.destination?.route
+            val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
+            val currentRoute = navBackStackEntry?.destination?.route
+            val selectedIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
-                tabs.forEach { tab ->
-                    val selected = currentRoute == tab.route
-                    NavigationBarItem(
-                        icon = {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    tab.icon,
-                                    contentDescription = tab.title,
-                                    modifier = Modifier.size(if (selected) 26.dp else 22.dp)
-                                )
-                                // Yellow indicator dot under selected tab
-                                if (selected) {
-                                    Box(
-                                        modifier = Modifier
-                                            .align(Alignment.BottomCenter)
-                                            .padding(top = 30.dp)
-                                            .width(16.dp)
-                                            .height(3.dp)
-                                            .background(Brand, RoundedCornerShape(2.dp))
-                                    )
-                                }
-                            }
-                        },
-                        label = {
-                            Text(
-                                tab.title,
-                                fontSize = 10.sp,
-                                fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
-                                letterSpacing = if (selected) 0.3.sp else 0.sp
-                            )
-                        },
-                        selected = selected,
-                        onClick = {
-                            tabNavController.navigate(tab.route) {
-                                popUpTo(tabNavController.graph.findStartDestination().id) {
-                                    saveState = true
-                                }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = Brand,
-                            selectedTextColor = Brand,
-                            unselectedIconColor = Inactive,
-                            unselectedTextColor = Inactive,
-                            indicatorColor = Color.Transparent
+            val navBarShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
+
+            BoxWithConstraints(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(elevation = 12.dp, shape = navBarShape)
+                    .clip(navBarShape)
+                    .background(MaterialTheme.colorScheme.surface)
+                    .windowInsetsPadding(WindowInsets.navigationBars)
+            ) {
+                val tabWidth = maxWidth / tabs.size
+                val pillWidth = 48.dp
+                val pillOffset = tabWidth * selectedIndex + (tabWidth - pillWidth) / 2
+
+                // Animated pill indicator
+                val animatedPillOffset by animateDpAsState(
+                    targetValue = pillOffset,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessMediumLow
+                    ),
+                    label = "pillOffset"
+                )
+
+                // Pill indicator background drawn behind the row
+                Box(
+                    modifier = Modifier
+                        .offset(x = animatedPillOffset, y = 6.dp)
+                        .width(pillWidth)
+                        .height(32.dp)
+                        .background(
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
+                            RoundedCornerShape(16.dp)
                         )
-                    )
+                )
+
+                NavigationBar(
+                    containerColor = Color.Transparent,
+                    tonalElevation = 0.dp
+                ) {
+                    tabs.forEach { tab ->
+                        val selected = currentRoute == tab.route
+
+                        // Spring-based icon scale animation
+                        val iconScale by animateFloatAsState(
+                            targetValue = if (selected) 1.15f else 1.0f,
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessMedium
+                            ),
+                            label = "iconScale"
+                        )
+
+                        NavigationBarItem(
+                            icon = {
+                                Icon(
+                                    imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                    contentDescription = tab.title,
+                                    modifier = Modifier
+                                        .size(24.dp)
+                                        .graphicsLayer {
+                                            scaleX = iconScale
+                                            scaleY = iconScale
+                                        }
+                                )
+                            },
+                            label = {
+                                Text(
+                                    tab.title,
+                                    fontSize = 10.sp,
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
+                                    letterSpacing = if (selected) 0.3.sp else 0.sp
+                                )
+                            },
+                            selected = selected,
+                            onClick = {
+                                if (currentRoute != tab.route) {
+                                    hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    tabNavController.navigate(tab.route) {
+                                        popUpTo(tabNavController.graph.findStartDestination().id) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
+                                }
+                            },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = MaterialTheme.colorScheme.primary,
+                                selectedTextColor = MaterialTheme.colorScheme.primary,
+                                unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                indicatorColor = Color.Transparent
+                            )
+                        )
+                    }
                 }
             }
         }
