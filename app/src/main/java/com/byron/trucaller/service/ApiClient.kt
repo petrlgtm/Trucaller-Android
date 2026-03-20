@@ -124,6 +124,9 @@ object ApiClient {
     suspend fun getAlarmLogs(deviceId: String): ApiResult<List<Map<String, Any>>> =
         get("/api/alarms/logs/$deviceId")
 
+    suspend fun updateAlarmLogResult(logId: String, result: String, notes: String? = null): ApiResult<Unit> =
+        put("/api/alarms/logs/$logId/result", mapOf("result" to result, "notes" to (notes ?: "")))
+
     // ── SMS Spam ────────────────────────────────────────────────────────
 
     suspend fun reportSmsSpam(senderNumber: String, messageBody: String?, reason: String? = null): ApiResult<Unit> =

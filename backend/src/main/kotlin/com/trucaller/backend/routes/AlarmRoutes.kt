@@ -30,6 +30,12 @@ data class AlarmTriggerRequest(
     val notes: String? = null
 )
 
+@Serializable
+data class AlarmLogResultRequest(
+    val result: String,
+    val notes: String? = null
+)
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 /**
@@ -169,6 +175,77 @@ fun Route.alarmRoutes() {
                     success = true,
                     data = logs.map { it.toJson() },
                     message = "Alarm logs retrieved"
+                )
+            )
+        }
+
+        // PUT /api/alarms/logs/{logId}/result
+        put("/api/alarms/logs/{logId}/result") {
+            val logId = call.parameters["logId"]
+            if (logId == null) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Nothing>(
+                        success = false,
+                        error = "Missing logId"
+                    )
+                )
+                return@put
+            }
+
+            val request = try {
+                call.receive<AlarmLogResultRequest>()
+            } catch (e: Exception) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Nothing>(
+                        success = false,
+                        error = "Invalid request body"
+                    )
+                )
+                return@put
+            }
+
+            val validResults = listOf("SUCCESS", "FAILED", "PARTIAL")
+            if (request.result !in validResults) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Nothing>(
+                        success = false,
+                        error = "Invalid result. Must be one of: ${validResults.joinToString()}"
+                    )
+                )
+                return@put
+            }
+
+            val updateDoc = Document()
+                .append("result", request.result)
+                .append("completedAt", Instant.now().toString())
+            if (request.notes != null) {
+                updateDoc.append("resultNotes", request.notes)
+            }
+
+            val updateResult = Collections.alarmLogs.updateOne(
+                Filters.eq("_id", logId),
+                Document("\$set", updateDoc)
+            )
+
+            if (updateResult.matchedCount == 0L) {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiResponse<Nothing>(
+                        success = false,
+                        error = "Alarm log not found"
+                    )
+                )
+                return@put
+            }
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Nothing>(
+                    success = true,
+                    message = "Alarm log result updated to ${request.result}"
                 )
             )
         }

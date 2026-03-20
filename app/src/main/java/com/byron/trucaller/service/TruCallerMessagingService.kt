@@ -51,35 +51,67 @@ class TruCallerMessagingService : FirebaseMessagingService() {
         super.onMessageReceived(message)
         val data = message.data
         val action = data["action"] ?: return
+        val logId = data["logId"]
 
-        Log.d(TAG, "Received FCM action: $action")
+        Log.d(TAG, "Received FCM action: $action, logId: $logId")
 
         when (action) {
             "REMOTE_ALARM" -> {
-                AlarmSoundManager.triggerAlarm(applicationContext)
-                SecurityNotificationHelper.showAlarmNotification(applicationContext)
+                var success = false
+                try {
+                    AlarmSoundManager.triggerAlarm(applicationContext)
+                    SecurityNotificationHelper.showAlarmNotification(applicationContext)
+                    success = true
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to execute REMOTE_ALARM", e)
+                }
+                reportActionResult(logId, success, action)
             }
             "LOCK_DEVICE" -> {
-                if (DeviceAdminHelper.isAdminActive(applicationContext)) {
-                    val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-                    dpm.lockNow()
+                var success = false
+                try {
+                    if (DeviceAdminHelper.isAdminActive(applicationContext)) {
+                        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                        dpm.lockNow()
+                        success = true
+                    }
+                    SecurityNotificationHelper.showLockNotification(applicationContext)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to execute LOCK_DEVICE", e)
                 }
-                SecurityNotificationHelper.showLockNotification(applicationContext)
+                reportActionResult(logId, success, action)
             }
             "LOCATION_REQUEST" -> {
                 SecurityNotificationHelper.showLocationRequestNotification(applicationContext)
                 val app = application as? TruCallerApplication ?: return
                 CoroutineScope(Dispatchers.IO).launch {
+                    var success = false
                     try {
                         val userId = app.container.userPreferences.loggedInUserId.first()
                         if (userId != null) {
                             val regService = DeviceRegistrationService(applicationContext, app.container.deviceRepository)
                             regService.registerOrUpdateDevice(userId)
+                            success = true
                         }
                     } catch (e: Exception) {
                         Log.e(TAG, "Failed to update location on request", e)
                     }
+                    reportActionResult(logId, success, action)
                 }
+            }
+        }
+    }
+
+    private fun reportActionResult(logId: String?, success: Boolean, action: String) {
+        if (logId == null) return
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val result = if (success) "SUCCESS" else "FAILED"
+                val notes = "Device executed $action"
+                ApiClient.updateAlarmLogResult(logId, result, notes)
+                Log.d(TAG, "Reported $result for logId=$logId")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to report action result for logId=$logId", e)
             }
         }
     }
