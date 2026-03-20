@@ -89,9 +89,15 @@ class ContactsViewModel(
 
     fun updateContactPhoto(contactId: String, uri: Uri) {
         viewModelScope.launch {
-            val file = copyImageToInternal(getApplication(), uri, "contact_$contactId")
-            contactRepository.updateContactPhoto(contactId, file.absolutePath)
-            _syncMessage.value = "Photo updated"
+            try {
+                val file = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    copyImageToInternal(getApplication(), uri, "contact_$contactId")
+                }
+                contactRepository.updateContactPhoto(contactId, file.absolutePath)
+                _syncMessage.value = "Photo updated"
+            } catch (_: Exception) {
+                _syncMessage.value = "Failed to save photo"
+            }
         }
     }
 
@@ -196,17 +202,12 @@ class ContactsViewModel(
                 count
             }
 
-            // Step 2: Update all user's contacts' sync timestamp
-            // Use .first() to get a single snapshot instead of .collect{} which would
-            // re-emit on every update, causing an infinite loop race condition.
-            val list = contactRepository.getContactsByUser(userId).first()
-            list.forEach { contact ->
-                contactRepository.updateContact(
-                    contact.copy(syncedAt = now, isBackedUp = true)
-                )
-            }
+            // Step 2: Update all user's contacts' sync timestamp via batch
+            contactRepository.markAllSynced(userId, now)
 
             // Step 3: Upload contacts to backend MongoDB
+            // Re-fetch after updates to include newly imported contacts
+            val list = contactRepository.getContactsByUser(userId).first()
             try {
                 val contactMaps = list.map { c ->
                     mapOf(

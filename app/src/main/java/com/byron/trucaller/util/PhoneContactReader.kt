@@ -34,9 +34,9 @@ fun readPhoneContacts(context: Context): List<PhoneContact> {
     val contactIdToPhone = mutableMapOf<String, String>()
 
     cursor.use {
-        val idIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
-        val nameIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
-        val numberIndex = it.getColumnIndex(ContactsContract.CommonDataKinds.Phone.NUMBER)
+        val idIndex = it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.CONTACT_ID)
+        val nameIndex = it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME)
+        val numberIndex = it.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Phone.NUMBER)
 
         while (it.moveToNext()) {
             val contactId = it.getString(idIndex) ?: continue
@@ -80,8 +80,8 @@ fun readPhoneContacts(context: Context): List<PhoneContact> {
             )
 
             emailCursor?.use { ec ->
-                val emailIdIndex = ec.getColumnIndex(ContactsContract.CommonDataKinds.Email.CONTACT_ID)
-                val emailAddrIndex = ec.getColumnIndex(ContactsContract.CommonDataKinds.Email.ADDRESS)
+                val emailIdIndex = ec.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.CONTACT_ID)
+                val emailAddrIndex = ec.getColumnIndexOrThrow(ContactsContract.CommonDataKinds.Email.ADDRESS)
 
                 while (ec.moveToNext()) {
                     val contactId = ec.getString(emailIdIndex) ?: continue

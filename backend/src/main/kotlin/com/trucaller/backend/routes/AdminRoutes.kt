@@ -149,7 +149,9 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = users.map { it.toJson() },
+                        data = users.map { it.toJson() }.map { json ->
+                            org.bson.Document.parse(json).also { it.remove("passwordHash") }.toJson()
+                        },
                         message = "Retrieved ${users.size} user(s)"
                     )
                 )
@@ -572,6 +574,23 @@ fun Route.adminRoutes() {
                     call.respond(
                         HttpStatusCode.BadRequest,
                         ApiResponse<Nothing>(success = false, error = "Name and email are required")
+                    )
+                    return@put
+                }
+
+                // Check if another admin already uses this email
+                val existingAdmin = Collections.adminUsers
+                    .find(
+                        Filters.and(
+                            Filters.eq("email", request.email),
+                            Filters.ne("_id", adminId)
+                        )
+                    )
+                    .firstOrNull()
+                if (existingAdmin != null) {
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        ApiResponse<Nothing>(success = false, error = "Another admin already uses this email")
                     )
                     return@put
                 }

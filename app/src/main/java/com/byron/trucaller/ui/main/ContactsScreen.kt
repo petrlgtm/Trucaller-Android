@@ -156,7 +156,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
     val contactsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        contactsViewModel.syncContacts(user.id)
+        if (granted) contactsViewModel.syncContacts(user.id)
     }
 
     val driveSignInLauncher = rememberLauncherForActivityResult(

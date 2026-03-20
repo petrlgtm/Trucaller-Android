@@ -19,11 +19,13 @@ import com.byron.trucaller.service.AlarmSoundManager
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.service.DeviceRegistrationService
 import com.byron.trucaller.util.DeviceAdminHelper
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -133,6 +135,8 @@ class AlarmViewModel(
      * Executes alarm sound locally on this device.
      * Called directly when target is the current device, or from TruCallerMessagingService via FCM.
      */
+    private var alarmTimeoutJob: Job? = null
+
     fun executeLocalAlarm(logId: String) {
         viewModelScope.launch {
             try {
@@ -140,7 +144,8 @@ class AlarmViewModel(
                 _alarmPlaying.value = true
                 alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Alarm sounded for 30 seconds")
 
-                viewModelScope.launch {
+                alarmTimeoutJob?.cancel()
+                alarmTimeoutJob = viewModelScope.launch {
                     delay(30_000)
                     _alarmPlaying.value = false
                 }
@@ -152,6 +157,8 @@ class AlarmViewModel(
     }
 
     fun stopAlarm() {
+        alarmTimeoutJob?.cancel()
+        alarmTimeoutJob = null
         AlarmSoundManager.stopAlarm()
         _alarmPlaying.value = false
     }
@@ -220,7 +227,9 @@ class AlarmViewModel(
             try {
                 val app = getApplication<TruCallerApplication>()
                 val regService = DeviceRegistrationService(app, deviceRepository)
-                regService.registerOrUpdateDevice(triggeredBy)
+                // Use the device owner's userId (from preferences), not the requestor
+                val ownerId = app.container.userPreferences.loggedInUserId.first() ?: triggeredBy
+                regService.registerOrUpdateDevice(ownerId)
                 alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Location updated via IP geolocation")
                 _actionMessage.value = "Location updated successfully"
             } catch (e: Exception) {

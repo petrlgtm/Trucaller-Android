@@ -32,7 +32,10 @@ import android.widget.TextView
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.SpamCategory
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class CallerIdOverlayService : Service() {
 
@@ -113,20 +116,28 @@ class CallerIdOverlayService : Service() {
         // Check the cache first — the call screening service may have already
         // looked up this number, so we can avoid a redundant query.
         val cachedResult = CallerIdCache.get(phoneNumber)
-        val lookupResult = if (cachedResult != null) {
+        if (cachedResult != null) {
             Log.d(TAG, "Using cached caller ID result for $phoneNumber")
-            cachedResult
+            showOrNotify(phoneNumber, cachedResult.callerIdEntry)
         } else {
-            try {
-                runBlocking { callerIdRepo.lookupNumber(phoneNumber) }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error looking up number: $phoneNumber", e)
-                null
+            // Perform lookup asynchronously to avoid blocking the main thread (ANR)
+            CoroutineScope(Dispatchers.IO).launch {
+                val lookupResult = try {
+                    callerIdRepo.lookupNumber(phoneNumber)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error looking up number: $phoneNumber", e)
+                    null
+                }
+                withContext(Dispatchers.Main) {
+                    showOrNotify(phoneNumber, lookupResult?.callerIdEntry)
+                }
             }
         }
 
-        val entry = lookupResult?.callerIdEntry
+        return START_NOT_STICKY
+    }
 
+    private fun showOrNotify(phoneNumber: String, entry: CallerIdEntry?) {
         // If overlay permission is not granted, fall back to a notification
         if (!Settings.canDrawOverlays(this)) {
             Log.d(TAG, "Overlay permission denied — showing notification instead")
@@ -138,12 +149,9 @@ class CallerIdOverlayService : Service() {
                 category = entry?.category ?: SpamCategory.SAFE
             )
             stopSelf()
-            return START_NOT_STICKY
+            return
         }
-
         showOverlay(phoneNumber, entry)
-
-        return START_NOT_STICKY
     }
 
     private fun isDarkMode(): Boolean {

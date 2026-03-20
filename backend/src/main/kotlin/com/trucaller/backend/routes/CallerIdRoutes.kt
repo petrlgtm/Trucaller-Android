@@ -8,6 +8,7 @@ import com.trucaller.backend.data.models.LookupResponse
 import com.trucaller.backend.data.models.SpamCategory
 import io.ktor.http.*
 import io.ktor.server.application.*
+import com.trucaller.backend.auth.getAdminRole
 import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
@@ -164,6 +165,15 @@ fun Route.callerIdRoutes() {
 
             // ── POST /api/caller-id/upload ────────────────────────────────
             post("/upload") {
+                // Admin-only: reject non-admin users
+                if (call.getAdminRole() == null) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Unit>(success = false, error = "Admin access required")
+                    )
+                    return@post
+                }
+
                 @Serializable
                 data class CallerIdUpload(
                     val phoneNumber: String,

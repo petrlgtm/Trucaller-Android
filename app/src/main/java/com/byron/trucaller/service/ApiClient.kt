@@ -462,7 +462,7 @@ object ApiClient {
                 .build()
 
             val response = client.newCall(request).execute()
-            parseResponse(response)
+            response.use { parseResponse(it) }
         } catch (e: Exception) {
             Log.e(TAG, "GET $path failed", e)
             ApiResult(success = false, error = e.message ?: "Network error")
@@ -479,7 +479,7 @@ object ApiClient {
                 .build()
 
             val response = client.newCall(request).execute()
-            parseResponse(response)
+            response.use { parseResponse(it) }
         } catch (e: Exception) {
             Log.e(TAG, "PUT $path failed", e)
             ApiResult(success = false, error = e.message ?: "Network error")
@@ -495,7 +495,7 @@ object ApiClient {
                 .build()
 
             val response = client.newCall(request).execute()
-            parseResponse(response)
+            response.use { parseResponse(it) }
         } catch (e: Exception) {
             Log.e(TAG, "DELETE $path failed", e)
             ApiResult(success = false, error = e.message ?: "Network error")
@@ -512,7 +512,7 @@ object ApiClient {
                 .build()
 
             val response = client.newCall(request).execute()
-            parseResponse(response)
+            response.use { parseResponse(it) }
         } catch (e: Exception) {
             Log.e(TAG, "POST $path failed", e)
             ApiResult(success = false, error = e.message ?: "Network error")

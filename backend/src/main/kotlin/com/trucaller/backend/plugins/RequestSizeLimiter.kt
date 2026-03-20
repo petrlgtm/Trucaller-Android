@@ -25,6 +25,7 @@ val RequestSizeLimiterPlugin = createApplicationPlugin(
                 HttpStatusCode.PayloadTooLarge,
                 mapOf("success" to false, "error" to "Request body too large. Maximum size is ${maxBytes / 1024}KB.")
             )
+            return@onCall
         }
     }
 }

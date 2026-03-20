@@ -251,8 +251,9 @@ fun Route.analyticsRoutes() {
  * Derives a trust level label from the numeric trust score.
  */
 private fun trustLevelFromScore(score: Int): String = when {
-    score >= 80 -> "TRUSTED"
-    score >= 50 -> "VERIFIED"
+    score >= 100 -> "AUTHORITY"
+    score >= 80 -> "VERIFIED"
+    score >= 50 -> "TRUSTED"
     score >= 20 -> "BASIC"
     else -> "NEW"
 }

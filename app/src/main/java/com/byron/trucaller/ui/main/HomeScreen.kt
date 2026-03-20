@@ -183,7 +183,7 @@ fun HomeScreen(
     val contactsPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
-        contactsViewModel.syncContacts(user.id)
+        if (granted) contactsViewModel.syncContacts(user.id)
     }
 
     // Google Drive sign-in launcher for backup

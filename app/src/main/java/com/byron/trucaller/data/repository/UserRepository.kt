@@ -28,4 +28,5 @@ class UserRepository(
     suspend fun getAdminById(id: String): AdminUser? = adminUserDao.getById(id)
     fun getAllAdmins(): Flow<List<AdminUser>> = adminUserDao.getAll()
     suspend fun updateAdmin(admin: AdminUser) = adminUserDao.update(admin)
+    suspend fun insertAdminUser(admin: AdminUser) = adminUserDao.insert(admin)
 }

@@ -422,7 +422,7 @@ private fun Route.getIpLogsByDevice() {
             .find(Filters.eq("deviceId", deviceId))
             .firstOrNull()
 
-        if (deviceDoc != null && deviceDoc.getString("userId") != currentUserId) {
+        if (deviceDoc == null || deviceDoc.getString("userId") != currentUserId) {
             call.respond(
                 HttpStatusCode.Forbidden,
                 ApiResponse<Unit>(success = false, error = "Access denied")
@@ -484,7 +484,7 @@ private fun Route.getDeviceForensics() {
             .find(Filters.eq("deviceId", deviceId))
             .firstOrNull()
 
-        if (deviceDoc != null && deviceDoc.getString("userId") != currentUserId) {
+        if (deviceDoc == null || deviceDoc.getString("userId") != currentUserId) {
             call.respond(
                 HttpStatusCode.Forbidden,
                 ApiResponse<Unit>(success = false, error = "Access denied")

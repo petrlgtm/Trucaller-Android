@@ -17,47 +17,65 @@ class Converters {
     @TypeConverter
     fun fromDeviceStatus(status: DeviceStatus): String = status.name
     @TypeConverter
-    fun toDeviceStatus(value: String): DeviceStatus = DeviceStatus.valueOf(value)
+    fun toDeviceStatus(value: String): DeviceStatus = try {
+        DeviceStatus.valueOf(value)
+    } catch (_: IllegalArgumentException) { DeviceStatus.ACTIVE }
 
     @TypeConverter
     fun fromSpamCategory(category: SpamCategory): String = category.name
     @TypeConverter
-    fun toSpamCategory(value: String): SpamCategory = SpamCategory.valueOf(value)
+    fun toSpamCategory(value: String): SpamCategory = try {
+        SpamCategory.valueOf(value)
+    } catch (_: IllegalArgumentException) { SpamCategory.SAFE }
 
     @TypeConverter
     fun fromReportStatus(status: ReportStatus): String = status.name
     @TypeConverter
-    fun toReportStatus(value: String): ReportStatus = ReportStatus.valueOf(value)
+    fun toReportStatus(value: String): ReportStatus = try {
+        ReportStatus.valueOf(value)
+    } catch (_: IllegalArgumentException) { ReportStatus.PENDING }
 
     @TypeConverter
     fun fromAlarmType(type: AlarmType): String = type.name
     @TypeConverter
-    fun toAlarmType(value: String): AlarmType = AlarmType.valueOf(value)
+    fun toAlarmType(value: String): AlarmType = try {
+        AlarmType.valueOf(value)
+    } catch (_: IllegalArgumentException) { AlarmType.REMOTE_ALARM }
 
     @TypeConverter
     fun fromAlarmResult(result: AlarmResult): String = result.name
     @TypeConverter
-    fun toAlarmResult(value: String): AlarmResult = AlarmResult.valueOf(value)
+    fun toAlarmResult(value: String): AlarmResult = try {
+        AlarmResult.valueOf(value)
+    } catch (_: IllegalArgumentException) { AlarmResult.PENDING }
 
     @TypeConverter
     fun fromGeofenceTransitionType(type: GeofenceTransitionType): String = type.name
     @TypeConverter
-    fun toGeofenceTransitionType(value: String): GeofenceTransitionType = GeofenceTransitionType.valueOf(value)
+    fun toGeofenceTransitionType(value: String): GeofenceTransitionType = try {
+        GeofenceTransitionType.valueOf(value)
+    } catch (_: IllegalArgumentException) { GeofenceTransitionType.ENTER }
 
     @TypeConverter
     fun fromSmsRuleType(type: SmsRuleType): String = type.name
     @TypeConverter
-    fun toSmsRuleType(value: String): SmsRuleType = SmsRuleType.valueOf(value)
+    fun toSmsRuleType(value: String): SmsRuleType = try {
+        SmsRuleType.valueOf(value)
+    } catch (_: IllegalArgumentException) { SmsRuleType.KEYWORD_MATCH }
 
     @TypeConverter
     fun fromSmsCategory(category: SmsCategory): String = category.name
     @TypeConverter
-    fun toSmsCategory(value: String): SmsCategory = SmsCategory.valueOf(value)
+    fun toSmsCategory(value: String): SmsCategory = try {
+        SmsCategory.valueOf(value)
+    } catch (_: IllegalArgumentException) { SmsCategory.PERSONAL }
 
     @TypeConverter
     fun fromCallDirection(direction: CallDirection): String = direction.name
     @TypeConverter
-    fun toCallDirection(value: String): CallDirection = CallDirection.valueOf(value)
+    fun toCallDirection(value: String): CallDirection = try {
+        CallDirection.valueOf(value)
+    } catch (_: IllegalArgumentException) { CallDirection.INCOMING }
 
     @TypeConverter
     fun fromTrustLevel(level: TrustLevel): String = level.name
@@ -71,5 +89,7 @@ class Converters {
     @TypeConverter
     fun fromScheduleBlockType(type: ScheduleBlockType): String = type.name
     @TypeConverter
-    fun toScheduleBlockType(value: String): ScheduleBlockType = ScheduleBlockType.valueOf(value)
+    fun toScheduleBlockType(value: String): ScheduleBlockType = try {
+        ScheduleBlockType.valueOf(value)
+    } catch (_: IllegalArgumentException) { ScheduleBlockType.ALL_UNKNOWN }
 }

@@ -232,7 +232,8 @@ class CallRecordingService : Service() {
         val fileSize = if (file.exists()) file.length() else 0L
 
         val app = applicationContext as? TruCallerApplication ?: return
-        serviceScope.launch {
+        // Use runBlocking to ensure the DB update completes before onDestroy cancels the scope
+        kotlinx.coroutines.runBlocking(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 app.container.callRecordingRepository.updateDurationAndSize(id, duration, fileSize)
                 Log.d(TAG, "Recording entry updated: duration=${duration}ms, size=${fileSize}B")

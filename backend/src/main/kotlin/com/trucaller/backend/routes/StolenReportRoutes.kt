@@ -12,6 +12,7 @@ import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
 import org.bson.Document
@@ -67,6 +68,21 @@ fun Route.stolenReportRoutes() {
             }
 
             val userId = call.userId()
+
+            // Ownership check: verify the device belongs to the requesting user
+            val deviceDoc = Collections.devices
+                .find(Filters.eq("deviceId", request.deviceId))
+                .firstOrNull()
+            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiResponse<Nothing>(
+                        success = false,
+                        error = "Not authorized for this device"
+                    )
+                )
+                return@post
+            }
 
             val reportId = ObjectId().toString()
             val now = Instant.now().toString()

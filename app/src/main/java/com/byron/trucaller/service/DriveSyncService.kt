@@ -158,10 +158,11 @@ class DriveSyncService(private val context: Context) {
      * Full sync: upload local -> download remote -> merge
      */
     suspend fun fullSync(): SyncResult = withContext(Dispatchers.IO) {
-        val uploadOk = uploadContacts()
-        val uploadCallerOk = uploadCallerIdEntries()
+        // Download and merge FIRST to avoid overwriting remote changes
         val newContacts = downloadAndMergeContacts()
         val newEntries = downloadAndMergeCallerIdEntries()
+        val uploadOk = uploadContacts()
+        val uploadCallerOk = uploadCallerIdEntries()
         SyncResult(
             contactsUploaded = uploadOk,
             callerIdUploaded = uploadCallerOk,

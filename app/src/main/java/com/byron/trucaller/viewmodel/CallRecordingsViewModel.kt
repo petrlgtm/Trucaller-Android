@@ -112,8 +112,10 @@ class CallRecordingsViewModel(
                     }?.sortedByDescending { it.lastModified() } ?: emptyList()
                 }
 
-                val recordings = files.mapIndexed { index, file ->
-                    parseRecordingFile(file, index)
+                val recordings = withContext(Dispatchers.IO) {
+                    files.mapIndexed { index, file ->
+                        parseRecordingFile(file, index)
+                    }
                 }
 
                 _recordings.value = recordings
@@ -408,10 +410,13 @@ class CallRecordingsViewModel(
         }
 
         fun formatDateHeader(timestamp: Long): String {
-            val now = System.currentTimeMillis()
-            val dayMs = 24 * 60 * 60 * 1000L
-            val todayStart = now - (now % dayMs)
-            val yesterdayStart = todayStart - dayMs
+            val cal = java.util.Calendar.getInstance()
+            cal.set(java.util.Calendar.HOUR_OF_DAY, 0)
+            cal.set(java.util.Calendar.MINUTE, 0)
+            cal.set(java.util.Calendar.SECOND, 0)
+            cal.set(java.util.Calendar.MILLISECOND, 0)
+            val todayStart = cal.timeInMillis
+            val yesterdayStart = todayStart - 24 * 60 * 60 * 1000L
 
             return when {
                 timestamp >= todayStart -> "Today"

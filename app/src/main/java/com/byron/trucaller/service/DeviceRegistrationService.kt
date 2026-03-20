@@ -174,23 +174,27 @@ class DeviceRegistrationService(
             try {
                 val url = URL("http://ip-api.com/json/?fields=query,isp,city,country,lat,lon")
                 val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 5000
-                connection.readTimeout = 5000
+                try {
+                    connection.requestMethod = "GET"
+                    connection.connectTimeout = 5000
+                    connection.readTimeout = 5000
 
-                if (connection.responseCode == 200) {
-                    val response = connection.inputStream.bufferedReader().readText()
-                    val json = JSONObject(response)
-                    IpInfo(
-                        ip = json.optString("query", "0.0.0.0"),
-                        isp = json.optString("isp", "Unknown ISP"),
-                        city = json.optString("city", "Unknown"),
-                        country = json.optString("country", "Unknown"),
-                        latitude = json.optDouble("lat", 0.0),
-                        longitude = json.optDouble("lon", 0.0)
-                    )
-                } else {
-                    IpInfo.default()
+                    if (connection.responseCode == 200) {
+                        val response = connection.inputStream.bufferedReader().readText()
+                        val json = JSONObject(response)
+                        IpInfo(
+                            ip = json.optString("query", "0.0.0.0"),
+                            isp = json.optString("isp", "Unknown ISP"),
+                            city = json.optString("city", "Unknown"),
+                            country = json.optString("country", "Unknown"),
+                            latitude = json.optDouble("lat", 0.0),
+                            longitude = json.optDouble("lon", 0.0)
+                        )
+                    } else {
+                        IpInfo.default()
+                    }
+                } finally {
+                    connection.disconnect()
                 }
             } catch (e: Exception) {
                 IpInfo.default()

@@ -38,7 +38,7 @@ private const val MAX_OTP_ATTEMPTS = 5
 private const val MAX_OTP_REQUESTS_PER_HOUR = 5
 
 private fun generateOtp(): String {
-    return (100000..999999).random().toString()
+    return (java.security.SecureRandom().nextInt(900000) + 100000).toString()
 }
 
 /**

@@ -117,10 +117,11 @@ object ScheduleEvaluator {
                 contacts.none { normalizedMatch(it.phoneNumber, phoneNumber) }
             }
             ScheduleBlockType.ALL_SPAM -> {
-                // ALL_SPAM is handled by the spam-score check already in the
-                // screening service, so this schedule type always blocks.
-                // Callers known as contacts are NOT exempted — spam means spam.
-                true
+                // Block only if the number is NOT in the user's contacts.
+                // The actual spam-score threshold check is handled separately in
+                // TruCallerCallScreeningService — this schedule type filters out
+                // unknown callers during the scheduled window so that only contacts ring.
+                contacts.none { normalizedMatch(it.phoneNumber, phoneNumber) }
             }
             ScheduleBlockType.ALL_EXCEPT_CONTACTS -> {
                 // Block every call unless the caller is a saved contact

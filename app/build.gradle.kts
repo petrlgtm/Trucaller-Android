@@ -6,15 +6,16 @@ plugins {
 }
 
 // Load signing credentials from local.properties, keystore.properties, or environment variables.
-// Priority: keystore.properties > local.properties > environment variables.
-val localProps = java.util.Properties().apply {
-    val localFile = rootProject.file("local.properties")
-    if (localFile.exists()) localFile.inputStream().use { load(it) }
-}
-val keystoreProps = java.util.Properties().apply {
-    val ksFile = rootProject.file("keystore.properties")
-    if (ksFile.exists()) ksFile.inputStream().use { load(it) }
-}
+import java.util.Properties
+import java.io.FileInputStream
+
+val localProps = Properties()
+val localFile = rootProject.file("local.properties")
+if (localFile.exists()) { FileInputStream(localFile).use { localProps.load(it) } }
+
+val keystoreProps = Properties()
+val ksFile = rootProject.file("keystore.properties")
+if (ksFile.exists()) { FileInputStream(ksFile).use { keystoreProps.load(it) } }
 
 fun signingProp(key: String): String =
     keystoreProps.getProperty(key)

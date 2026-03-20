@@ -26,6 +26,9 @@ interface ContactDao {
     @Query("UPDATE contacts SET isBackedUp = :backed WHERE userId = :userId")
     suspend fun updateAllBackupStatus(userId: String, backed: Boolean)
 
+    @Query("UPDATE contacts SET syncedAt = :syncedAt, isBackedUp = 1 WHERE userId = :userId")
+    suspend fun markAllSynced(userId: String, syncedAt: String)
+
     @Query("SELECT COUNT(*) FROM contacts WHERE userId = :userId")
     fun getCountByUser(userId: String): Flow<Int>
 

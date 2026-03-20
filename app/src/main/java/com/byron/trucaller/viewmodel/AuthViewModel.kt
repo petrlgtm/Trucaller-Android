@@ -57,10 +57,21 @@ class AuthViewModel(
             if (userId != null) {
                 val user = userRepository.getUserById(userId)
                 if (user != null) {
+                    // Attempt to refresh the token from the backend;
+                    // fall back to a local-only token if the network is unavailable.
+                    val restoredToken = try {
+                        val result = ApiClient.login(user.phoneNumber, "")
+                        if (result.success && result.data != null) {
+                            ApiClient.setAuthToken(result.data.token)
+                            result.data.token
+                        } else UUID.randomUUID().toString()
+                    } catch (_: Exception) {
+                        UUID.randomUUID().toString()
+                    }
                     _authState.value = AuthState(
                         user = user,
                         isAuthenticated = true,
-                        token = UUID.randomUUID().toString()
+                        token = restoredToken
                     )
                     // Update device info and log IP on app restart
                     try {
@@ -145,13 +156,24 @@ class AuthViewModel(
                 val tokenData = apiResult.data
                 ApiClient.setAuthToken(tokenData.token)
 
-                // Also sync with local Room DB
-                val admin = userRepository.getAdminByCredentials(email, password)
-                if (admin != null) {
-                    preferences.setAdminId(admin.id)
-                    preferences.setAdminProfile(admin.name, admin.email)
-                    _adminUser.value = admin
+                // Sync with local Room DB, or create a local record from the backend response
+                var admin = userRepository.getAdminByCredentials(email, password)
+                if (admin == null) {
+                    val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+                    admin = AdminUser(
+                        id = tokenData.userId,
+                        name = email.substringBefore("@"),
+                        email = email,
+                        password = hashPassword(password),
+                        role = "SUPER_ADMIN",
+                        lastLogin = now,
+                        createdAt = now
+                    )
+                    userRepository.insertAdminUser(admin)
                 }
+                preferences.setAdminId(admin.id)
+                preferences.setAdminProfile(admin.name, admin.email)
+                _adminUser.value = admin
                 return true
             }
         } catch (_: Exception) { }
@@ -167,8 +189,8 @@ class AuthViewModel(
     fun adminLogout() {
         viewModelScope.launch {
             preferences.setAdminId(null)
+            _adminUser.value = null
         }
-        _adminUser.value = null
     }
 
     fun register(fullName: String, phone: String, password: String): Boolean {
@@ -320,10 +342,16 @@ class AuthViewModel(
     fun updateAvatar(uri: Uri) {
         viewModelScope.launch {
             val user = _authState.value.user ?: return@launch
-            val file = copyImageToInternal(getApplication(), uri, "avatar_${user.id}")
-            val updated = user.copy(avatarUrl = file.absolutePath)
-            userRepository.updateUser(updated)
-            _authState.value = _authState.value.copy(user = updated)
+            try {
+                val file = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    copyImageToInternal(getApplication(), uri, "avatar_${user.id}")
+                }
+                val updated = user.copy(avatarUrl = file.absolutePath)
+                userRepository.updateUser(updated)
+                _authState.value = _authState.value.copy(user = updated)
+            } catch (_: Exception) {
+                // Image copy failed — leave avatar unchanged
+            }
         }
     }
 
@@ -340,9 +368,9 @@ class AuthViewModel(
     fun logout() {
         viewModelScope.launch {
             preferences.setLoggedInUserId(null)
+            phoneAuthManager.signOut()
+            _authState.value = AuthState()
         }
-        phoneAuthManager.signOut()
-        _authState.value = AuthState()
     }
 
     /**

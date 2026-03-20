@@ -87,7 +87,7 @@ fun Route.geofenceRoutes() {
             val deviceDoc = Collections.devices
                 .find(Filters.eq("deviceId", request.deviceId))
                 .firstOrNull()
-            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+            if (deviceDoc == null || deviceDoc.getString("userId") != userId) {
                 call.respond(
                     HttpStatusCode.Forbidden,
                     ApiResponse<Nothing>(success = false, error = "Access denied")
@@ -137,7 +137,7 @@ fun Route.geofenceRoutes() {
             val deviceDoc = Collections.devices
                 .find(Filters.eq("deviceId", deviceId))
                 .firstOrNull()
-            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+            if (deviceDoc == null || deviceDoc.getString("userId") != userId) {
                 call.respond(
                     HttpStatusCode.Forbidden,
                     ApiResponse<Nothing>(success = false, error = "Access denied")
@@ -400,7 +400,7 @@ fun Route.geofenceRoutes() {
             val deviceDoc = Collections.devices
                 .find(Filters.eq("deviceId", deviceId))
                 .firstOrNull()
-            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+            if (deviceDoc == null || deviceDoc.getString("userId") != userId) {
                 call.respond(
                     HttpStatusCode.Forbidden,
                     ApiResponse<Nothing>(success = false, error = "Access denied")

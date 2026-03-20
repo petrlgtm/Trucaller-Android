@@ -333,11 +333,37 @@ class FamilyGroupViewModel : ViewModel() {
                     ?: _uiState.value.groups.find { it.id == groupId }
 
                 if (group == null) {
+                    // Load the group detail and then retry — loadGroupDetail is async,
+                    // so we wait for selectedGroup to be populated before continuing.
                     loadGroupDetail(groupId)
-                    _uiState.value = _uiState.value.copy(isLoadingDevices = false)
+                    // Give the detail load a moment, then retry with updated state
+                    kotlinx.coroutines.delay(500)
+                    val retryGroup = _uiState.value.selectedGroup
+                        ?: _uiState.value.groups.find { it.id == groupId }
+                    if (retryGroup == null) {
+                        _uiState.value = _uiState.value.copy(
+                            isLoadingDevices = false,
+                            error = "Group not found"
+                        )
+                        return@launch
+                    }
+                    // Fall through with the retried group — reassign val via a local
+                    fetchGroupMemberDevicesInternal(retryGroup)
                     return@launch
                 }
 
+                fetchGroupMemberDevicesInternal(group)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to fetch group member devices", e)
+                _uiState.value = _uiState.value.copy(
+                    isLoadingDevices = false,
+                    error = "Failed to load device locations: ${e.message}"
+                )
+            }
+        }
+    }
+
+    private suspend fun fetchGroupMemberDevicesInternal(group: com.byron.trucaller.data.model.FamilyGroup) {
                 val entries = mutableListOf<FamilyDeviceMapEntry>()
 
                 for (member in group.members) {
@@ -389,14 +415,6 @@ class FamilyGroupViewModel : ViewModel() {
                     memberDevices = entries,
                     isLoadingDevices = false
                 )
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch group member devices", e)
-                _uiState.value = _uiState.value.copy(
-                    isLoadingDevices = false,
-                    error = "Failed to load device locations: ${e.message}"
-                )
-            }
-        }
     }
 
     /**

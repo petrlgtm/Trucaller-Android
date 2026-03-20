@@ -20,14 +20,16 @@ object AlarmSoundManager {
     private var vibrator: Vibrator? = null
     private var alarmJob: Job? = null
     private var previousVolume: Int = 0
+    private var audioManager: AudioManager? = null
 
     fun triggerAlarm(context: Context, durationMs: Long = 30_000) {
         stopAlarm()
 
-        val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-        previousVolume = audioManager.getStreamVolume(AudioManager.STREAM_ALARM)
-        val maxVolume = audioManager.getStreamMaxVolume(AudioManager.STREAM_ALARM)
-        audioManager.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        audioManager = am
+        previousVolume = am.getStreamVolume(AudioManager.STREAM_ALARM)
+        val maxVolume = am.getStreamMaxVolume(AudioManager.STREAM_ALARM)
+        am.setStreamVolume(AudioManager.STREAM_ALARM, maxVolume, 0)
 
         val alarmUri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
             ?: RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
@@ -86,6 +88,10 @@ object AlarmSoundManager {
 
         vibrator?.cancel()
         vibrator = null
+
+        // Restore previous volume
+        audioManager?.setStreamVolume(AudioManager.STREAM_ALARM, previousVolume, 0)
+        audioManager = null
     }
 
     fun isPlaying(): Boolean = mediaPlayer?.isPlaying == true

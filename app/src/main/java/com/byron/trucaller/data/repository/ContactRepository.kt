@@ -14,6 +14,7 @@ class ContactRepository(private val contactDao: ContactDao) {
     suspend fun insertContacts(contacts: List<Contact>) = contactDao.insertAll(contacts)
     suspend fun updateContact(contact: Contact) = contactDao.update(contact)
     suspend fun updateAllBackupStatus(userId: String, backed: Boolean) = contactDao.updateAllBackupStatus(userId, backed)
+    suspend fun markAllSynced(userId: String, syncedAt: String) = contactDao.markAllSynced(userId, syncedAt)
     suspend fun getContactByPhone(phone: String): Contact? = contactDao.getByPhone(phone)
     suspend fun searchContacts(query: String): List<Contact> = contactDao.search(query)
     suspend fun deleteContact(contact: Contact) = contactDao.delete(contact)

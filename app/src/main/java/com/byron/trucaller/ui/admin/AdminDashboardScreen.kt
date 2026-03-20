@@ -445,7 +445,7 @@ fun AdminDashboardScreen(
                                 "${stats.smsSpamReportCount} reports",
                                 Color(0xFFFF9800)
                             ) {
-                                navController.navigate("admin_sms_spam_reports")
+                                navController.navigate("admin_caller_id")
                             }
                             AdminMenuItem(
                                 Icons.Default.Settings,

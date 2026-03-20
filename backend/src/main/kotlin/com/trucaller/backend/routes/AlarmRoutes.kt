@@ -90,10 +90,20 @@ fun Route.alarmRoutes() {
 
             Collections.alarmLogs.insertOne(alarmDoc)
 
-            // ── Send FCM push to the target device ──────────────────────
+            // ── Device ownership check ────────────────────────────────────
             val deviceDoc = Collections.devices
                 .find(Filters.eq("deviceId", request.deviceId))
                 .firstOrNull()
+
+            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiResponse<Nothing>(success = false, error = "Not authorized for this device")
+                )
+                return@post
+            }
+
+            // ── Send FCM push to the target device ──────────────────────
             val fcmToken = deviceDoc?.getString("fcmToken")
 
             if (fcmToken.isNullOrBlank()) {

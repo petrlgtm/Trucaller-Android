@@ -39,7 +39,7 @@ fun formatRelativeTime(dateStr: String): String {
         if (date == null) return dateStr
 
         val now = Date()
-        val diffMs = now.time - date.time
+        val diffMs = (now.time - date.time).coerceAtLeast(0)
         val diffMins = diffMs / 60000
         val diffHours = diffMs / 3600000
         val diffDays = diffMs / 86400000
