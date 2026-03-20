@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Block
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -36,8 +37,10 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -55,9 +58,19 @@ import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatPhoneNumber
 import com.byron.trucaller.util.formatRelativeTime
+import com.byron.trucaller.data.model.TrustLevel
+import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
 import kotlinx.coroutines.launch
+
+private fun trustLevelFromScore(score: Int): TrustLevel = when {
+    score >= 100 -> TrustLevel.AUTHORITY
+    score >= 80 -> TrustLevel.VERIFIED
+    score >= 50 -> TrustLevel.TRUSTED
+    score >= 20 -> TrustLevel.BASIC
+    else -> TrustLevel.NEW
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -264,6 +277,122 @@ fun AdminUserDetailScreen(
                         style = TruCallerButtonStyle.Primary,
                         leadingIcon = Icons.Default.CheckCircle
                     )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Trust Level management card
+                Text(
+                    "Trust Level",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = colorScheme.onBackground
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                TruCallerCard(
+                    elevation = 1.dp
+                ) {
+                    val trustColor = when (u.trustLevel) {
+                        com.byron.trucaller.data.model.TrustLevel.NEW -> colorScheme.onSurfaceVariant
+                        com.byron.trucaller.data.model.TrustLevel.BASIC -> Color(0xFF2196F3)
+                        com.byron.trucaller.data.model.TrustLevel.TRUSTED -> Color(0xFF4CAF50)
+                        com.byron.trucaller.data.model.TrustLevel.VERIFIED -> Color(0xFFFF9800)
+                        com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> Color(0xFF9C27B0)
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Shield,
+                            contentDescription = "Trust level",
+                            tint = trustColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                u.trustLevel.name,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp,
+                                color = trustColor
+                            )
+                            Text(
+                                "Score: ${u.trustScore}/100",
+                                fontSize = 13.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        }
+                        TruCallerBadge(
+                            text = "${u.trustScore}",
+                            type = BadgeType.Custom,
+                            color = trustColor,
+                            backgroundColor = trustColor.copy(alpha = 0.12f)
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    // Admin trust adjustment buttons
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        TruCallerButton(
+                            text = "-10",
+                            onClick = {
+                                val newScore = maxOf(u.trustScore - 10, 0)
+                                coroutineScope.launch {
+                                    val updated = u.copy(
+                                        trustScore = newScore,
+                                        trustLevel = trustLevelFromScore(newScore)
+                                    )
+                                    app.container.userRepository.updateUser(updated)
+                                    user = updated
+                                    try {
+                                        ApiClient.updateUserTrust(userId, trustScore = newScore)
+                                    } catch (_: Exception) { }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            style = TruCallerButtonStyle.Danger
+                        )
+                        TruCallerButton(
+                            text = "+10",
+                            onClick = {
+                                val newScore = minOf(u.trustScore + 10, 100)
+                                coroutineScope.launch {
+                                    val updated = u.copy(
+                                        trustScore = newScore,
+                                        trustLevel = trustLevelFromScore(newScore)
+                                    )
+                                    app.container.userRepository.updateUser(updated)
+                                    user = updated
+                                    try {
+                                        ApiClient.updateUserTrust(userId, trustScore = newScore)
+                                    } catch (_: Exception) { }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            style = TruCallerButtonStyle.Primary
+                        )
+                        TruCallerButton(
+                            text = "Authority",
+                            onClick = {
+                                coroutineScope.launch {
+                                    val updated = u.copy(
+                                        trustScore = 100,
+                                        trustLevel = com.byron.trucaller.data.model.TrustLevel.AUTHORITY
+                                    )
+                                    app.container.userRepository.updateUser(updated)
+                                    user = updated
+                                    try {
+                                        ApiClient.updateUserTrust(userId, trustScore = 100, trustLevel = "AUTHORITY")
+                                    } catch (_: Exception) { }
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            style = TruCallerButtonStyle.Secondary
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))

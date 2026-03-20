@@ -20,7 +20,10 @@ class AppContainer(context: Context) {
         context.applicationContext,
         TruCallerDatabase::class.java,
         "trucaller_database"
-    ).fallbackToDestructiveMigration(true).build()
+    )
+        .addMigrations(TruCallerDatabase.MIGRATION_9_10)
+        .fallbackToDestructiveMigration(true)
+        .build()
 
     val userPreferences = UserPreferences(context)
 

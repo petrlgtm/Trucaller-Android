@@ -68,6 +68,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
@@ -433,6 +434,99 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                         }
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            // Trust Level card
+            Text(
+                "Community Trust",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier
+                    .padding(bottom = Spacing.sm, start = 4.dp)
+                    .semantics { heading() }
+            )
+            TruCallerCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("trust_level_card"),
+                elevation = 1.dp,
+                containerColor = colorScheme.surfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Trust shield icon
+                    val trustColor = when (user.trustLevel) {
+                        com.byron.trucaller.data.model.TrustLevel.NEW -> colorScheme.onSurfaceVariant
+                        com.byron.trucaller.data.model.TrustLevel.BASIC -> Color(0xFF2196F3)
+                        com.byron.trucaller.data.model.TrustLevel.TRUSTED -> Color(0xFF4CAF50)
+                        com.byron.trucaller.data.model.TrustLevel.VERIFIED -> Color(0xFFFF9800)
+                        com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> Color(0xFF9C27B0)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(44.dp)
+                            .background(trustColor.copy(alpha = 0.12f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Shield,
+                            contentDescription = "Trust level",
+                            tint = trustColor,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            user.trustLevel.name.lowercase()
+                                .replaceFirstChar { it.uppercase() },
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = colorScheme.onSurface
+                        )
+                        Text(
+                            "Trust Score: ${user.trustScore}/100",
+                            fontSize = 13.sp,
+                            color = colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                // Trust progress bar
+                androidx.compose.material3.LinearProgressIndicator(
+                    progress = { user.trustScore / 100f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(3.dp)),
+                    color = when (user.trustLevel) {
+                        com.byron.trucaller.data.model.TrustLevel.NEW -> colorScheme.onSurfaceVariant
+                        com.byron.trucaller.data.model.TrustLevel.BASIC -> Color(0xFF2196F3)
+                        com.byron.trucaller.data.model.TrustLevel.TRUSTED -> Color(0xFF4CAF50)
+                        com.byron.trucaller.data.model.TrustLevel.VERIFIED -> Color(0xFFFF9800)
+                        com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> Color(0xFF9C27B0)
+                    },
+                    trackColor = colorScheme.outlineVariant
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                Text(
+                    when (user.trustLevel) {
+                        com.byron.trucaller.data.model.TrustLevel.NEW -> "New member. Report spam and verify numbers to build trust."
+                        com.byron.trucaller.data.model.TrustLevel.BASIC -> "Basic trust. Keep contributing to level up."
+                        com.byron.trucaller.data.model.TrustLevel.TRUSTED -> "Trusted member. Your reports carry extra weight."
+                        com.byron.trucaller.data.model.TrustLevel.VERIFIED -> "Verified contributor. High impact on spam scoring."
+                        com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> "Authority. Top-tier community member."
+                    },
+                    fontSize = 12.sp,
+                    color = colorScheme.onSurfaceVariant,
+                    lineHeight = 16.sp
+                )
             }
 
             Spacer(modifier = Modifier.height(Spacing.md))

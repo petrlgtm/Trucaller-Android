@@ -3,6 +3,8 @@ package com.byron.trucaller.data.db
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.byron.trucaller.data.dao.AdminUserDao
 import com.byron.trucaller.data.dao.AlarmLogDao
 import com.byron.trucaller.data.dao.BlockedNumberDao
@@ -46,7 +48,7 @@ import com.byron.trucaller.data.model.User
         Geofence::class,
         GeofenceEvent::class
     ],
-    version = 9,
+    version = 10,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -64,4 +66,14 @@ abstract class TruCallerDatabase : RoomDatabase() {
     abstract fun contactAliasDao(): ContactAliasDao
     abstract fun geofenceDao(): GeofenceDao
     abstract fun geofenceEventDao(): GeofenceEventDao
+
+    companion object {
+        /** Migration 9 -> 10: add trustScore and trustLevel columns to users table. */
+        val MIGRATION_9_10 = object : Migration(9, 10) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE users ADD COLUMN trustScore INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE users ADD COLUMN trustLevel TEXT NOT NULL DEFAULT 'NEW'")
+            }
+        }
+    }
 }

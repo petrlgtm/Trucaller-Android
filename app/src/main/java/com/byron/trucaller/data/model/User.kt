@@ -3,6 +3,14 @@ package com.byron.trucaller.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+enum class TrustLevel {
+    NEW,        // 0-19
+    BASIC,      // 20-49
+    TRUSTED,    // 50-79
+    VERIFIED,   // 80-99
+    AUTHORITY   // 100
+}
+
 @Entity(tableName = "users")
 data class User(
     @PrimaryKey val id: String,
@@ -14,7 +22,9 @@ data class User(
     val lastLogin: String? = null,
     val isActive: Boolean = true,
     val avatarUrl: String? = null,
-    val securityPin: String? = null
+    val securityPin: String? = null,
+    val trustScore: Int = 0,
+    val trustLevel: TrustLevel = TrustLevel.NEW
 )
 
 data class AuthState(

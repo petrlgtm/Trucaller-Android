@@ -11,6 +11,7 @@ import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.AdminUser
 import com.byron.trucaller.data.model.AuthState
 import com.byron.trucaller.data.model.Contact
+import com.byron.trucaller.data.model.TrustLevel
 import com.byron.trucaller.data.model.User
 import com.byron.trucaller.data.preferences.UserPreferences
 import com.byron.trucaller.data.repository.ContactRepository
@@ -107,6 +108,8 @@ class AuthViewModel(
 
                 viewModelScope.launch {
                     try { deviceRegistrationService.registerOrUpdateDevice(user.id) } catch (_: Exception) { }
+                    // Sync trust data from backend
+                    syncTrustFromBackend(user.id)
                 }
                 return true
             }
@@ -340,6 +343,31 @@ class AuthViewModel(
         }
         phoneAuthManager.signOut()
         _authState.value = AuthState()
+    }
+
+    /** Syncs trust score/level from the backend and updates local state. */
+    private suspend fun syncTrustFromBackend(userId: String) {
+        try {
+            val result = ApiClient.getUserTrust(userId)
+            if (result.success && result.data != null) {
+                val trustScore = (result.data["trustScore"] as? Number)?.toInt() ?: return
+                val trustLevelStr = result.data["trustLevel"]?.toString() ?: return
+                val trustLevel = try {
+                    TrustLevel.valueOf(trustLevelStr)
+                } catch (_: IllegalArgumentException) {
+                    TrustLevel.NEW
+                }
+
+                val currentUser = _authState.value.user ?: return
+                if (currentUser.trustScore != trustScore || currentUser.trustLevel != trustLevel) {
+                    val updated = currentUser.copy(trustScore = trustScore, trustLevel = trustLevel)
+                    userRepository.updateUser(updated)
+                    _authState.value = _authState.value.copy(user = updated)
+                }
+            }
+        } catch (_: Exception) {
+            // Silently ignore — trust sync is best-effort
+        }
     }
 
     companion object {

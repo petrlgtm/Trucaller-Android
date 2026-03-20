@@ -7,6 +7,7 @@ import com.byron.trucaller.data.model.DeviceStatus
 import com.byron.trucaller.data.model.GeofenceTransitionType
 import com.byron.trucaller.data.model.ReportStatus
 import com.byron.trucaller.data.model.SpamCategory
+import com.byron.trucaller.data.model.TrustLevel
 
 class Converters {
     @TypeConverter
@@ -38,4 +39,13 @@ class Converters {
     fun fromGeofenceTransitionType(type: GeofenceTransitionType): String = type.name
     @TypeConverter
     fun toGeofenceTransitionType(value: String): GeofenceTransitionType = GeofenceTransitionType.valueOf(value)
+
+    @TypeConverter
+    fun fromTrustLevel(level: TrustLevel): String = level.name
+    @TypeConverter
+    fun toTrustLevel(value: String): TrustLevel = try {
+        TrustLevel.valueOf(value)
+    } catch (_: IllegalArgumentException) {
+        TrustLevel.NEW
+    }
 }
