@@ -65,6 +65,16 @@ class TruCallerCallScreeningService : CallScreeningService() {
                         .setSkipNotification(true)
                         .build()
                     respondToCall(callDetails, response)
+
+                    // Show a notification so the user knows a call was blocked
+                    val lookup = callerIdRepo.lookupNumber(phoneNumber)
+                    val blockedEntry = lookup.callerIdEntry
+                    CallNotificationHelper.showBlockedCallNotification(
+                        context = this@TruCallerCallScreeningService,
+                        callerName = blockedEntry?.name,
+                        number = phoneNumber,
+                        spamScore = blockedEntry?.spamScore ?: -1
+                    )
                     return@runBlocking
                 }
 

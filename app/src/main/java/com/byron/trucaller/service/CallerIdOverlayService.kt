@@ -15,6 +15,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.os.IBinder
+import android.provider.Settings
 import android.util.Log
 import android.util.TypedValue
 import android.view.GestureDetector
@@ -116,6 +117,21 @@ class CallerIdOverlayService : Service() {
         }
 
         val entry = lookupResult?.callerIdEntry
+
+        // If overlay permission is not granted, fall back to a notification
+        if (!Settings.canDrawOverlays(this)) {
+            Log.d(TAG, "Overlay permission denied — showing notification instead")
+            CallNotificationHelper.showCallerIdNotification(
+                context = this,
+                callerName = entry?.name ?: "Unknown Caller",
+                number = phoneNumber,
+                spamScore = entry?.spamScore ?: -1,
+                category = entry?.category ?: SpamCategory.SAFE
+            )
+            stopSelf()
+            return START_NOT_STICKY
+        }
+
         showOverlay(phoneNumber, entry)
 
         return START_NOT_STICKY
