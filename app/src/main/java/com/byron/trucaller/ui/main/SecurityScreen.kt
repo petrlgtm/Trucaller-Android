@@ -36,7 +36,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -78,12 +81,26 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
     val scope = rememberCoroutineScope()
 
     // PIN state
+    var currentPin by remember { mutableStateOf("") }
     var pin by remember { mutableStateOf("") }
     var confirmPin by remember { mutableStateOf("") }
     var pinError by remember { mutableStateOf<String?>(null) }
     var pinSuccess by remember { mutableStateOf<String?>(null) }
     var pinLoading by remember { mutableStateOf(false) }
     val hasPin = authViewModel.hasSecurityPin()
+
+    // PIN change cooldown state
+    var pinFailedAttempts by remember { mutableIntStateOf(0) }
+    var pinCooldownUntil by remember { mutableLongStateOf(0L) }
+    var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(pinCooldownUntil) {
+        while (pinCooldownUntil > 0 && System.currentTimeMillis() < pinCooldownUntil) {
+            currentTime = System.currentTimeMillis()
+            kotlinx.coroutines.delay(1000)
+        }
+        currentTime = System.currentTimeMillis()
+    }
+    val pinCooldownActive = pinCooldownUntil > currentTime
 
     Column(
         modifier = Modifier
@@ -137,7 +154,15 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
 
                     Spacer(modifier = Modifier.height(20.dp))
 
-                    Text("Enter PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+                    // Current PIN field (only when changing existing PIN)
+                    if (hasPin) {
+                        Text("Current PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        PinInput(value = currentPin, onValueChange = { currentPin = it; pinError = null; pinSuccess = null })
+                        Spacer(modifier = Modifier.height(16.dp))
+                    }
+
+                    Text(if (hasPin) "New PIN" else "Enter PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
                     Spacer(modifier = Modifier.height(8.dp))
                     PinInput(value = pin, onValueChange = { pin = it; pinError = null; pinSuccess = null })
 
@@ -147,7 +172,16 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
                     Spacer(modifier = Modifier.height(8.dp))
                     PinInput(value = confirmPin, onValueChange = { confirmPin = it; pinError = null; pinSuccess = null })
 
-                    if (pinError != null) {
+                    if (pinCooldownActive) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val remaining = ((pinCooldownUntil - currentTime) / 1000).coerceAtLeast(0)
+                        Text(
+                            "Too many failed attempts. Try again in ${remaining}s.",
+                            color = Danger,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    } else if (pinError != null) {
                         Spacer(modifier = Modifier.height(10.dp))
                         Text(pinError!!, color = Danger, fontSize = 13.sp)
                     }
@@ -160,6 +194,25 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
 
                     Button(
                         onClick = {
+                            if (pinCooldownActive) return@Button
+                            // Verify current PIN if one exists
+                            if (hasPin) {
+                                if (currentPin.length != 4) {
+                                    pinError = "Enter your current 4-digit PIN"
+                                    return@Button
+                                }
+                                if (!authViewModel.verifySecurityPin(currentPin)) {
+                                    pinFailedAttempts++
+                                    currentPin = ""
+                                    if (pinFailedAttempts >= 3) {
+                                        pinCooldownUntil = System.currentTimeMillis() + 30_000L
+                                        pinError = "Too many failed attempts. Try again in 30 seconds."
+                                    } else {
+                                        pinError = "Current PIN is incorrect (${3 - pinFailedAttempts} attempts remaining)"
+                                    }
+                                    return@Button
+                                }
+                            }
                             if (pin.length != 4) {
                                 pinError = "PIN must be 4 digits"
                                 return@Button
@@ -176,8 +229,10 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
                                 pinLoading = false
                                 if (result) {
                                     pinSuccess = "Security PIN saved successfully!"
+                                    currentPin = ""
                                     pin = ""
                                     confirmPin = ""
+                                    pinFailedAttempts = 0
                                 } else {
                                     pinError = "Failed to save PIN"
                                 }
@@ -186,7 +241,7 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
                         modifier = Modifier.fillMaxWidth().height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Brand),
-                        enabled = !pinLoading && pin.length == 4 && confirmPin.length == 4
+                        enabled = !pinLoading && !pinCooldownActive && pin.length == 4 && confirmPin.length == 4 && (!hasPin || currentPin.length == 4)
                     ) {
                         if (pinLoading) {
                             CircularProgressIndicator(color = Brand, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
