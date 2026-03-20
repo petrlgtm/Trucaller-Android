@@ -35,10 +35,10 @@ interface ContactDao {
     @Query("SELECT * FROM contacts WHERE phoneNumber = :phone LIMIT 1")
     suspend fun getByPhone(phone: String): Contact?
 
-    @Query("SELECT * FROM contacts WHERE phoneNumber LIKE '%' || :query || '%' OR name LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM contacts WHERE phoneNumber LIKE '%' || :query || '%' OR name LIKE '%' || :query || '%' LIMIT 500")
     suspend fun search(query: String): List<Contact>
 
-    @Query("SELECT * FROM contacts ORDER BY name ASC")
+    @Query("SELECT * FROM contacts ORDER BY name ASC LIMIT 500")
     fun getAllContacts(): Flow<List<Contact>>
 
     @Delete

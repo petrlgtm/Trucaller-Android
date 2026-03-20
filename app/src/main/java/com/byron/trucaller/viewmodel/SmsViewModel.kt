@@ -57,10 +57,10 @@ class SmsViewModel(
             _isLoading.value = true
             try {
                 val all = smsRepository.getConversations(contentResolver, userId)
-                _conversations.value = all
+                _conversations.value = all.take(MAX_LIST_SIZE)
                 _spamConversations.value = all.filter {
                     it.category == SmsCategory.SPAM || it.category == SmsCategory.PROMOTIONAL
-                }
+                }.take(MAX_LIST_SIZE)
             } catch (e: Exception) {
                 _actionMessage.value = "Failed to load messages: ${e.message}"
             } finally {
@@ -210,6 +210,8 @@ class SmsViewModel(
 
     companion object {
         private const val TAG = "SmsViewModel"
+        /** Maximum number of items held in memory to prevent OOM on large SMS inboxes. */
+        private const val MAX_LIST_SIZE = 500
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as TruCallerApplication

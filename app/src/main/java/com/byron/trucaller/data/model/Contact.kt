@@ -1,8 +1,10 @@
 package com.byron.trucaller.data.model
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
+@Immutable
 @Entity(tableName = "contacts")
 data class Contact(
     @PrimaryKey val id: String,

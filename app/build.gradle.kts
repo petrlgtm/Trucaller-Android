@@ -79,6 +79,7 @@ dependencies {
     testImplementation(libs.truth)
     testImplementation(libs.arch.core.testing)
     testImplementation(libs.room.testing)
+    testImplementation(libs.okhttp.mockwebserver)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
@@ -105,4 +106,6 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.coil.compose)
+    implementation(libs.profileinstaller)
+    debugImplementation(libs.leakcanary)
 }

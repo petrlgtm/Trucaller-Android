@@ -22,6 +22,8 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_PHONE_CALL" />
 
     <application
         android:name=".TruCallerApplication"
@@ -78,14 +80,16 @@
         <service
             android:name=".service.TruCallerCallScreeningService"
             android:permission="android.permission.BIND_SCREENING_SERVICE"
-            android:exported="true">
+            android:exported="true"
+            android:foregroundServiceType="phoneCall">
             <intent-filter>
                 <action android:name="android.telecom.CallScreeningService" />
             </intent-filter>
         </service>
         <service
             android:name=".service.CallerIdOverlayService"
-            android:exported="false" />
+            android:exported="false"
+            android:foregroundServiceType="phoneCall" />
         <service
             android:name=".service.CallRecordingService"
             android:exported="false"

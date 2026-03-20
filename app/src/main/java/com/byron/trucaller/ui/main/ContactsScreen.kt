@@ -523,7 +523,11 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                                 )
                             }
                         }
-                        items(contacts, key = { it.id }) { contact ->
+                        items(
+                            contacts,
+                            key = { it.id },
+                            contentType = { "contact_item" }
+                        ) { contact ->
                             val itemIndex = globalIndex++
                             Column {
                                 AnimatedVisibility(

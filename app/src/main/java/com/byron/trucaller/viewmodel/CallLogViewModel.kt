@@ -47,9 +47,9 @@ class CallLogViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val rawEntries = CallLogReader.readCallLog(context, limit = 200)
+                val rawEntries = CallLogReader.readCallLog(context, limit = 500)
                 val enriched = rawEntries.map { entry -> enrichWithCallerIdData(entry) }
-                _callLogEntries.value = enriched
+                _callLogEntries.value = enriched.take(MAX_LIST_SIZE)
             } catch (e: Exception) {
                 _actionMessage.value = "Failed to load call log: ${e.message}"
             } finally {
@@ -131,6 +131,9 @@ class CallLogViewModel(
     }
 
     companion object {
+        /** Maximum number of items held in memory to prevent OOM on large call logs. */
+        private const val MAX_LIST_SIZE = 500
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as TruCallerApplication

@@ -12,13 +12,13 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface CallerIdDao {
-    @Query("SELECT * FROM caller_id_entries")
+    @Query("SELECT * FROM caller_id_entries LIMIT 500")
     fun getAll(): Flow<List<CallerIdEntry>>
 
-    @Query("SELECT * FROM caller_id_entries")
+    @Query("SELECT * FROM caller_id_entries LIMIT 500")
     suspend fun getAllOnce(): List<CallerIdEntry>
 
-    @Query("SELECT * FROM caller_id_entries WHERE phoneNumber LIKE '%' || :query || '%' OR name LIKE '%' || :query || '%'")
+    @Query("SELECT * FROM caller_id_entries WHERE phoneNumber LIKE '%' || :query || '%' OR name LIKE '%' || :query || '%' LIMIT 500")
     fun search(query: String): Flow<List<CallerIdEntry>>
 
     @Query("SELECT * FROM caller_id_entries WHERE phoneNumber = :phone")

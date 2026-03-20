@@ -1,5 +1,6 @@
 package com.byron.trucaller.data.model
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -15,6 +16,7 @@ enum class SmsType {
  * Represents an SMS message read from the device's SMS content provider.
  * Not stored in Room — used as an in-memory data class.
  */
+@Immutable
 data class SmsMessage(
     val id: Long,
     val address: String,
@@ -30,6 +32,7 @@ data class SmsMessage(
 /**
  * Groups SMS messages into conversations by phone number.
  */
+@Immutable
 data class SmsConversation(
     val address: String,
     val contactName: String? = null,

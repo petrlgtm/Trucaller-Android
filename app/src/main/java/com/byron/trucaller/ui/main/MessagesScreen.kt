@@ -58,6 +58,7 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -278,13 +279,17 @@ fun MessagesScreen(
         } else if (isLoading) {
             ShimmerLoadingList()
         } else {
-            val filtered = smsViewModel.getFilteredConversations().filter { conv ->
-                if (searchQuery.isBlank()) true
-                else {
-                    val q = searchQuery.lowercase()
-                    (conv.contactName?.lowercase()?.contains(q) == true) ||
-                            conv.address.contains(q) ||
-                            conv.lastMessage.lowercase().contains(q)
+            val filtered by remember(searchQuery, selectedFilter, conversations) {
+                derivedStateOf {
+                    smsViewModel.getFilteredConversations().filter { conv ->
+                        if (searchQuery.isBlank()) true
+                        else {
+                            val q = searchQuery.lowercase()
+                            (conv.contactName?.lowercase()?.contains(q) == true) ||
+                                    conv.address.contains(q) ||
+                                    conv.lastMessage.lowercase().contains(q)
+                        }
+                    }
                 }
             }
 
@@ -310,7 +315,11 @@ fun MessagesScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        itemsIndexed(filtered, key = { _, it -> it.address }) { index, conversation ->
+                        itemsIndexed(
+                            filtered,
+                            key = { _, it -> it.address },
+                            contentType = { _, _ -> "sms_conversation" }
+                        ) { index, conversation ->
                             // Date separator
                             val showDateHeader = index == 0 || !isSameDay(
                                 filtered[index - 1].lastDate,

@@ -13,9 +13,16 @@ class TruCallerApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         container = AppContainer(this)
-        NotificationChannelManager.createNotificationChannels(this)
+
+        // Defer non-critical initializations off the main thread
         CoroutineScope(Dispatchers.IO).launch {
             container.seedDatabaseIfEmpty()
+        }
+
+        // Defer notification channel creation — still synchronous but low-cost,
+        // moved to a background post so it does not block Activity.onCreate()
+        CoroutineScope(Dispatchers.Default).launch {
+            NotificationChannelManager.createNotificationChannels(this@TruCallerApplication)
         }
     }
 }

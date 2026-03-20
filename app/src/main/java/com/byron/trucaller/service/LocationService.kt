@@ -42,6 +42,9 @@ class LocationService(private val context: Context) {
     private val fusedClient: FusedLocationProviderClient =
         LocationServices.getFusedLocationProviderClient(context)
 
+    /** Tracks any active location callback so it can be cleaned up. */
+    private var activeCallback: LocationCallback? = null
+
     companion object {
         const val REQUEST_CHECK_SETTINGS = 9001
 
@@ -86,7 +89,7 @@ class LocationService(private val context: Context) {
      * Call from an Activity context. Returns true if location is already enabled.
      */
     fun requestLocationSettings(activity: Activity) {
-        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 5000).build()
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_BALANCED_POWER_ACCURACY, 10_000).build()
         val settingsRequest = LocationSettingsRequest.Builder()
             .addLocationRequest(locationRequest)
             .setAlwaysShow(true)
@@ -104,7 +107,8 @@ class LocationService(private val context: Context) {
     }
 
     /**
-     * Gets the most accurate location possible.
+     * Gets the most accurate location possible — used for stolen device tracking.
+     * Uses HIGH_ACCURACY priority to force GPS fix.
      * 1. First tries getCurrentLocation() API (forces GPS fix, most accurate)
      * 2. Falls back to location updates with high accuracy
      * 3. Last resort: lastLocation cache
@@ -115,11 +119,11 @@ class LocationService(private val context: Context) {
 
         return try {
             // Method 1: Force a fresh GPS fix (most accurate)
-            val fresh = withTimeoutOrNull(10_000L) { requestCurrentLocation() }
+            val fresh = withTimeoutOrNull(10_000L) { requestCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY) }
             if (fresh != null && fresh.accuracy <= 50f) return fresh
 
             // Method 2: Request location updates and wait for accurate result
-            val updated = withTimeoutOrNull(10_000L) { requestLocationUpdates() }
+            val updated = withTimeoutOrNull(10_000L) { requestLocationUpdates(Priority.PRIORITY_HIGH_ACCURACY) }
             if (updated != null && updated.accuracy <= 100f) return updated
 
             // Method 3: Use last known location as fallback
@@ -135,18 +139,50 @@ class LocationService(private val context: Context) {
     }
 
     /**
-     * Uses the getCurrentLocation API which forces the device to get a fresh GPS fix.
-     * This is the most accurate single-shot method available.
+     * Gets a battery-friendly location — used for background/periodic location updates.
+     * Uses BALANCED_POWER_ACCURACY (Wi-Fi + cell tower, ~100m accuracy).
+     * Falls back to last known location if a fresh fix is unavailable.
+     */
+    suspend fun getBackgroundLocation(): LocationInfo {
+        if (!hasLocationPermission()) return LocationInfo.unknown()
+
+        return try {
+            val fresh = withTimeoutOrNull(8_000L) { requestCurrentLocation(Priority.PRIORITY_BALANCED_POWER_ACCURACY) }
+            if (fresh != null) return fresh
+
+            val last = getLastKnownLocation()
+            last ?: LocationInfo.unknown()
+        } catch (e: Exception) {
+            Log.w("LocationService", "Failed to get background location", e)
+            LocationInfo.unknown()
+        }
+    }
+
+    /**
+     * Releases any active location callback to prevent battery drain.
+     * Call this from service onDestroy or when location tracking is no longer needed.
+     */
+    fun stopLocationUpdates() {
+        activeCallback?.let { callback ->
+            fusedClient.removeLocationUpdates(callback)
+            activeCallback = null
+            Log.d("LocationService", "Location updates stopped and callback released")
+        }
+    }
+
+    /**
+     * Uses the getCurrentLocation API which forces the device to get a fresh fix.
+     * @param priority one of [Priority.PRIORITY_HIGH_ACCURACY] or [Priority.PRIORITY_BALANCED_POWER_ACCURACY]
      */
     @SuppressWarnings("MissingPermission")
-    private suspend fun requestCurrentLocation(): LocationInfo? {
+    private suspend fun requestCurrentLocation(priority: Int): LocationInfo? {
         if (!hasLocationPermission()) return null
 
         return suspendCancellableCoroutine { cont ->
             val cancellationToken = CancellationTokenSource()
 
             fusedClient.getCurrentLocation(
-                Priority.PRIORITY_HIGH_ACCURACY,
+                priority,
                 cancellationToken.token
             )
                 .addOnSuccessListener { location ->
@@ -176,10 +212,11 @@ class LocationService(private val context: Context) {
     }
 
     /**
-     * Requests location updates with high accuracy and picks the most accurate result.
+     * Requests location updates and picks the most accurate result.
+     * @param priority one of [Priority.PRIORITY_HIGH_ACCURACY] or [Priority.PRIORITY_BALANCED_POWER_ACCURACY]
      */
     @SuppressWarnings("MissingPermission")
-    private suspend fun requestLocationUpdates(): LocationInfo? {
+    private suspend fun requestLocationUpdates(priority: Int): LocationInfo? {
         if (!hasLocationPermission()) return null
 
         val maxUpdates = 5
@@ -188,7 +225,7 @@ class LocationService(private val context: Context) {
             var resumed = false
             var updateCount = 0
 
-            val request = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 1000)
+            val request = LocationRequest.Builder(priority, 1000)
                 .setWaitForAccurateLocation(true)
                 .setMinUpdateIntervalMillis(500)
                 .setMaxUpdates(maxUpdates)
@@ -218,20 +255,24 @@ class LocationService(private val context: Context) {
                     if (location.accuracy <= 20f && !resumed) {
                         resumed = true
                         fusedClient.removeLocationUpdates(this)
+                        activeCallback = null
                         cont.resume(info)
                     } else if (updateCount >= maxUpdates && !resumed) {
                         // All updates received without hitting accuracy threshold;
                         // resume with the best result we collected.
                         resumed = true
+                        activeCallback = null
                         cont.resume(bestResult)
                     }
                 }
             }
 
+            activeCallback = callback
             fusedClient.requestLocationUpdates(request, callback, Looper.getMainLooper())
 
             cont.invokeOnCancellation {
                 fusedClient.removeLocationUpdates(callback)
+                activeCallback = null
                 // Note: Cannot resume here as the continuation is already cancelled.
                 // The bestResult is returned via the maxUpdates check above or
                 // via the accuracy threshold check, both of which fire before timeout.

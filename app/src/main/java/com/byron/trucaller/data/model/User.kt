@@ -1,5 +1,6 @@
 package com.byron.trucaller.data.model
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -11,6 +12,7 @@ enum class TrustLevel {
     AUTHORITY   // 100
 }
 
+@Immutable
 @Entity(tableName = "users")
 data class User(
     @PrimaryKey val id: String,

@@ -1,0 +1,42 @@
+# Baseline Profile for TruCaller Android
+# Critical startup path classes and methods
+
+# Application and DI
+HSPLcom/byron/trucaller/TruCallerApplication;->onCreate()V
+HSPLcom/byron/trucaller/di/AppContainer;-><init>(Landroid/content/Context;)V
+
+# MainActivity and Compose entry
+HSPLcom/byron/trucaller/MainActivity;->onCreate(Landroid/os/Bundle;)V
+
+# Navigation
+HSPLcom/byron/trucaller/ui/navigation/NavGraphKt;->**(**)**
+
+# Core screens (hot paths)
+HSPLcom/byron/trucaller/ui/main/CallLogScreenKt;->**(**)**
+HSPLcom/byron/trucaller/ui/main/ContactsScreenKt;->**(**)**
+HSPLcom/byron/trucaller/ui/main/MessagesScreenKt;->**(**)**
+HSPLcom/byron/trucaller/ui/main/HomeScreenKt;->**(**)**
+HSPLcom/byron/trucaller/ui/auth/SplashScreenKt;->**(**)**
+HSPLcom/byron/trucaller/ui/auth/LoginScreenKt;->**(**)**
+
+# ViewModels
+HSPLcom/byron/trucaller/viewmodel/AuthViewModel;->**(**)**
+HSPLcom/byron/trucaller/viewmodel/CallLogViewModel;->**(**)**
+HSPLcom/byron/trucaller/viewmodel/ContactsViewModel;->**(**)**
+HSPLcom/byron/trucaller/viewmodel/SmsViewModel;->**(**)**
+
+# Data layer (Room + Repositories)
+HSPLcom/byron/trucaller/data/db/TruCallerDatabase;->**(**)**
+HSPLcom/byron/trucaller/data/repository/ContactRepository;->**(**)**
+HSPLcom/byron/trucaller/data/repository/CallerIdRepository;->**(**)**
+HSPLcom/byron/trucaller/data/repository/UserRepository;->**(**)**
+
+# Theme and components
+HSPLcom/byron/trucaller/ui/theme/ThemeKt;->**(**)**
+HSPLcom/byron/trucaller/ui/components/TruCallerAvatarKt;->**(**)**
+HSPLcom/byron/trucaller/ui/components/TruCallerHeaderKt;->**(**)**
+HSPLcom/byron/trucaller/ui/components/TruCallerCardKt;->**(**)**
+
+# Services
+HSPLcom/byron/trucaller/service/NotificationChannelManager;->**(**)**
+HSPLcom/byron/trucaller/service/CallerIdCache;->**(**)**

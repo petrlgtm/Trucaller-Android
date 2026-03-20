@@ -31,20 +31,23 @@ class AppContainer(context: Context) {
 
     val userPreferences = UserPreferences(context)
 
+    // Critical-path repositories — eagerly initialized
     val userRepository = UserRepository(database.userDao(), database.adminUserDao())
-    val deviceRepository = DeviceRepository(database.deviceDao(), database.ipLogDao())
     val contactRepository = ContactRepository(database.contactDao())
     val contactAliasDao = database.contactAliasDao()
     val callerIdRepository = CallerIdRepository(database.callerIdDao(), database.contactDao(), database.userDao(), contactAliasDao)
-    val stolenReportRepository = StolenReportRepository(database.stolenReportDao())
-    val alarmRepository = AlarmRepository(database.alarmLogDao())
     val blockedNumberRepository = BlockedNumberRepository(database.blockedNumberDao())
-    val geofenceRepository = GeofenceRepository(database.geofenceDao(), database.geofenceEventDao())
-    val smsRuleRepository = SmsRuleRepository(database.smsRuleDao())
-    val callRecordingRepository = CallRecordingRepository(database.callRecordingDao())
-    val blockingScheduleRepository = BlockingScheduleRepository(database.blockingScheduleDao())
-    val familyGroupRepository = FamilyGroupRepository(database.familyGroupDao(), database.familyMemberDao())
-    val smsRepository = SmsRepository(database.smsSpamDao(), callerIdRepository, blockedNumberRepository, smsRuleRepository)
+
+    // Non-critical repositories — lazily initialized on first access
+    val deviceRepository by lazy { DeviceRepository(database.deviceDao(), database.ipLogDao()) }
+    val stolenReportRepository by lazy { StolenReportRepository(database.stolenReportDao()) }
+    val alarmRepository by lazy { AlarmRepository(database.alarmLogDao()) }
+    val geofenceRepository by lazy { GeofenceRepository(database.geofenceDao(), database.geofenceEventDao()) }
+    val smsRuleRepository by lazy { SmsRuleRepository(database.smsRuleDao()) }
+    val callRecordingRepository by lazy { CallRecordingRepository(database.callRecordingDao()) }
+    val blockingScheduleRepository by lazy { BlockingScheduleRepository(database.blockingScheduleDao()) }
+    val familyGroupRepository by lazy { FamilyGroupRepository(database.familyGroupDao(), database.familyMemberDao()) }
+    val smsRepository by lazy { SmsRepository(database.smsSpamDao(), callerIdRepository, blockedNumberRepository, smsRuleRepository) }
 
     suspend fun seedDatabaseIfEmpty() {
         if (database.userDao().count() == 0) {

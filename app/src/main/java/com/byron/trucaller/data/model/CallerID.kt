@@ -1,5 +1,6 @@
 package com.byron.trucaller.data.model
 
+import androidx.compose.runtime.Immutable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
@@ -7,6 +8,7 @@ enum class SpamCategory {
     SAFE, SUSPECTED_SPAM, SPAM, FRAUD
 }
 
+@Immutable
 @Entity(tableName = "caller_id_entries")
 data class CallerIdEntry(
     @PrimaryKey val id: String,

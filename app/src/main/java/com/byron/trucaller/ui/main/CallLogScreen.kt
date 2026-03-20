@@ -58,6 +58,7 @@ import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -142,7 +143,7 @@ fun CallLogScreen(
             .background(colorScheme.background)
     ) {
         // -- Premium Header with gradient --
-        val missedCount = callLogEntries.count { it.callType == CallType.MISSED }
+        val missedCount by remember { derivedStateOf { callLogEntries.count { it.callType == CallType.MISSED } } }
 
         TruCallerHeader(
             title = "Call Log",
@@ -300,7 +301,7 @@ fun CallLogScreen(
         } else if (isLoading) {
             ShimmerLoadingList()
         } else {
-            val filtered = callLogViewModel.getFilteredEntries()
+            val filtered by remember { derivedStateOf { callLogViewModel.getFilteredEntries() } }
 
             AnimatedVisibility(
                 visible = showContent,
@@ -324,7 +325,11 @@ fun CallLogScreen(
                         modifier = Modifier.fillMaxSize(),
                         verticalArrangement = Arrangement.spacedBy(2.dp)
                     ) {
-                        itemsIndexed(filtered, key = { _, it -> it.id }) { index, entry ->
+                        itemsIndexed(
+                            filtered,
+                            key = { _, it -> it.id },
+                            contentType = { _, _ -> "call_log_entry" }
+                        ) { index, entry ->
                             // Date separator
                             val showDateHeader = index == 0 || !isSameDayCallLog(
                                 filtered[index - 1].timestamp,

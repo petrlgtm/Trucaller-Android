@@ -7,8 +7,10 @@ import android.telephony.TelephonyManager
 import android.util.Log
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.CallDirection
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.firstOrNull
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.launch
 
 /**
  * BroadcastReceiver that listens for phone state changes (incoming/outgoing calls)
@@ -92,36 +94,43 @@ class PhoneStateReceiver : BroadcastReceiver() {
      *
      * The direction filter is also checked: if the user set recording to INCOMING-only or
      * OUTGOING-only, calls in the other direction are skipped.
+     *
+     * Uses goAsync() + coroutine to avoid blocking the main thread in onReceive().
      */
     private fun startRecordingIfEnabled(context: Context, phoneNumber: String, direction: CallDirection) {
         val app = context.applicationContext as? TruCallerApplication ?: return
         val prefs = app.container.userPreferences
 
-        try {
-            val recordingEnabled = runBlocking { prefs.recordingEnabled.firstOrNull() ?: false }
-            if (!recordingEnabled) {
-                Log.d(TAG, "Call recording is disabled in preferences")
-                return
-            }
+        val pendingResult = goAsync()
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                val recordingEnabled = prefs.recordingEnabled.firstOrNull() ?: false
+                if (!recordingEnabled) {
+                    Log.d(TAG, "Call recording is disabled in preferences")
+                    return@launch
+                }
 
-            // Check direction filter
-            val directionPref = runBlocking { prefs.recordingDirection.firstOrNull() ?: "ALL" }
-            val shouldRecord = when (directionPref) {
-                "INCOMING" -> direction == CallDirection.INCOMING
-                "OUTGOING" -> direction == CallDirection.OUTGOING
-                else -> true // "ALL"
-            }
+                // Check direction filter
+                val directionPref = prefs.recordingDirection.firstOrNull() ?: "ALL"
+                val shouldRecord = when (directionPref) {
+                    "INCOMING" -> direction == CallDirection.INCOMING
+                    "OUTGOING" -> direction == CallDirection.OUTGOING
+                    else -> true // "ALL"
+                }
 
-            if (!shouldRecord) {
-                Log.d(TAG, "Call direction $direction does not match filter $directionPref — skipping recording")
-                return
-            }
+                if (!shouldRecord) {
+                    Log.d(TAG, "Call direction $direction does not match filter $directionPref — skipping recording")
+                    return@launch
+                }
 
-            Log.d(TAG, "Starting call recording for $phoneNumber (direction=$direction)")
-            CallRecordingService.start(context, phoneNumber, direction)
-            isRecordingActive = true
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking recording preferences", e)
+                Log.d(TAG, "Starting call recording for $phoneNumber (direction=$direction)")
+                CallRecordingService.start(context, phoneNumber, direction)
+                isRecordingActive = true
+            } catch (e: Exception) {
+                Log.e(TAG, "Error checking recording preferences", e)
+            } finally {
+                pendingResult.finish()
+            }
         }
     }
 }
