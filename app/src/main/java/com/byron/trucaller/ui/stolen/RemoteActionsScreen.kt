@@ -13,6 +13,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.scaleIn
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,10 +29,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -63,6 +69,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -84,7 +92,11 @@ import com.byron.trucaller.ui.theme.BorderRadius
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.ui.theme.Accent
 import com.byron.trucaller.ui.theme.Brand
+import com.byron.trucaller.ui.theme.Danger
+import com.byron.trucaller.ui.theme.Divider
+import com.byron.trucaller.ui.theme.Background
 import com.byron.trucaller.ui.theme.Success
+import com.byron.trucaller.ui.theme.TextPrimary
 import com.byron.trucaller.ui.theme.Warning
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
@@ -96,6 +108,8 @@ import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
+
+private enum class PendingRemoteAction { ALARM, LOCK, LOCATION }
 
 private val TIMELINE_DOT_COLORS = listOf(
     Color(0xFFE53935), Color(0xFF1565C0), Color(0xFFFB8C00), Color(0xFF43A047),
@@ -123,6 +137,82 @@ fun RemoteActionsScreen(
     var showRecoverConfirm by remember { mutableStateOf(false) }
     var showRecoverSuccess by remember { mutableStateOf(false) }
     var recoverLoading by remember { mutableStateOf(false) }
+
+    // PIN verification state
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinInput by remember { mutableStateOf("") }
+    var pinError by remember { mutableStateOf<String?>(null) }
+    var pinFailedAttempts by remember { mutableIntStateOf(0) }
+    var pinCooldownUntil by remember { mutableLongStateOf(0L) }
+    var pendingAction by remember { mutableStateOf<PendingRemoteAction?>(null) }
+    var showNoPinMessage by remember { mutableStateOf(false) }
+
+    // Cooldown ticker
+    var currentTime by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(pinCooldownUntil) {
+        while (pinCooldownUntil > 0 && System.currentTimeMillis() < pinCooldownUntil) {
+            currentTime = System.currentTimeMillis()
+            delay(1000)
+        }
+        currentTime = System.currentTimeMillis()
+    }
+    val pinCooldownActive = pinCooldownUntil > currentTime
+
+    val hasPin = authViewModel.hasSecurityPin()
+
+    /** Gate an action behind PIN verification */
+    fun requirePin(action: PendingRemoteAction) {
+        if (!hasPin) {
+            showNoPinMessage = true
+            return
+        }
+        pendingAction = action
+        pinInput = ""
+        pinError = null
+        showPinDialog = true
+    }
+
+    /** Called when PIN is submitted */
+    fun onPinSubmit() {
+        if (pinCooldownActive) return
+        if (pinInput.length != 4) {
+            pinError = "PIN must be 4 digits"
+            return
+        }
+        if (authViewModel.verifySecurityPin(pinInput)) {
+            // Success — execute the pending action
+            showPinDialog = false
+            pinFailedAttempts = 0
+            pinInput = ""
+            pinError = null
+            when (pendingAction) {
+                PendingRemoteAction.ALARM -> showAlarmConfirm = true
+                PendingRemoteAction.LOCK -> showLockConfirm = true
+                PendingRemoteAction.LOCATION -> {
+                    val currentUser = user ?: return
+                    val currentDevice = device ?: return
+                    locationLoading = true
+                    alarmViewModel.requestLocation(
+                        deviceId = currentDevice.id,
+                        triggeredBy = currentUser.id,
+                        triggeredByName = currentUser.fullName,
+                        triggeredByRole = "owner"
+                    )
+                }
+                null -> {}
+            }
+            pendingAction = null
+        } else {
+            pinFailedAttempts++
+            pinInput = ""
+            if (pinFailedAttempts >= 3) {
+                pinCooldownUntil = System.currentTimeMillis() + 30_000L
+                pinError = "Too many attempts. Try again in 30 seconds."
+            } else {
+                pinError = "Incorrect PIN (${3 - pinFailedAttempts} attempts remaining)"
+            }
+        }
+    }
 
     val alarmPlaying by alarmViewModel.alarmPlaying.collectAsState()
     val actionMessage by alarmViewModel.actionMessage.collectAsState()
@@ -199,6 +289,114 @@ fun RemoteActionsScreen(
             kotlinx.coroutines.delay(3000)
             alarmViewModel.clearActionMessage()
         }
+    }
+
+    // PIN verification dialog
+    if (showPinDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                showPinDialog = false
+                pendingAction = null
+                pinInput = ""
+                pinError = null
+            },
+            title = { Text("Security PIN Required") },
+            text = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    Text(
+                        "Enter your 4-digit security PIN to proceed.",
+                        fontSize = 14.sp,
+                        textAlign = TextAlign.Center,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(20.dp))
+                    // 4-digit PIN input boxes
+                    BasicTextField(
+                        value = pinInput,
+                        onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) { pinInput = it; pinError = null } },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
+                        textStyle = TextStyle(color = Color.Transparent),
+                        enabled = !pinCooldownActive,
+                        decorationBox = {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                repeat(4) { index ->
+                                    val char = pinInput.getOrNull(index)?.toString() ?: ""
+                                    val isFocused = pinInput.length == index
+                                    Box(
+                                        modifier = Modifier
+                                            .size(48.dp)
+                                            .border(
+                                                if (isFocused) 2.dp else 1.5.dp,
+                                                if (isFocused || char.isNotEmpty()) Brand else Divider,
+                                                RoundedCornerShape(12.dp)
+                                            )
+                                            .background(
+                                                if (char.isNotEmpty()) Color(0xFF252525) else Background,
+                                                RoundedCornerShape(12.dp)
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Text(
+                                            if (char.isNotEmpty()) "\u2022" else "",
+                                            fontSize = 22.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = TextPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    if (pinCooldownActive) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        val remaining = ((pinCooldownUntil - currentTime) / 1000).coerceAtLeast(0)
+                        Text(
+                            "Too many attempts. Try again in ${remaining}s.",
+                            color = Danger,
+                            fontSize = 13.sp,
+                            textAlign = TextAlign.Center
+                        )
+                    } else if (pinError != null) {
+                        Spacer(modifier = Modifier.height(10.dp))
+                        Text(pinError!!, color = Danger, fontSize = 13.sp, textAlign = TextAlign.Center)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { onPinSubmit() },
+                    enabled = pinInput.length == 4 && !pinCooldownActive
+                ) { Text("Verify") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showPinDialog = false
+                    pendingAction = null
+                    pinInput = ""
+                    pinError = null
+                }) { Text("Cancel") }
+            }
+        )
+    }
+    // No PIN set message
+    if (showNoPinMessage) {
+        AlertDialog(
+            onDismissRequest = { showNoPinMessage = false },
+            title = { Text("No Security PIN Set") },
+            text = { Text("You need to set a security PIN before using remote actions. Go to Security settings to set one.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showNoPinMessage = false
+                    navController.navigate("security")
+                }) { Text("Go to Security") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showNoPinMessage = false }) { Text("Cancel") }
+            }
+        )
     }
 
     // Dialogs
@@ -402,7 +600,7 @@ fun RemoteActionsScreen(
                         }
                         TruCallerButton(
                             text = "Trigger",
-                            onClick = { showAlarmConfirm = true },
+                            onClick = { requirePin(PendingRemoteAction.ALARM) },
                             style = TruCallerButtonStyle.Danger,
                             enabled = !alarmLoading && device != null && user != null,
                             isLoading = alarmLoading
@@ -428,7 +626,7 @@ fun RemoteActionsScreen(
                         }
                         TruCallerButton(
                             text = "Lock",
-                            onClick = { showLockConfirm = true },
+                            onClick = { requirePin(PendingRemoteAction.LOCK) },
                             style = TruCallerButtonStyle.Primary,
                             enabled = !lockLoading && device != null && user != null,
                             isLoading = lockLoading
@@ -454,17 +652,7 @@ fun RemoteActionsScreen(
                         }
                         TruCallerButton(
                             text = "Refresh",
-                            onClick = {
-                                val currentUser = user ?: return@TruCallerButton
-                                val currentDevice = device ?: return@TruCallerButton
-                                locationLoading = true
-                                alarmViewModel.requestLocation(
-                                    deviceId = currentDevice.id,
-                                    triggeredBy = currentUser.id,
-                                    triggeredByName = currentUser.fullName,
-                                    triggeredByRole = "owner"
-                                )
-                            },
+                            onClick = { requirePin(PendingRemoteAction.LOCATION) },
                             style = TruCallerButtonStyle.Primary,
                             enabled = !locationLoading && device != null && user != null,
                             isLoading = locationLoading
