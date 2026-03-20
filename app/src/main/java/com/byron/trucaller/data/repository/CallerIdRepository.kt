@@ -6,6 +6,7 @@ import com.byron.trucaller.data.dao.UserDao
 import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.Contact
 import com.byron.trucaller.data.model.SpamCategory
+import com.byron.trucaller.service.ApiClient
 import kotlinx.coroutines.flow.Flow
 
 class CallerIdRepository(
@@ -78,6 +79,18 @@ class CallerIdRepository(
                 source = "central_drive"
             )
         }
+
+        // 4. Remote API fallback — query the backend for community-sourced caller ID
+        try {
+            val result = ApiClient.lookupCallerId(fullPhone)
+            if (result.success && result.data != null) {
+                val entry = BackendMappers.mapLookupToCallerIdEntry(result.data)
+                if (entry != null) {
+                    callerIdDao.insert(entry) // Cache locally for future lookups
+                    return LookupResult(callerIdEntry = entry, contactMatch = null, source = "remote_api")
+                }
+            }
+        } catch (_: Exception) { }
 
         return LookupResult(callerIdEntry = null, contactMatch = null, source = "not_found")
     }

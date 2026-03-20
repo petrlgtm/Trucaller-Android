@@ -12,6 +12,7 @@ import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.BlockedNumber
 import com.byron.trucaller.data.model.Contact
 import com.byron.trucaller.data.preferences.UserPreferences
+import com.byron.trucaller.data.repository.BackendMappers
 import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.data.repository.ContactRepository
@@ -242,16 +243,95 @@ class ContactsViewModel(
                 }
             } catch (_: Exception) { }
 
+            // Step 3c: Download contacts from backend and merge
+            var downloadedContacts = 0
+            try {
+                val result = withContext(Dispatchers.IO) { ApiClient.syncContacts() }
+                if (result.success && result.data != null) {
+                    result.data.forEach { map ->
+                        val remote = BackendMappers.mapToContact(map, userId)
+                        if (remote.phoneNumber.isNotBlank()) {
+                            val existing = contactRepository.getContactByPhone(remote.phoneNumber)
+                            if (existing == null) {
+                                contactRepository.insertContact(remote)
+                                downloadedContacts++
+                            } else if (existing.userId == userId) {
+                                contactRepository.updateContact(
+                                    existing.copy(
+                                        name = remote.name,
+                                        email = remote.email ?: existing.email,
+                                        syncedAt = now,
+                                        isBackedUp = true
+                                    )
+                                )
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+
+            // Step 3d: Download blocked numbers from backend and merge
+            var downloadedBlocked = 0
+            try {
+                val result = withContext(Dispatchers.IO) { ApiClient.getBlockedNumbers() }
+                if (result.success && result.data != null) {
+                    result.data.forEach { map ->
+                        val remote = BackendMappers.mapToBlockedNumber(map)
+                        if (remote.phoneNumber.isNotBlank() &&
+                            !blockedNumberRepository.isBlocked(userId, remote.phoneNumber)
+                        ) {
+                            blockedNumberRepository.blockNumber(remote.copy(userId = userId))
+                            downloadedBlocked++
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+
+            // Step 3e: Download spam/caller-ID data from backend and merge
+            var downloadedSpam = 0
+            try {
+                val result = withContext(Dispatchers.IO) { ApiClient.getSpamNumbers() }
+                if (result.success && result.data != null) {
+                    result.data.forEach { map ->
+                        val remote = BackendMappers.mapToCallerIdEntry(map)
+                        if (remote.phoneNumber.isNotBlank()) {
+                            val existing = callerIdRepository.getByPhone(remote.phoneNumber)
+                            if (existing == null) {
+                                callerIdRepository.insertEntry(remote)
+                                downloadedSpam++
+                            } else if (remote.spamScore > existing.spamScore) {
+                                callerIdRepository.updateEntry(
+                                    existing.copy(
+                                        spamScore = remote.spamScore,
+                                        reportCount = remote.reportCount,
+                                        category = remote.category,
+                                        lastUpdated = remote.lastUpdated
+                                    )
+                                )
+                                downloadedSpam++
+                            }
+                        }
+                    }
+                }
+            } catch (_: Exception) { }
+
+            val downloadSummary = listOfNotNull(
+                if (downloadedContacts > 0) "$downloadedContacts contacts" else null,
+                if (downloadedBlocked > 0) "$downloadedBlocked blocked" else null,
+                if (downloadedSpam > 0) "$downloadedSpam spam entries" else null
+            ).joinToString(", ")
+            val downloadPart = if (downloadSummary.isNotEmpty()) " Downloaded $downloadSummary." else ""
+
             // Step 4: Sync to Google Drive if signed in
             if (driveSyncService.isSignedIn()) {
                 val result = driveSyncService.fullSync()
                 _isSyncing.value = false
                 _syncMessage.value = "Imported $importedCount new contacts. " +
-                        "${list.size} contacts & $callerIdCount caller IDs synced to Cloud & Drive."
+                        "${list.size} contacts & $callerIdCount caller IDs synced to Cloud & Drive.$downloadPart"
             } else {
                 _isSyncing.value = false
                 _syncMessage.value = "Imported $importedCount new contacts. " +
-                        "${list.size} contacts & $callerIdCount caller IDs backed up to cloud."
+                        "${list.size} contacts & $callerIdCount caller IDs backed up to cloud.$downloadPart"
             }
         }
     }
