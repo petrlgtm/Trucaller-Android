@@ -189,6 +189,25 @@ object ApiClient {
     suspend fun getAdminSmsSpamReports(skip: Int = 0, limit: Int = 20): ApiResult<List<String>> =
         get("/api/admin/sms-spam-reports?skip=$skip&limit=$limit")
 
+    suspend fun getAdminUserDetail(userId: String): ApiResult<Map<String, Any>> =
+        get("/api/admin/users/$userId")
+
+    suspend fun updateAdminCallerId(
+        entryId: String,
+        spamScore: Int? = null,
+        category: String? = null,
+        name: String? = null
+    ): ApiResult<Unit> {
+        val body = mutableMapOf<String, Any>()
+        spamScore?.let { body["spamScore"] = it }
+        category?.let { body["category"] = it }
+        name?.let { body["name"] = it }
+        return put("/api/admin/caller-ids/$entryId", body)
+    }
+
+    suspend fun deleteAdminCallerId(entryId: String): ApiResult<Unit> =
+        delete("/api/admin/caller-ids/$entryId")
+
     // ── Internal HTTP methods ───────────────────────────────────────────
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> = withContext(Dispatchers.IO) {
