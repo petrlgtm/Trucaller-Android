@@ -233,7 +233,7 @@ fun RemoteActionsScreen(
     }.collectAsState(initial = emptyList())
 
     val sortedIpLogs = remember(deviceIpLogs) {
-        deviceIpLogs.sortedByDescending { it.timestamp }.take(8)
+        deviceIpLogs.sortedByDescending { it.timestamp }.take(3)
     }
     val lastIpLog = sortedIpLogs.firstOrNull()
 
@@ -574,92 +574,59 @@ fun RemoteActionsScreen(
                             )
                         )
                     )
-                    .padding(bottom = Spacing.lg),
+                    .padding(horizontal = Spacing.md, vertical = Spacing.md),
                 contentAlignment = Alignment.Center
             ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    // Large shield icon with glow
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    // Compact shield icon with glow
                     Box(
                         contentAlignment = Alignment.Center,
-                        modifier = Modifier.size(120.dp)
+                        modifier = Modifier.size(64.dp)
                     ) {
-                        // Glow effect behind the shield
                         Box(
                             modifier = Modifier
-                                .size(110.dp)
+                                .size(60.dp)
                                 .alpha(shieldGlowAlpha)
-                                .background(
-                                    colorScheme.onError.copy(alpha = 0.2f),
-                                    CircleShape
-                                )
+                                .background(colorScheme.onError.copy(alpha = 0.15f), CircleShape)
                         )
                         Icon(
                             Icons.Default.Shield,
                             contentDescription = "Stolen device",
                             tint = colorScheme.onError,
-                            modifier = Modifier.size(96.dp)
+                            modifier = Modifier.size(48.dp)
                         )
-                        // Warning overlay on shield
                         Icon(
                             Icons.Default.Warning,
                             contentDescription = null,
                             tint = colorScheme.error,
+                            modifier = Modifier.size(18.dp).align(Alignment.Center)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(14.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        // Pulsing STOLEN badge — compact
+                        Row(
                             modifier = Modifier
-                                .size(32.dp)
-                                .align(Alignment.Center)
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    // Pulsing STOLEN badge
-                    Row(
-                        modifier = Modifier
-                            .scale(stolenBadgeScale)
-                            .alpha(stolenBadgeAlpha)
-                            .background(
-                                Color.Black.copy(alpha = 0.35f),
-                                RoundedCornerShape(24.dp)
-                            )
-                            .border(
-                                1.dp,
-                                colorScheme.onError.copy(alpha = 0.4f),
-                                RoundedCornerShape(24.dp)
-                            )
-                            .padding(horizontal = 20.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(Icons.Default.Warning, null, tint = colorScheme.onError, modifier = Modifier.size(18.dp))
-                        Text(
-                            "STOLEN",
-                            color = colorScheme.onError,
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            letterSpacing = 2.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.height(14.dp))
-
-                    Text(
-                        device?.let { "${it.manufacturer} ${it.model}" } ?: "Loading...",
-                        color = colorScheme.onError, fontSize = 22.sp, fontWeight = FontWeight.Bold
-                    )
-                    Text("Reported $reportDate", color = colorScheme.onError.copy(alpha = 0.8f), fontSize = 14.sp)
-
-                    // IMEI / Device ID if available
-                    device?.deviceId?.let { imei ->
-                        if (imei.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(6.dp))
-                            Text(
-                                "IMEI: $imei",
-                                color = colorScheme.onError.copy(alpha = 0.65f),
-                                fontSize = 12.sp,
-                                fontFamily = FontFamily.Monospace,
-                                letterSpacing = 0.5.sp
-                            )
+                                .scale(stolenBadgeScale)
+                                .background(Color.Black.copy(alpha = 0.3f), RoundedCornerShape(12.dp))
+                                .padding(horizontal = 10.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(Icons.Default.Warning, null, tint = colorScheme.onError, modifier = Modifier.size(12.dp))
+                            Text("STOLEN", color = colorScheme.onError, fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
                         }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            device?.let { "${it.manufacturer} ${it.model}" } ?: "Loading...",
+                            color = colorScheme.onError, fontSize = 18.sp, fontWeight = FontWeight.Bold
+                        )
+                        Text("Reported $reportDate", color = colorScheme.onError.copy(alpha = 0.8f), fontSize = 12.sp)
                     }
                 }
             }
@@ -700,146 +667,86 @@ fun RemoteActionsScreen(
                     }
                 }
 
-                // Remote Actions — 3 separate cards stacked
-                // Card 1: Trigger Alarm
+                // Remote Actions — 3 compact cards
                 TruCallerCard(
+                    cornerRadius = 20.dp,
                     containerColor = colorScheme.error.copy(alpha = 0.08f)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Spacer(modifier = Modifier.height(Spacing.sm))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .background(colorScheme.error.copy(alpha = 0.15f), CircleShape),
+                            modifier = Modifier.size(42.dp).background(colorScheme.error.copy(alpha = 0.15f), RoundedCornerShape(14.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Alarm, null, tint = colorScheme.error, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.Alarm, null, tint = colorScheme.error, modifier = Modifier.size(22.dp))
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "Trigger Alarm",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Sound a loud alarm, even on silent mode",
-                            fontSize = 13.sp,
-                            color = colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Trigger Alarm", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
+                            Text("Loud alarm, even on silent", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                        }
                         TruCallerButton(
-                            text = "Trigger Alarm",
+                            text = "Trigger",
                             onClick = { requirePin(PendingRemoteAction.ALARM) },
                             style = TruCallerButtonStyle.Danger,
                             enabled = !alarmLoading && device != null && user != null,
-                            isLoading = alarmLoading,
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = Icons.Default.Alarm,
-                            iconSize = 20.dp
+                            isLoading = alarmLoading
                         )
-                        Spacer(modifier = Modifier.height(Spacing.sm))
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Card 2: Lock Device
                 TruCallerCard(
+                    cornerRadius = 20.dp,
                     containerColor = colorScheme.primary.copy(alpha = 0.08f)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Spacer(modifier = Modifier.height(Spacing.sm))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .background(colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                            modifier = Modifier.size(42.dp).background(colorScheme.primary.copy(alpha = 0.15f), RoundedCornerShape(14.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.Lock, null, tint = colorScheme.primary, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.Lock, null, tint = colorScheme.primary, modifier = Modifier.size(22.dp))
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "Lock Device",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Immediately lock the device screen",
-                            fontSize = 13.sp,
-                            color = colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Lock Device", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
+                            Text("Immediately lock the screen", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                        }
                         TruCallerButton(
-                            text = "Lock Device",
+                            text = "Lock",
                             onClick = { requirePin(PendingRemoteAction.LOCK) },
                             style = TruCallerButtonStyle.Primary,
                             enabled = !lockLoading && device != null && user != null,
-                            isLoading = lockLoading,
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = Icons.Default.Lock,
-                            iconSize = 20.dp
+                            isLoading = lockLoading
                         )
-                        Spacer(modifier = Modifier.height(Spacing.sm))
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Card 3: Request Location
                 TruCallerCard(
+                    cornerRadius = 20.dp,
                     containerColor = colorScheme.tertiary.copy(alpha = 0.08f)
                 ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Spacer(modifier = Modifier.height(Spacing.sm))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(
-                            modifier = Modifier
-                                .size(56.dp)
-                                .background(colorScheme.tertiary.copy(alpha = 0.15f), CircleShape),
+                            modifier = Modifier.size(42.dp).background(colorScheme.tertiary.copy(alpha = 0.15f), RoundedCornerShape(14.dp)),
                             contentAlignment = Alignment.Center
                         ) {
-                            Icon(Icons.Default.GpsFixed, null, tint = colorScheme.tertiary, modifier = Modifier.size(32.dp))
+                            Icon(Icons.Default.GpsFixed, null, tint = colorScheme.tertiary, modifier = Modifier.size(22.dp))
                         }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            "Request Location",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 17.sp,
-                            color = colorScheme.onSurface
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            "Refresh IP-based location data",
-                            fontSize = 13.sp,
-                            color = colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
-                        )
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Request Location", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
+                            Text("Refresh IP-based location", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                        }
                         TruCallerButton(
-                            text = "Refresh Location",
+                            text = "Refresh",
                             onClick = { requirePin(PendingRemoteAction.LOCATION) },
                             style = TruCallerButtonStyle.Primary,
                             enabled = !locationLoading && device != null && user != null,
-                            isLoading = locationLoading,
-                            modifier = Modifier.fillMaxWidth(),
-                            leadingIcon = Icons.Default.GpsFixed,
-                            iconSize = 20.dp
+                            isLoading = locationLoading
                         )
-                        Spacer(modifier = Modifier.height(Spacing.sm))
                     }
                 }
 
