@@ -10,6 +10,7 @@ import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.data.repository.ContactRepository
 import com.byron.trucaller.data.repository.DeviceRepository
+import com.byron.trucaller.data.repository.GeofenceRepository
 import com.byron.trucaller.data.repository.StolenReportRepository
 import com.byron.trucaller.data.repository.SmsRepository
 import com.byron.trucaller.data.repository.UserRepository
@@ -31,6 +32,7 @@ class AppContainer(context: Context) {
     val stolenReportRepository = StolenReportRepository(database.stolenReportDao())
     val alarmRepository = AlarmRepository(database.alarmLogDao())
     val blockedNumberRepository = BlockedNumberRepository(database.blockedNumberDao())
+    val geofenceRepository = GeofenceRepository(database.geofenceDao(), database.geofenceEventDao())
     val smsRepository = SmsRepository(database.smsSpamDao(), callerIdRepository, blockedNumberRepository)
 
     suspend fun seedDatabaseIfEmpty() {

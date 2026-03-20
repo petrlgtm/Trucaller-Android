@@ -12,6 +12,7 @@ import com.trucaller.backend.routes.callerIdRoutes
 import com.trucaller.backend.routes.contactRoutes
 import com.trucaller.backend.routes.deviceRoutes
 import com.trucaller.backend.routes.blockedRoutes
+import com.trucaller.backend.routes.geofenceRoutes
 import com.trucaller.backend.routes.smsRoutes
 import com.trucaller.backend.routes.stolenReportRoutes
 import io.ktor.http.*
@@ -123,6 +124,7 @@ fun Application.module() {
         alarmRoutes()
         smsRoutes()
         blockedRoutes()
+        geofenceRoutes()
         adminRoutes()
     }
 }

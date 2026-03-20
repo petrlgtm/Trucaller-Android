@@ -145,6 +145,73 @@ object ApiClient {
     suspend fun getSmsSpamReports(): ApiResult<List<Map<String, Any>>> =
         get("/api/sms/reports")
 
+    // ── Geofences ─────────────────────────────────────────────────────────
+
+    suspend fun createGeofence(
+        deviceId: String,
+        label: String,
+        latitude: Double,
+        longitude: Double,
+        radiusMeters: Int = 200
+    ): ApiResult<Map<String, Any>> =
+        post("/api/geofences", mapOf(
+            "deviceId" to deviceId,
+            "label" to label,
+            "latitude" to latitude,
+            "longitude" to longitude,
+            "radiusMeters" to radiusMeters
+        ))
+
+    suspend fun getGeofences(deviceId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/geofences/$deviceId")
+
+    suspend fun getGeofenceDetail(geofenceId: String): ApiResult<Map<String, Any>> =
+        get("/api/geofences/detail/$geofenceId")
+
+    suspend fun updateGeofence(
+        geofenceId: String,
+        label: String? = null,
+        latitude: Double? = null,
+        longitude: Double? = null,
+        radiusMeters: Int? = null,
+        isActive: Boolean? = null
+    ): ApiResult<Unit> {
+        val body = mutableMapOf<String, Any>()
+        label?.let { body["label"] = it }
+        latitude?.let { body["latitude"] = it }
+        longitude?.let { body["longitude"] = it }
+        radiusMeters?.let { body["radiusMeters"] = it }
+        isActive?.let { body["isActive"] = it }
+        return put("/api/geofences/$geofenceId", body)
+    }
+
+    suspend fun deleteGeofence(geofenceId: String): ApiResult<Unit> =
+        delete("/api/geofences/$geofenceId")
+
+    suspend fun recordGeofenceEvent(
+        geofenceId: String,
+        deviceId: String,
+        transitionType: String,
+        latitude: Double,
+        longitude: Double
+    ): ApiResult<Map<String, Any>> =
+        post("/api/geofence-events", mapOf(
+            "geofenceId" to geofenceId,
+            "deviceId" to deviceId,
+            "transitionType" to transitionType,
+            "latitude" to latitude,
+            "longitude" to longitude
+        ))
+
+    suspend fun getGeofenceEvents(deviceId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/geofence-events/$deviceId")
+
+    suspend fun getGeofenceEventsByFence(geofenceId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/geofence-events/fence/$geofenceId")
+
+    suspend fun syncGeofenceEvent(eventData: Map<String, Any>): ApiResult<Map<String, Any>> =
+        post("/api/geofence-events", eventData)
+
     // ── Blocked Numbers ─────────────────────────────────────────────────
 
     suspend fun blockNumber(data: Map<String, Any>): ApiResult<Unit> =
@@ -171,6 +238,17 @@ object ApiClient {
 
     suspend fun getSpamNumbers(skip: Int = 0, limit: Int = 50): ApiResult<List<Map<String, Any>>> =
         get("/api/sms/spam-numbers?skip=$skip&limit=$limit")
+
+    // ── Geofence Endpoints ─────────────────────────────────────────────
+
+    suspend fun syncGeofenceEvent(eventData: Map<String, Any>): ApiResult<Unit> =
+        post("/api/geofences/events", eventData)
+
+    suspend fun getGeofenceEvents(deviceId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/geofences/events/$deviceId")
+
+    suspend fun getGeofences(deviceId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/geofences/$deviceId")
 
     // ── Admin Endpoints ──────────────────────────────────────────────────
 

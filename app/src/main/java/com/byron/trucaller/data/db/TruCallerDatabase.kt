@@ -13,6 +13,8 @@ import com.byron.trucaller.data.dao.IpLogDao
 import com.byron.trucaller.data.dao.StolenReportDao
 import com.byron.trucaller.data.dao.SmsSpamDao
 import com.byron.trucaller.data.dao.ContactAliasDao
+import com.byron.trucaller.data.dao.GeofenceDao
+import com.byron.trucaller.data.dao.GeofenceEventDao
 import com.byron.trucaller.data.dao.UserDao
 import com.byron.trucaller.data.model.AdminUser
 import com.byron.trucaller.data.model.AlarmLog
@@ -20,6 +22,8 @@ import com.byron.trucaller.data.model.BlockedNumber
 import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.Contact
 import com.byron.trucaller.data.model.Device
+import com.byron.trucaller.data.model.Geofence
+import com.byron.trucaller.data.model.GeofenceEvent
 import com.byron.trucaller.data.model.IpLog
 import com.byron.trucaller.data.model.ContactAlias
 import com.byron.trucaller.data.model.SmsSpamReport
@@ -38,9 +42,11 @@ import com.byron.trucaller.data.model.User
         AdminUser::class,
         BlockedNumber::class,
         SmsSpamReport::class,
-        ContactAlias::class
+        ContactAlias::class,
+        Geofence::class,
+        GeofenceEvent::class
     ],
-    version = 7,
+    version = 9,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -56,4 +62,6 @@ abstract class TruCallerDatabase : RoomDatabase() {
     abstract fun blockedNumberDao(): BlockedNumberDao
     abstract fun smsSpamDao(): SmsSpamDao
     abstract fun contactAliasDao(): ContactAliasDao
+    abstract fun geofenceDao(): GeofenceDao
+    abstract fun geofenceEventDao(): GeofenceEventDao
 }

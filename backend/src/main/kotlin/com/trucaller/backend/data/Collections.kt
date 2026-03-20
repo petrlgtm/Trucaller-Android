@@ -50,6 +50,12 @@ object Collections {
     val otpRateLimits: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("otpRateLimits")
 
+    val geofences: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("geofences")
+
+    val geofenceEvents: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("geofenceEvents")
+
     // ── Index creation ───────────────────────────────────────────────────
 
     /**
@@ -122,5 +128,17 @@ object Collections {
         // Index on userId for SMS spam reports
         database.getCollection<Document>("smsSpamReports")
             .createIndex(Indexes.ascending("userId"))
+
+        // Index on deviceId for geofences
+        database.getCollection<Document>("geofences")
+            .createIndex(Indexes.ascending("deviceId"))
+
+        // Index on deviceId for geofence events
+        database.getCollection<Document>("geofenceEvents")
+            .createIndex(Indexes.ascending("deviceId"))
+
+        // Index on geofenceId for geofence events
+        database.getCollection<Document>("geofenceEvents")
+            .createIndex(Indexes.ascending("geofenceId"))
     }
 }

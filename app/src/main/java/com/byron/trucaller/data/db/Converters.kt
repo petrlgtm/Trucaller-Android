@@ -4,6 +4,7 @@ import androidx.room.TypeConverter
 import com.byron.trucaller.data.model.AlarmResult
 import com.byron.trucaller.data.model.AlarmType
 import com.byron.trucaller.data.model.DeviceStatus
+import com.byron.trucaller.data.model.GeofenceTransitionType
 import com.byron.trucaller.data.model.ReportStatus
 import com.byron.trucaller.data.model.SpamCategory
 
@@ -32,4 +33,9 @@ class Converters {
     fun fromAlarmResult(result: AlarmResult): String = result.name
     @TypeConverter
     fun toAlarmResult(value: String): AlarmResult = AlarmResult.valueOf(value)
+
+    @TypeConverter
+    fun fromGeofenceTransitionType(type: GeofenceTransitionType): String = type.name
+    @TypeConverter
+    fun toGeofenceTransitionType(value: String): GeofenceTransitionType = GeofenceTransitionType.valueOf(value)
 }
