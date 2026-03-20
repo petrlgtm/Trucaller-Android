@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.filled.Report
+import androidx.compose.material.icons.filled.Rule
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
@@ -47,6 +48,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Snackbar
@@ -160,6 +162,15 @@ fun MessagesScreen(
                         text = "$spamCount spam",
                         type = BadgeType.Spam,
                         icon = Icons.Default.Shield
+                    )
+                }
+                Spacer(modifier = Modifier.width(4.dp))
+                IconButton(onClick = { rootNavController.navigate("sms_rules") }) {
+                    Icon(
+                        Icons.Default.Rule,
+                        contentDescription = "SMS Rules",
+                        tint = colorScheme.primary,
+                        modifier = Modifier.size(22.dp)
                     )
                 }
             }

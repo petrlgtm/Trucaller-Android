@@ -17,7 +17,8 @@ import kotlinx.coroutines.flow.Flow
 class SmsRepository(
     private val smsSpamDao: SmsSpamDao,
     private val callerIdRepository: CallerIdRepository,
-    private val blockedNumberRepository: BlockedNumberRepository
+    private val blockedNumberRepository: BlockedNumberRepository,
+    private val smsRuleRepository: SmsRuleRepository
 ) {
     companion object {
         private const val TAG = "SmsRepository"
@@ -139,8 +140,18 @@ class SmsRepository(
             val senderResult = senderCache.getOrPut(msg.address) {
                 lookupSender(msg.address, userId)
             }
-            // Refine category using message body content analysis
-            val finalCategory = classifyMessage(msg.address, msg.body, senderResult.second)
+
+            // Check user-defined rules first — they take priority over auto-classification
+            val userRuleCategory = try {
+                smsRuleRepository.evaluate(userId, msg.address, msg.body)
+            } catch (e: Exception) {
+                Log.w(TAG, "User rule evaluation failed", e)
+                null
+            }
+
+            val finalCategory = userRuleCategory
+                ?: classifyMessage(msg.address, msg.body, senderResult.second)
+
             val spamScore = when (finalCategory) {
                 SmsCategory.SPAM -> 80
                 SmsCategory.PROMOTIONAL -> 40
