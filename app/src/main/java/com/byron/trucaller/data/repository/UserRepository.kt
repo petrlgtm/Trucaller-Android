@@ -18,6 +18,7 @@ class UserRepository(
     suspend fun getUserByPhone(phone: String): User? = userDao.getByPhone(phone)
     suspend fun insertUser(user: User) = userDao.insert(user)
     suspend fun updateUser(user: User) = userDao.update(user)
+    suspend fun deleteUser(user: User) = userDao.delete(user)
 
     suspend fun deactivateUser(userId: String) = userDao.setActive(userId, false)
     suspend fun reactivateUser(userId: String) = userDao.setActive(userId, true)

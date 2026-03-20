@@ -1,0 +1,13 @@
+Initial release of TruCaller v1.0.0
+
+- Caller ID lookup with community-driven spam scoring
+- Call and SMS spam blocking with scheduled blocking rules
+- Contact sync and cloud backup
+- Anti-theft: stolen device reporting, remote alarm, remote lock, IP tracking
+- Family groups with shared device monitoring and alerts
+- Call recording with playback and management
+- Geofence alerts for device location boundaries
+- User analytics dashboard
+- Dark mode, light mode, and system theme support
+- Device administrator integration for enhanced security
+- Privacy-first design: bcrypt passwords, JWT auth, HTTPS encryption

@@ -7,6 +7,7 @@ import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.*
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -25,6 +26,7 @@ fun Routing.authRoutes() {
         registerRoute()
         loginRoute()
         resetPasswordRoute()
+        deleteAccountRoute()
     }
 }
 
@@ -523,5 +525,85 @@ private fun Route.resetPasswordRoute() {
                 message = "Password reset successfully."
             )
         )
+    }
+}
+
+// ── DELETE /api/auth/delete-account ──────────────────────────────────
+
+private fun Route.deleteAccountRoute() {
+    authenticate("auth-jwt") {
+        delete("/delete-account") {
+            val userId = call.userId()
+
+            // Verify the user exists
+            val userDoc = Collections.users
+                .find(Filters.eq("_id", userId))
+                .firstOrNull()
+
+            if (userDoc == null) {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiResponse<Unit>(success = false, error = "Account not found.")
+                )
+                return@delete
+            }
+
+            // Delete all user data across collections
+            val userFilter = Filters.eq("userId", userId)
+
+            // Delete devices and their IP logs
+            val devicesCursor = Collections.devices.find(userFilter)
+            val deviceIds = mutableListOf<String>()
+            devicesCursor.collect { doc ->
+                val deviceId = doc.getString("_id")
+                if (deviceId != null) deviceIds.add(deviceId)
+            }
+            for (deviceId in deviceIds) {
+                Collections.ipLogs.deleteMany(Filters.eq("deviceId", deviceId))
+                Collections.alarmLogs.deleteMany(Filters.eq("deviceId", deviceId))
+                Collections.geofenceEvents.deleteMany(Filters.eq("deviceId", deviceId))
+                Collections.geofences.deleteMany(Filters.eq("deviceId", deviceId))
+            }
+            Collections.devices.deleteMany(userFilter)
+
+            // Delete contacts
+            Collections.contacts.deleteMany(userFilter)
+
+            // Delete blocked numbers
+            Collections.blockedNumbers.deleteMany(userFilter)
+
+            // Delete stolen reports
+            Collections.stolenReports.deleteMany(userFilter)
+
+            // Delete SMS spam reports
+            Collections.smsSpamReports.deleteMany(userFilter)
+
+            // Delete spam verifications
+            Collections.spamVerifications.deleteMany(userFilter)
+
+            // Delete family memberships
+            Collections.familyMembers.deleteMany(userFilter)
+
+            // Delete family groups owned by this user
+            Collections.familyGroups.deleteMany(Filters.eq("ownerId", userId))
+
+            // Delete OTP codes and rate limits for this user's phone
+            val phoneNumber = userDoc.getString("phoneNumber")
+            if (phoneNumber != null) {
+                Collections.otpCodes.deleteMany(Filters.eq("phoneNumber", phoneNumber))
+                Collections.otpRateLimits.deleteMany(Filters.eq("phoneNumber", phoneNumber))
+            }
+
+            // Finally, delete the user document
+            Collections.users.deleteOne(Filters.eq("_id", userId))
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Unit>(
+                    success = true,
+                    message = "Account and all associated data have been permanently deleted."
+                )
+            )
+        }
     }
 }

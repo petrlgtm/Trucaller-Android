@@ -46,7 +46,9 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -119,6 +121,10 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
     var showIpHistory by remember { mutableStateOf(false) }
     var showAbout by remember { mutableStateOf(false) }
     var showLogoutDialog by remember { mutableStateOf(false) }
+    var showDeleteAccountDialog by remember { mutableStateOf(false) }
+    var deleteAccountPassword by remember { mutableStateOf("") }
+    var deleteAccountError by remember { mutableStateOf<String?>(null) }
+    var isDeleting by remember { mutableStateOf(false) }
     var showProtectionDialog by remember { mutableStateOf(false) }
     var showDisableProtectionDialog by remember { mutableStateOf(false) }
     var disablePassword by remember { mutableStateOf("") }
@@ -286,6 +292,110 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
             },
             dismissButton = {
                 TextButton(onClick = { showLogoutDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    val deleteScope = rememberCoroutineScope()
+
+    if (showDeleteAccountDialog) {
+        AlertDialog(
+            onDismissRequest = {
+                if (!isDeleting) {
+                    showDeleteAccountDialog = false
+                    deleteAccountPassword = ""
+                    deleteAccountError = null
+                }
+            },
+            title = { Text("Delete My Account", fontWeight = FontWeight.Bold, color = colorScheme.error) },
+            text = {
+                Column {
+                    Text(
+                        "This action is permanent and cannot be undone. All your data will be deleted, including your profile, contacts, devices, and reports.",
+                        fontSize = 13.sp,
+                        color = colorScheme.onSurfaceVariant,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        "Enter your password to confirm:",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = deleteAccountPassword,
+                        onValueChange = { deleteAccountPassword = it; deleteAccountError = null },
+                        label = { Text("Password") },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colorScheme.error,
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedContainerColor = colorScheme.surfaceVariant,
+                            unfocusedContainerColor = colorScheme.surfaceVariant
+                        ),
+                        isError = deleteAccountError != null,
+                        enabled = !isDeleting
+                    )
+                    if (deleteAccountError != null) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(deleteAccountError!!, color = colorScheme.error, fontSize = 12.sp)
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (deleteAccountPassword.isBlank()) {
+                            deleteAccountError = "Password is required"
+                        } else if (!authViewModel.verifyPassword(deleteAccountPassword)) {
+                            deleteAccountError = "Incorrect password"
+                        } else {
+                            isDeleting = true
+                            deleteAccountError = null
+                            deleteScope.launch {
+                                val success = authViewModel.deleteAccount()
+                                isDeleting = false
+                                if (success) {
+                                    showDeleteAccountDialog = false
+                                    deleteAccountPassword = ""
+                                    rootNavController.navigate("login") {
+                                        popUpTo(0) { inclusive = true }
+                                    }
+                                } else {
+                                    deleteAccountError = "Failed to delete account. Please try again."
+                                }
+                            }
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = colorScheme.error),
+                    enabled = !isDeleting
+                ) {
+                    if (isDeleting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            color = colorScheme.onError,
+                            strokeWidth = 2.dp
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Text("Delete Account", color = colorScheme.onError)
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = {
+                        showDeleteAccountDialog = false
+                        deleteAccountPassword = ""
+                        deleteAccountError = null
+                    },
+                    enabled = !isDeleting
+                ) { Text("Cancel") }
             }
         )
     }
@@ -792,6 +902,20 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                         )
                     }
                 }
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Delete My Account
+                ProfileMenuItem(
+                    icon = Icons.Default.DeleteForever,
+                    title = "Delete My Account",
+                    iconColor = colorScheme.error,
+                    titleColor = colorScheme.error,
+                    onClick = {
+                        deleteAccountPassword = ""
+                        deleteAccountError = null
+                        showDeleteAccountDialog = true
+                    }
+                )
                 HorizontalDivider(color = colorScheme.outlineVariant)
 
                 // Logout

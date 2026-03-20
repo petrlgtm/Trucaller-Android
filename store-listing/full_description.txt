@@ -1,0 +1,49 @@
+TruCaller is a powerful caller identification and anti-theft protection app built for Android. Know who is calling before you answer, block spam and fraud numbers, and keep your device safe with advanced security features.
+
+KEY FEATURES
+
+Caller Identification
+- Identify unknown callers using a community-driven database
+- See spam scores and fraud warnings before answering
+- Community-verified spam reports for higher accuracy
+
+Spam & Call Blocking
+- Block unwanted calls and SMS messages
+- Automatic spam detection with configurable blocking schedules
+- Bulk report spam numbers to protect the community
+
+Contact Management
+- Sync and back up your contacts to secure cloud storage
+- Restore contacts when switching devices
+- Smart contact search and organization
+
+Anti-Theft Protection
+- Report your device as stolen and track its last known location
+- Trigger a remote alarm on your missing device
+- Remote device lock via Device Administrator
+- IP and network logging for forensic recovery
+
+Family & Group Safety
+- Create family groups to monitor devices together
+- Send alerts to family members
+- Shared device tracking for peace of mind
+
+Call Recording
+- Record incoming and outgoing calls
+- Manage and play back recordings from the app
+- Configurable recording settings
+
+Analytics Dashboard
+- View your call and spam statistics
+- Track blocking effectiveness over time
+- Community contribution metrics
+
+Privacy & Security
+- Passwords hashed with bcrypt; never stored in plaintext
+- JWT-based authentication with secure token management
+- All API communications encrypted over HTTPS
+- Full account deletion available at any time
+
+TruCaller is made with care in Uganda. Your privacy matters to us -- we never sell your data to third parties.
+
+Download TruCaller today and take control of your calls and device security.

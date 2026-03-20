@@ -345,6 +345,35 @@ class AuthViewModel(
         _authState.value = AuthState()
     }
 
+    /**
+     * Permanently deletes the user's account on the backend and clears all local data.
+     * Returns true if the account was successfully deleted (or backend was unreachable
+     * and local cleanup proceeded), false if the user is not authenticated.
+     */
+    suspend fun deleteAccount(): Boolean {
+        val user = _authState.value.user ?: return false
+
+        // Attempt backend deletion
+        try {
+            val result = ApiClient.deleteAccount()
+            if (!result.success) {
+                // If backend explicitly rejects (not a network error), abort
+                if (result.error != null && !result.error.contains("Network error")) {
+                    return false
+                }
+            }
+        } catch (_: Exception) {
+            // Network failure — proceed with local cleanup anyway
+        }
+
+        // Clear local data
+        userRepository.deleteUser(user)
+        preferences.setLoggedInUserId(null)
+        phoneAuthManager.signOut()
+        _authState.value = AuthState()
+        return true
+    }
+
     /** Syncs trust score/level from the backend and updates local state. */
     private suspend fun syncTrustFromBackend(userId: String) {
         try {
