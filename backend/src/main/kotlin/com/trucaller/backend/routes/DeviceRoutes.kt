@@ -28,7 +28,14 @@ data class DeviceRegisterRequest(
     val manufacturer: String,
     val osVersion: String,
     val deviceId: String,
-    val fcmToken: String? = null
+    val fcmToken: String? = null,
+    val lastIp: String? = null,
+    val isp: String? = null,
+    val city: String? = null,
+    val country: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val networkType: String? = null
 )
 
 @Serializable
@@ -99,9 +106,12 @@ private fun Route.registerDevice() {
             return@post
         }
 
-        val clientIp = call.request.header("X-Forwarded-For")
+        val headerIp = call.request.header("X-Forwarded-For")
             ?.split(",")?.firstOrNull()?.trim()
             ?: call.request.local.remoteHost
+
+        // Use client-provided IP if available, fall back to X-Forwarded-For header
+        val deviceIp = request.lastIp ?: headerIp
 
         val now = Instant.now().toString()
 
@@ -118,24 +128,24 @@ private fun Route.registerDevice() {
                 .append("deviceId", request.deviceId)
                 .append("userId", userId)
                 .append("status", "ACTIVE")
-                .append("lastIp", clientIp)
+                .append("lastIp", deviceIp)
                 .append("lastSeen", now)
                 .append("fcmToken", request.fcmToken)
             ).append("\$setOnInsert", Document("registeredAt", now)),
             UpdateOptions().upsert(true)
         )
 
-        // Create IpLog entry with default geolocation fields
+        // Create IpLog entry using client-provided geolocation when available
         val ipLogDoc = Document()
             .append("_id", ObjectId().toString())
             .append("deviceId", request.deviceId)
-            .append("ipAddress", clientIp)
-            .append("isp", "unknown")
-            .append("city", "unknown")
-            .append("country", "unknown")
-            .append("latitude", 0.0)
-            .append("longitude", 0.0)
-            .append("networkType", "unknown")
+            .append("ipAddress", deviceIp)
+            .append("isp", request.isp ?: "unknown")
+            .append("city", request.city ?: "unknown")
+            .append("country", request.country ?: "unknown")
+            .append("latitude", request.latitude ?: 0.0)
+            .append("longitude", request.longitude ?: 0.0)
+            .append("networkType", request.networkType ?: "unknown")
             .append("timestamp", now)
 
         Collections.ipLogs.insertOne(ipLogDoc)

@@ -140,7 +140,13 @@ class DeviceRegistrationService(
                 "deviceId" to (androidId ?: "unknown"),
                 "status" to "ACTIVE",
                 "lastIp" to ipInfo.ip,
-                "fcmToken" to (fcmToken ?: "")
+                "fcmToken" to (fcmToken ?: ""),
+                "isp" to ipInfo.isp,
+                "city" to city,
+                "country" to country,
+                "latitude" to latitude,
+                "longitude" to longitude,
+                "networkType" to getNetworkType()
             ))
         } catch (e: Exception) {
             Log.w("DeviceRegService", "Backend sync failed (offline?)", e)
