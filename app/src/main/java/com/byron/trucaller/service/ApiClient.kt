@@ -236,6 +236,9 @@ object ApiClient {
     suspend fun deleteAdminCallerId(entryId: String): ApiResult<Unit> =
         delete("/api/admin/caller-ids/$entryId")
 
+    suspend fun updateAdminStolenReportStatus(reportId: String, status: String): ApiResult<Unit> =
+        put("/api/admin/stolen-reports/$reportId/status", mapOf("status" to status))
+
     suspend fun adminUpdateDeviceStatus(
         deviceId: String,
         status: String,

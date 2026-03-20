@@ -188,6 +188,52 @@ class StolenReportViewModel(
         }
     }
 
+    /**
+     * Admin-only: update a stolen report's status without ownership check.
+     * Uses the admin endpoint PUT /api/admin/stolen-reports/{id}/status.
+     * When resolving, the backend automatically sets the device status to ACTIVE.
+     */
+    fun adminUpdateReportStatus(reportId: String, newStatus: ReportStatus) {
+        viewModelScope.launch {
+            _updatingReportId.value = reportId
+            try {
+                // 1. Update locally in Room
+                stolenReportRepository.updateReportStatus(reportId, newStatus)
+
+                // 2. Sync via admin endpoint (no ownership check on backend)
+                try {
+                    val result = ApiClient.updateAdminStolenReportStatus(reportId, newStatus.name)
+                    if (result.success) {
+                        Log.d("StolenReportVM", "Admin status synced: $reportId -> $newStatus")
+                    } else {
+                        Log.w("StolenReportVM", "Admin status sync failed: ${result.error}")
+                    }
+                } catch (e: Exception) {
+                    Log.e("StolenReportVM", "Admin status sync error for $reportId", e)
+                }
+
+                // 3. If resolving, update device status locally as well
+                if (newStatus == ReportStatus.RESOLVED) {
+                    try {
+                        val report = stolenReportRepository.getReportById(reportId)
+                        if (report != null) {
+                            deviceRepository.updateDeviceStatus(report.deviceId, DeviceStatus.ACTIVE)
+                        }
+                    } catch (e: Exception) {
+                        Log.e("StolenReportVM", "Local device recovery error for report $reportId", e)
+                    }
+                }
+
+                _statusMessage.value = "Report ${newStatus.name.lowercase().replaceFirstChar { it.uppercase() }}"
+            } catch (e: Exception) {
+                Log.e("StolenReportVM", "Failed to admin-update report status for $reportId", e)
+                _statusMessage.value = "Failed to update status: ${e.message}"
+            } finally {
+                _updatingReportId.value = null
+            }
+        }
+    }
+
     fun markDeviceRecovered(deviceId: String) {
         viewModelScope.launch {
             deviceRepository.updateDeviceStatus(deviceId, DeviceStatus.ACTIVE)

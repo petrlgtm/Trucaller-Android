@@ -1,9 +1,13 @@
 package com.trucaller.backend.routes
 
+import at.favre.lib.crypto.bcrypt.BCrypt
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Updates
 import com.trucaller.backend.auth.requireAdmin
+import com.trucaller.backend.auth.userId
 import com.trucaller.backend.data.Collections
+import com.trucaller.backend.data.models.AdminPasswordUpdateRequest
+import com.trucaller.backend.data.models.AdminProfileUpdateRequest
 import com.trucaller.backend.data.models.ApiResponse
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -11,6 +15,7 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
 import org.bson.Document
@@ -47,6 +52,11 @@ data class CallerIdUpdateRequest(
 )
 
 @Serializable
+data class AdminStatusUpdateRequest(
+    val status: String
+)
+
+@Serializable
 data class UserWithDevices(
     val user: String,       // JSON string of user document
     val devices: List<String> // JSON strings of device documents
@@ -67,6 +77,9 @@ data class UserWithDevices(
  * - `POST   /api/admin/caller-ids`      -- create a caller ID entry
  * - `PUT    /api/admin/caller-ids/{id}`  -- update a caller ID entry
  * - `DELETE /api/admin/caller-ids/{id}`  -- delete a caller ID entry
+ * - `PUT    /api/admin/stolen-reports/{id}/status` -- update stolen report status (no ownership check)
+ * - `PUT    /api/admin/profile`           -- update admin name and email
+ * - `PUT    /api/admin/password`          -- update admin password (BCrypt verified)
  */
 fun Route.adminRoutes() {
 
@@ -436,6 +449,91 @@ fun Route.adminRoutes() {
                     ApiResponse<Nothing>(
                         success = true,
                         message = "Caller ID entry deleted"
+                    )
+                )
+            }
+
+            // ── PUT /api/admin/stolen-reports/{id}/status ─────────────
+            put("/stolen-reports/{id}/status") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@put
+                }
+
+                val reportId = call.parameters["id"]
+                if (reportId.isNullOrBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Missing report id")
+                    )
+                    return@put
+                }
+
+                val request = try {
+                    call.receive<AdminStatusUpdateRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Invalid request body")
+                    )
+                    return@put
+                }
+
+                // Validate status value
+                val validStatuses = listOf("PENDING", "VERIFIED", "ESCALATED", "RESOLVED")
+                if (request.status !in validStatuses) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(
+                            success = false,
+                            error = "Invalid status. Must be one of: ${validStatuses.joinToString()}"
+                        )
+                    )
+                    return@put
+                }
+
+                // Admin: no ownership check — update any report by ID
+                val updateFields = Document("status", request.status)
+                    .append("updatedAt", java.time.Instant.now().toString())
+
+                val result = Collections.stolenReports.updateOne(
+                    Filters.eq("_id", reportId),
+                    Document("\$set", updateFields)
+                )
+
+                if (result.matchedCount == 0L) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        ApiResponse<Nothing>(success = false, error = "Stolen report not found")
+                    )
+                    return@put
+                }
+
+                // When resolving, optionally update device status back to ACTIVE
+                if (request.status == "RESOLVED") {
+                    val reportDoc = Collections.stolenReports
+                        .find(Filters.eq("_id", reportId))
+                        .toList()
+                        .firstOrNull()
+                    val deviceId = reportDoc?.getString("deviceId")
+                    if (deviceId != null) {
+                        Collections.devices.updateOne(
+                            Filters.eq("deviceId", deviceId),
+                            Document("\$set", Document("status", "ACTIVE"))
+                        )
+                    }
+                }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse<Nothing>(
+                        success = true,
+                        message = "Stolen report status updated to ${request.status}"
                     )
                 )
             }
