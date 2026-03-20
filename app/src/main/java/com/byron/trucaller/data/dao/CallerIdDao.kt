@@ -7,6 +7,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Update
 import com.byron.trucaller.data.model.CallerIdEntry
+import com.byron.trucaller.data.model.SpamCategory
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -37,6 +38,15 @@ interface CallerIdDao {
 
     @Delete
     suspend fun delete(entry: CallerIdEntry)
+
+    @Query("DELETE FROM caller_id_entries WHERE id IN (:ids)")
+    suspend fun deleteByIds(ids: List<String>)
+
+    @Query("UPDATE caller_id_entries SET category = :category, lastUpdated = :lastUpdated WHERE id IN (:ids)")
+    suspend fun updateCategoryByIds(ids: List<String>, category: SpamCategory, lastUpdated: String)
+
+    @Query("SELECT * FROM caller_id_entries WHERE id IN (:ids)")
+    suspend fun getByIds(ids: List<String>): List<CallerIdEntry>
 
     @Query("SELECT COUNT(*) FROM caller_id_entries")
     fun countFlow(): Flow<Int>

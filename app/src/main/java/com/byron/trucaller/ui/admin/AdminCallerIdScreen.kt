@@ -1,8 +1,12 @@
 package com.byron.trucaller.ui.admin
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,12 +20,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.outlined.Circle
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.BottomAppBar
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -96,12 +109,80 @@ fun AdminCallerIdScreen(navController: NavController, callerIdViewModel: CallerI
     var showDeleteDialog by remember { mutableStateOf(false) }
     var selectedEntry by remember { mutableStateOf<CallerIdEntry?>(null) }
 
+    // Multi-select state
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    var selectedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBulkDeleteDialog by remember { mutableStateOf(false) }
+    var showBulkCategoryDialog by remember { mutableStateOf(false) }
+
+    val isBulkOperationInProgress by callerIdViewModel.isBulkOperationInProgress.collectAsState()
+
+    // Exit multi-select when no items remain selected
+    fun exitMultiSelect() {
+        isMultiSelectMode = false
+        selectedIds = emptySet()
+    }
+
+    fun toggleSelection(id: String) {
+        selectedIds = if (selectedIds.contains(id)) {
+            val updated = selectedIds - id
+            if (updated.isEmpty()) {
+                isMultiSelectMode = false
+            }
+            updated
+        } else {
+            selectedIds + id
+        }
+    }
+
     val filtered by remember(searchQuery, allEntries) {
         derivedStateOf {
             if (searchQuery.isBlank()) allEntries
             else {
                 val q = searchQuery.lowercase()
                 allEntries.filter { it.phoneNumber.contains(q) || it.name.lowercase().contains(q) }
+            }
+        }
+    }
+
+    // Clean up selectedIds when entries change (e.g., after bulk delete)
+    LaunchedEffect(allEntries) {
+        if (isMultiSelectMode) {
+            val validIds = allEntries.map { it.id }.toSet()
+            val cleaned = selectedIds.intersect(validIds)
+            selectedIds = cleaned
+            if (cleaned.isEmpty()) {
+                isMultiSelectMode = false
+            }
+        }
+    }
+
+    // Pagination state
+    var currentPage by remember { mutableIntStateOf(1) }
+    val lazyListState = rememberLazyListState()
+
+    // Reset page when filter changes
+    LaunchedEffect(searchQuery) {
+        currentPage = 1
+    }
+
+    val paginatedItems by remember(filtered, currentPage) {
+        derivedStateOf { filtered.take(PAGE_SIZE * currentPage) }
+    }
+    val hasMoreItems by remember(paginatedItems, filtered) {
+        derivedStateOf { paginatedItems.size < filtered.size }
+    }
+
+    // Detect scroll near bottom to load next page
+    LaunchedEffect(lazyListState, hasMoreItems) {
+        snapshotFlow {
+            val layoutInfo = lazyListState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisibleIndex to totalItems
+        }.collect { (lastVisible, total) ->
+            if (total > 0 && lastVisible >= total - 3 && hasMoreItems) {
+                currentPage++
             }
         }
     }
@@ -149,7 +230,7 @@ fun AdminCallerIdScreen(navController: NavController, callerIdViewModel: CallerI
         )
     }
 
-    // Delete Confirmation Dialog
+    // Single Delete Confirmation Dialog
     if (showDeleteDialog && selectedEntry != null) {
         AlertDialog(
             onDismissRequest = { showDeleteDialog = false; selectedEntry = null },
@@ -168,37 +249,212 @@ fun AdminCallerIdScreen(navController: NavController, callerIdViewModel: CallerI
         )
     }
 
+    // Bulk Delete Confirmation Dialog
+    if (showBulkDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showBulkDeleteDialog = false },
+            title = { Text("Delete ${selectedIds.size} Entries") },
+            text = {
+                Text("Are you sure you want to delete ${selectedIds.size} selected entries? This action cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showBulkDeleteDialog = false
+                        callerIdViewModel.bulkDeleteEntries(selectedIds) {
+                            exitMultiSelect()
+                        }
+                    },
+                    enabled = !isBulkOperationInProgress
+                ) { Text("Delete All", color = colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showBulkDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Bulk Category Change Dialog
+    if (showBulkCategoryDialog) {
+        BulkCategoryDialog(
+            selectedCount = selectedIds.size,
+            onDismiss = { showBulkCategoryDialog = false },
+            onConfirm = { category ->
+                showBulkCategoryDialog = false
+                callerIdViewModel.bulkUpdateCategory(selectedIds, category) {
+                    exitMultiSelect()
+                }
+            }
+        )
+    }
+
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        "Caller ID (${filtered.size})",
-                        fontWeight = FontWeight.Bold,
-                        color = colorScheme.onPrimary
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
-            )
+            if (isMultiSelectMode) {
+                // Multi-select top bar
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(28.dp)
+                                    .clip(CircleShape)
+                                    .background(colorScheme.onPrimary),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    "${selectedIds.size}",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 14.sp,
+                                    color = colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                "Selected",
+                                fontWeight = FontWeight.Bold,
+                                color = colorScheme.onPrimary
+                            )
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { exitMultiSelect() }) {
+                            Icon(Icons.Default.Close, "Exit selection", tint = colorScheme.onPrimary)
+                        }
+                    },
+                    actions = {
+                        val allFilteredIds = filtered.map { it.id }.toSet()
+                        val allSelected = allFilteredIds.isNotEmpty() && allFilteredIds.all { it in selectedIds }
+
+                        TextButton(onClick = {
+                            selectedIds = if (allSelected) {
+                                emptySet()
+                            } else {
+                                allFilteredIds
+                            }
+                            if (selectedIds.isEmpty()) {
+                                isMultiSelectMode = false
+                            }
+                        }) {
+                            Text(
+                                if (allSelected) "Deselect All" else "Select All",
+                                color = colorScheme.onPrimary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+                )
+            } else {
+                // Normal top bar
+                TopAppBar(
+                    title = {
+                        Text(
+                            "Caller ID (${filtered.size})",
+                            fontWeight = FontWeight.Bold,
+                            color = colorScheme.onPrimary
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navController.popBackStack() }) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+                )
+            }
         },
         floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = colorScheme.primary,
-                contentColor = colorScheme.onPrimary
+            if (!isMultiSelectMode) {
+                FloatingActionButton(
+                    onClick = { showAddDialog = true },
+                    containerColor = colorScheme.primary,
+                    contentColor = colorScheme.onPrimary
+                ) {
+                    Icon(Icons.Default.Add, "Add entry")
+                }
+            }
+        },
+        bottomBar = {
+            // Bulk action bar
+            AnimatedVisibility(
+                visible = isMultiSelectMode && selectedIds.isNotEmpty(),
+                enter = slideInVertically(initialOffsetY = { it }),
+                exit = slideOutVertically(targetOffsetY = { it })
             ) {
-                Icon(Icons.Default.Add, "Add entry")
+                BottomAppBar(
+                    containerColor = colorScheme.surfaceVariant,
+                    tonalElevation = 4.dp
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.md),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (isBulkOperationInProgress) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp,
+                                color = colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                "Processing...",
+                                fontSize = 14.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Button(
+                                onClick = { showBulkDeleteDialog = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colorScheme.error,
+                                    contentColor = colorScheme.onError
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Delete (${selectedIds.size})")
+                            }
+                            Button(
+                                onClick = { showBulkCategoryDialog = true },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = colorScheme.primary,
+                                    contentColor = colorScheme.onPrimary
+                                ),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Icon(
+                                    Icons.Default.Edit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Category (${selectedIds.size})")
+                            }
+                        }
+                    }
+                }
             }
         },
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         containerColor = colorScheme.background
     ) { paddingValues ->
         Column(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
+            // Progress indicator during bulk operations
+            if (isBulkOperationInProgress) {
+                LinearProgressIndicator(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = colorScheme.primary
+                )
+            }
+
             OutlinedTextField(
                 value = searchQuery, onValueChange = { searchQuery = it },
                 placeholder = { Text("Search by phone or name...") },
@@ -229,8 +485,12 @@ fun AdminCallerIdScreen(navController: NavController, callerIdViewModel: CallerI
                     )
                 }
                 else -> {
-                    LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md)) {
-                        items(filtered, key = { it.id }) { entry ->
+                    LazyColumn(
+                        state = lazyListState,
+                        modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md)
+                    ) {
+                        items(paginatedItems, key = { it.id }) { entry ->
+                            val isSelected = entry.id in selectedIds
                             val catBadgeType = when (entry.category) {
                                 SpamCategory.SAFE -> BadgeType.Success
                                 SpamCategory.SUSPECTED_SPAM -> BadgeType.Warning
@@ -249,17 +509,37 @@ fun AdminCallerIdScreen(navController: NavController, callerIdViewModel: CallerI
                                     .padding(vertical = 3.dp)
                                     .combinedClickable(
                                         onClick = {
-                                            selectedEntry = entry
-                                            showEditDialog = true
+                                            if (isMultiSelectMode) {
+                                                toggleSelection(entry.id)
+                                            } else {
+                                                selectedEntry = entry
+                                                showEditDialog = true
+                                            }
                                         },
                                         onLongClick = {
-                                            selectedEntry = entry
-                                            showDeleteDialog = true
+                                            if (!isMultiSelectMode) {
+                                                isMultiSelectMode = true
+                                                selectedIds = setOf(entry.id)
+                                            } else {
+                                                toggleSelection(entry.id)
+                                            }
                                         }
                                     ),
-                                elevation = 0.5.dp
+                                elevation = if (isSelected) 2.dp else 0.5.dp
                             ) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    // Selection checkbox in multi-select mode
+                                    if (isMultiSelectMode) {
+                                        Icon(
+                                            imageVector = if (isSelected) Icons.Default.CheckCircle
+                                            else Icons.Outlined.Circle,
+                                            contentDescription = if (isSelected) "Selected" else "Not selected",
+                                            tint = if (isSelected) colorScheme.primary
+                                            else colorScheme.onSurfaceVariant,
+                                            modifier = Modifier.size(24.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                    }
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
                                             entry.name,
@@ -306,12 +586,105 @@ fun AdminCallerIdScreen(navController: NavController, callerIdViewModel: CallerI
                                 }
                             }
                         }
+                        // Pagination footer
+                        item {
+                            if (hasMoreItems) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(Spacing.md),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp,
+                                        color = colorScheme.primary
+                                    )
+                                }
+                            } else if (paginatedItems.size > PAGE_SIZE) {
+                                Text(
+                                    "All items loaded",
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(Spacing.md),
+                                    textAlign = TextAlign.Center,
+                                    fontSize = 13.sp,
+                                    color = colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                         item { Spacer(modifier = Modifier.height(80.dp)) }
                     }
                 }
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun BulkCategoryDialog(
+    selectedCount: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (SpamCategory) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var selectedCategory by remember { mutableStateOf(SpamCategory.SAFE) }
+
+    val colorScheme = MaterialTheme.colorScheme
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Change Category") },
+        text = {
+            Column {
+                Text(
+                    "Update category for $selectedCount selected entries:",
+                    fontSize = 14.sp,
+                    color = colorScheme.onSurfaceVariant
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = !expanded }
+                ) {
+                    OutlinedTextField(
+                        value = selectedCategory.name,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Category") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(type = MenuAnchorType.PrimaryNotEditable),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colorScheme.primary,
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedContainerColor = colorScheme.surfaceVariant,
+                            unfocusedContainerColor = colorScheme.surfaceVariant
+                        )
+                    )
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
+                        SpamCategory.entries.forEach { cat ->
+                            DropdownMenuItem(
+                                text = { Text(cat.name) },
+                                onClick = { selectedCategory = cat; expanded = false }
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(selectedCategory) }) {
+                Text("Apply", color = colorScheme.primary)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

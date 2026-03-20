@@ -28,6 +28,10 @@ class CallerIdRepository(
     suspend fun insertEntry(entry: CallerIdEntry) = callerIdDao.insert(entry)
     suspend fun updateEntry(entry: CallerIdEntry) = callerIdDao.update(entry)
     suspend fun deleteEntry(entry: CallerIdEntry) = callerIdDao.delete(entry)
+    suspend fun deleteEntriesByIds(ids: List<String>) = callerIdDao.deleteByIds(ids)
+    suspend fun updateCategoryByIds(ids: List<String>, category: SpamCategory, lastUpdated: String) =
+        callerIdDao.updateCategoryByIds(ids, category, lastUpdated)
+    suspend fun getEntriesByIds(ids: List<String>): List<CallerIdEntry> = callerIdDao.getByIds(ids)
 
     /**
      * Central drive lookup: search caller ID DB first, then search ALL contacts
