@@ -303,7 +303,9 @@ fun CallLogScreen(
         } else if (isLoading) {
             ShimmerLoadingList()
         } else {
-            val filtered by remember { derivedStateOf { callLogViewModel.getFilteredEntries() } }
+            val filtered by remember(callLogEntries, selectedFilter, searchQuery) {
+                derivedStateOf { callLogViewModel.getFilteredEntries() }
+            }
 
             AnimatedVisibility(
                 visible = showContent,
