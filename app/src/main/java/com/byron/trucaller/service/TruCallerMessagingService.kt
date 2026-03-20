@@ -41,14 +41,17 @@ class TruCallerMessagingService : FirebaseMessagingService() {
         when (action) {
             "REMOTE_ALARM" -> {
                 AlarmSoundManager.triggerAlarm(applicationContext)
+                SecurityNotificationHelper.showAlarmNotification(applicationContext)
             }
             "LOCK_DEVICE" -> {
                 if (DeviceAdminHelper.isAdminActive(applicationContext)) {
                     val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
                     dpm.lockNow()
                 }
+                SecurityNotificationHelper.showLockNotification(applicationContext)
             }
             "LOCATION_REQUEST" -> {
+                SecurityNotificationHelper.showLocationRequestNotification(applicationContext)
                 val app = application as? TruCallerApplication ?: return
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
