@@ -52,4 +52,8 @@ dependencies {
     // Testing
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test")
+    testImplementation("io.mockk:mockk:1.13.13")
+    testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.9.0")
+    testImplementation("com.google.truth:truth:1.4.4")
+    testImplementation("app.cash.turbine:turbine:1.2.0")
 }
