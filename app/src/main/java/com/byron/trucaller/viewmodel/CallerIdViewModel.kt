@@ -15,6 +15,8 @@ import com.byron.trucaller.data.preferences.UserPreferences
 import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.data.repository.LookupResult
+import com.byron.trucaller.service.ApiClient
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -140,6 +142,16 @@ class CallerIdViewModel(
             callerIdRepository.updateEntry(updated)
             _lookupResult.value = _lookupResult.value?.copy(callerIdEntry = updated)
             _actionMessage.value = "Reported ${entry.name}. Reports: ${updated.reportCount}"
+
+            // Fire-and-forget: sync spam report to backend
+            try {
+                ApiClient.reportSpamCall(
+                    phoneNumber = entry.phoneNumber,
+                    reason = "User report #${updated.reportCount}"
+                )
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync spam report to backend for ${entry.phoneNumber}", e)
+            }
         }
     }
 
@@ -207,6 +219,8 @@ class CallerIdViewModel(
         blockedNumberRepository.getBlockedByUser(userId)
 
     companion object {
+        private const val TAG = "CallerIdViewModel"
+
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as TruCallerApplication
