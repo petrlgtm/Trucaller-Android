@@ -43,9 +43,11 @@ import com.byron.trucaller.ui.theme.BorderRadius
  * @param leadingIcon Optional leading icon.
  * @param trailingIcon Optional trailing icon. When [showClearButton] is true
  *   and [value] is not empty, a clear button is shown instead.
+ * @param trailingContent Optional custom trailing composable, overrides [trailingIcon] when set.
  * @param showClearButton When true and the field has text, a clear-button icon
  *   replaces [trailingIcon].
  * @param onClear Callback invoked when the clear button is pressed.
+ * @param prefix Optional prefix composable (e.g. country code for phone fields).
  * @param isSearch When true, applies search-field defaults: search leading icon,
  *   single line, [ImeAction.Search], and a compact 48dp height.
  * @param singleLine Whether the field is single-line.
@@ -71,8 +73,10 @@ fun TruCallerTextField(
     label: String? = null,
     leadingIcon: ImageVector? = null,
     trailingIcon: ImageVector? = null,
+    trailingContent: (@Composable () -> Unit)? = null,
     showClearButton: Boolean = false,
     onClear: (() -> Unit)? = null,
+    prefix: (@Composable () -> Unit)? = null,
     isSearch: Boolean = false,
     singleLine: Boolean = true,
     maxLines: Int = if (singleLine) 1 else Int.MAX_VALUE,
@@ -93,6 +97,33 @@ fun TruCallerTextField(
     val effectiveLeadingIcon: ImageVector? = leadingIcon ?: if (isSearch) Icons.Default.Search else null
 
     val heightModifier = if (fieldHeight != null) Modifier.height(fieldHeight) else Modifier
+
+    val resolvedTrailingIcon: (@Composable () -> Unit)? = when {
+        trailingContent != null -> trailingContent
+        showClearButton && value.isNotEmpty() -> {
+            {
+                IconButton(onClick = { onClear?.invoke() }) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Clear text",
+                        tint = colorScheme.onSurface.copy(alpha = 0.5f),
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+            }
+        }
+        trailingIcon != null -> {
+            {
+                Icon(
+                    imageVector = trailingIcon,
+                    contentDescription = null,
+                    tint = colorScheme.onSurface.copy(alpha = 0.5f),
+                    modifier = Modifier.size(20.dp)
+                )
+            }
+        }
+        else -> null
+    }
 
     OutlinedTextField(
         value = value,
@@ -117,27 +148,8 @@ fun TruCallerTextField(
                 )
             }
         } else null,
-        trailingIcon = if (showClearButton && value.isNotEmpty()) {
-            {
-                IconButton(onClick = { onClear?.invoke() }) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Clear text",
-                        tint = colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.size(18.dp)
-                    )
-                }
-            }
-        } else if (trailingIcon != null) {
-            {
-                Icon(
-                    imageVector = trailingIcon,
-                    contentDescription = null,
-                    tint = colorScheme.onSurface.copy(alpha = 0.5f),
-                    modifier = Modifier.size(20.dp)
-                )
-            }
-        } else null,
+        trailingIcon = resolvedTrailingIcon,
+        prefix = prefix,
         singleLine = singleLine,
         maxLines = maxLines,
         minLines = minLines,

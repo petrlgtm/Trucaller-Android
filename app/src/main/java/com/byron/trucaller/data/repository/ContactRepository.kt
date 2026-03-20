@@ -18,4 +18,11 @@ class ContactRepository(private val contactDao: ContactDao) {
     suspend fun searchContacts(query: String): List<Contact> = contactDao.search(query)
     suspend fun deleteContact(contact: Contact) = contactDao.delete(contact)
     suspend fun getContactById(id: String): Contact? = contactDao.getById(id)
+
+    fun getFavouritesByUser(userId: String): Flow<List<Contact>> = contactDao.getFavouritesByUser(userId)
+    fun getFavouritesBySegment(userId: String, segment: String): Flow<List<Contact>> = contactDao.getFavouritesBySegment(userId, segment)
+    fun getSegmentsByUser(userId: String): Flow<List<String>> = contactDao.getSegmentsByUser(userId)
+    suspend fun updateFavourite(id: String, isFavourite: Boolean, segment: String?) = contactDao.updateFavourite(id, isFavourite, segment)
+    suspend fun updateNote(id: String, note: String?) = contactDao.updateNote(id, note)
+    suspend fun updateContactPhoto(id: String, photoUri: String?) = contactDao.updatePhoto(id, photoUri)
 }

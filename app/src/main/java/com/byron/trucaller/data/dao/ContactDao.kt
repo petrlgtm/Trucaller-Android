@@ -46,4 +46,22 @@ interface ContactDao {
 
     @Query("SELECT * FROM contacts WHERE id = :id LIMIT 1")
     suspend fun getById(id: String): Contact?
+
+    @Query("SELECT * FROM contacts WHERE userId = :userId AND isFavourite = 1 ORDER BY name ASC")
+    fun getFavouritesByUser(userId: String): Flow<List<Contact>>
+
+    @Query("SELECT * FROM contacts WHERE userId = :userId AND isFavourite = 1 AND favouriteSegment = :segment ORDER BY name ASC")
+    fun getFavouritesBySegment(userId: String, segment: String): Flow<List<Contact>>
+
+    @Query("SELECT DISTINCT favouriteSegment FROM contacts WHERE userId = :userId AND isFavourite = 1 AND favouriteSegment IS NOT NULL")
+    fun getSegmentsByUser(userId: String): Flow<List<String>>
+
+    @Query("UPDATE contacts SET isFavourite = :isFavourite, favouriteSegment = :segment WHERE id = :id")
+    suspend fun updateFavourite(id: String, isFavourite: Boolean, segment: String?)
+
+    @Query("UPDATE contacts SET note = :note WHERE id = :id")
+    suspend fun updateNote(id: String, note: String?)
+
+    @Query("UPDATE contacts SET photoUri = :photoUri WHERE id = :id")
+    suspend fun updatePhoto(id: String, photoUri: String?)
 }

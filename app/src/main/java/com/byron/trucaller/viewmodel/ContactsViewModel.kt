@@ -17,6 +17,8 @@ import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.data.repository.ContactRepository
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.service.DriveSyncService
+import android.net.Uri
+import com.byron.trucaller.util.copyImageToInternal
 import com.byron.trucaller.util.readPhoneContacts
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -50,6 +52,56 @@ class ContactsViewModel(
     fun getContactsByUser(userId: String): Flow<List<Contact>> = contactRepository.getContactsByUser(userId)
     fun getAllContacts(): Flow<List<Contact>> = contactRepository.getAllContacts()
     fun getContactCountByUser(userId: String): Flow<Int> = contactRepository.getContactCountByUser(userId)
+
+    fun getFavouritesByUser(userId: String): Flow<List<Contact>> = contactRepository.getFavouritesByUser(userId)
+    fun getFavouritesBySegment(userId: String, segment: String): Flow<List<Contact>> = contactRepository.getFavouritesBySegment(userId, segment)
+    fun getSegmentsByUser(userId: String): Flow<List<String>> = contactRepository.getSegmentsByUser(userId)
+
+    fun toggleFavourite(contact: Contact, segment: String?) {
+        viewModelScope.launch {
+            val newFav = !contact.isFavourite
+            contactRepository.updateFavourite(contact.id, newFav, if (newFav) segment else null)
+            _syncMessage.value = if (newFav) "${contact.name} added to favourites" else "${contact.name} removed from favourites"
+        }
+    }
+
+    fun removeFromFavourites(contact: Contact) {
+        viewModelScope.launch {
+            contactRepository.updateFavourite(contact.id, false, null)
+            _syncMessage.value = "${contact.name} removed from favourites"
+        }
+    }
+
+    fun updateFavouriteSegment(contactId: String, segment: String?) {
+        viewModelScope.launch {
+            contactRepository.updateFavourite(contactId, true, segment)
+        }
+    }
+
+    fun updateNote(contactId: String, note: String?) {
+        viewModelScope.launch {
+            val trimmed = note?.trim()?.ifEmpty { null }
+            contactRepository.updateNote(contactId, trimmed)
+            _syncMessage.value = if (trimmed != null) "Note saved" else "Note removed"
+        }
+    }
+
+    fun updateContactPhoto(contactId: String, uri: Uri) {
+        viewModelScope.launch {
+            val file = copyImageToInternal(getApplication(), uri, "contact_$contactId")
+            contactRepository.updateContactPhoto(contactId, file.absolutePath)
+            _syncMessage.value = "Photo updated"
+        }
+    }
+
+    fun removeContactPhoto(contactId: String) {
+        viewModelScope.launch {
+            val contact = contactRepository.getContactById(contactId)
+            contact?.photoUri?.let { path -> java.io.File(path).delete() }
+            contactRepository.updateContactPhoto(contactId, null)
+            _syncMessage.value = "Photo removed"
+        }
+    }
 
     fun setAutoBackup(enabled: Boolean, userId: String) {
         viewModelScope.launch {

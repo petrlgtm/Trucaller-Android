@@ -19,6 +19,8 @@ import com.byron.trucaller.data.repository.UserRepository
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.service.DeviceRegistrationService
 import com.byron.trucaller.service.FirebasePhoneAuthManager
+import android.net.Uri
+import com.byron.trucaller.util.copyImageToInternal
 import com.byron.trucaller.util.hashPassword
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -302,6 +304,26 @@ class AuthViewModel(
 
     fun hasSecurityPin(): Boolean {
         return _authState.value.user?.securityPin != null
+    }
+
+    fun updateAvatar(uri: Uri) {
+        viewModelScope.launch {
+            val user = _authState.value.user ?: return@launch
+            val file = copyImageToInternal(getApplication(), uri, "avatar_${user.id}")
+            val updated = user.copy(avatarUrl = file.absolutePath)
+            userRepository.updateUser(updated)
+            _authState.value = _authState.value.copy(user = updated)
+        }
+    }
+
+    fun removeAvatar() {
+        viewModelScope.launch {
+            val user = _authState.value.user ?: return@launch
+            user.avatarUrl?.let { path -> java.io.File(path).delete() }
+            val updated = user.copy(avatarUrl = null)
+            userRepository.updateUser(updated)
+            _authState.value = _authState.value.copy(user = updated)
+        }
     }
 
     fun logout() {

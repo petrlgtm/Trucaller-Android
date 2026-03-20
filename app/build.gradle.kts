@@ -95,4 +95,5 @@ dependencies {
     implementation(libs.osmdroid.android)
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
+    implementation(libs.coil.compose)
 }

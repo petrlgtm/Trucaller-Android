@@ -40,7 +40,7 @@ import com.byron.trucaller.data.model.User
         SmsSpamReport::class,
         ContactAlias::class
     ],
-    version = 5,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)

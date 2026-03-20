@@ -11,7 +11,11 @@ data class Contact(
     val phoneNumber: String,
     val email: String? = null,
     val syncedAt: String,
-    val isBackedUp: Boolean
+    val isBackedUp: Boolean,
+    val isFavourite: Boolean = false,
+    val favouriteSegment: String? = null,
+    val note: String? = null,
+    val photoUri: String? = null
 )
 
 data class ContactSyncStatus(
