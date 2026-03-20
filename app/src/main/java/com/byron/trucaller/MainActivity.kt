@@ -6,6 +6,8 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -30,9 +32,16 @@ class MainActivity : ComponentActivity() {
             val themePreferences = remember { ThemePreferences(applicationContext) }
             val themeMode by themePreferences.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
 
-            TruCallerTheme(themeMode = themeMode) {
-                val authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
-                TruCallerNavGraph(authViewModel = authViewModel)
+            // Crossfade animates smoothly between theme changes
+            Crossfade(
+                targetState = themeMode,
+                animationSpec = tween(durationMillis = 400),
+                label = "themeCrossfade"
+            ) { currentThemeMode ->
+                TruCallerTheme(themeMode = currentThemeMode) {
+                    val authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
+                    TruCallerNavGraph(authViewModel = authViewModel)
+                }
             }
         }
     }

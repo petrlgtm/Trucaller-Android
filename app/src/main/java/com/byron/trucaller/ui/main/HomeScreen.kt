@@ -59,6 +59,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -325,7 +328,8 @@ fun HomeScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Default.Warning, null,
+                                            Icons.Default.Warning,
+                                            contentDescription = "Device status warning",
                                             tint = statusColor,
                                             modifier = Modifier.size(18.dp)
                                         )
@@ -377,7 +381,8 @@ fun HomeScreen(
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Default.PhoneAndroid, null,
+                                            Icons.Default.PhoneAndroid,
+                                            contentDescription = "Device",
                                             tint = statusColor,
                                             modifier = Modifier.size(26.dp)
                                         )
@@ -433,7 +438,8 @@ fun HomeScreen(
                             fontWeight = FontWeight.Black,
                             fontSize = 18.sp,
                             color = colorScheme.onBackground,
-                            letterSpacing = (-0.3).sp
+                            letterSpacing = (-0.3).sp,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Spacer(modifier = Modifier.height(14.dp))
 
@@ -442,14 +448,18 @@ fun HomeScreen(
                             horizontalArrangement = Arrangement.spacedBy(10.dp)
                         ) {
                             QuickActionCard(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("quick_action_report_stolen"),
                                 icon = Icons.Default.Report,
                                 label = "Report\nStolen",
                                 color = colorScheme.error,
                                 onClick = { rootNavController.navigate("report_stolen") }
                             )
                             QuickActionCard(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("quick_action_sync_contacts"),
                                 icon = Icons.Default.Sync,
                                 label = "Sync\nContacts",
                                 color = BrandGold,
@@ -463,14 +473,18 @@ fun HomeScreen(
                                 }
                             )
                             QuickActionCard(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("quick_action_view_ip_log"),
                                 icon = Icons.Default.LocationOn,
                                 label = "View\nIP Log",
                                 color = colorScheme.primary,
                                 onClick = { rootNavController.navigate("remote_actions") }
                             )
                             QuickActionCard(
-                                modifier = Modifier.weight(1f),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("quick_action_trigger_alarm"),
                                 icon = Icons.Default.Alarm,
                                 label = "Trigger\nAlarm",
                                 color = colorScheme.secondary,
@@ -496,7 +510,8 @@ fun HomeScreen(
                             fontWeight = FontWeight.Black,
                             fontSize = 18.sp,
                             color = colorScheme.onBackground,
-                            letterSpacing = (-0.3).sp
+                            letterSpacing = (-0.3).sp,
+                            modifier = Modifier.semantics { heading() }
                         )
                         Spacer(modifier = Modifier.height(12.dp))
 
@@ -644,7 +659,7 @@ private fun QuickActionCard(
                     .background(color.copy(alpha = 0.12f), CircleShape),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, null, tint = color, modifier = Modifier.size(22.dp))
+                Icon(icon, contentDescription = label.replace("\n", " "), tint = color, modifier = Modifier.size(22.dp))
             }
             Spacer(modifier = Modifier.height(10.dp))
             Text(

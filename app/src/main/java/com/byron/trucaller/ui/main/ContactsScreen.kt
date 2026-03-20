@@ -86,6 +86,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -277,20 +280,22 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                 onClick = { selectedTab = 0; selectedSegment = null },
                 text = { Text("All", fontWeight = if (selectedTab == 0) FontWeight.Bold else FontWeight.Normal) },
                 selectedContentColor = colorScheme.primary,
-                unselectedContentColor = colorScheme.onSurface.copy(alpha = 0.5f)
+                unselectedContentColor = colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.testTag("contacts_tab_all")
             )
             Tab(
                 selected = selectedTab == 1,
                 onClick = { selectedTab = 1 },
                 text = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Star, contentDescription = "Favourites", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
                         Text("Favourites", fontWeight = if (selectedTab == 1) FontWeight.Bold else FontWeight.Normal)
                     }
                 },
                 selectedContentColor = colorScheme.primary,
-                unselectedContentColor = colorScheme.onSurface.copy(alpha = 0.5f)
+                unselectedContentColor = colorScheme.onSurface.copy(alpha = 0.5f),
+                modifier = Modifier.testTag("contacts_tab_favourites")
             )
         }
 
@@ -377,7 +382,8 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                     Switch(
                         checked = autoBackup,
                         onCheckedChange = { contactsViewModel.setAutoBackup(it, user.id) },
-                        colors = SwitchDefaults.colors(checkedTrackColor = colorScheme.primary)
+                        colors = SwitchDefaults.colors(checkedTrackColor = colorScheme.primary),
+                        modifier = Modifier.testTag("auto_backup_switch")
                     )
                 }
             }

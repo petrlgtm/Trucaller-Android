@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.sizeIn
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -27,13 +28,16 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.ChevronRight
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.SettingsSuggest
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Warning
@@ -55,6 +59,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import android.app.Activity
 import android.app.role.RoleManager
@@ -69,6 +74,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -82,11 +90,14 @@ import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.CardGradientEnd
 import com.byron.trucaller.ui.theme.CardGradientStart
 import com.byron.trucaller.ui.theme.Spacing
+import com.byron.trucaller.ui.theme.ThemeMode
 import com.byron.trucaller.util.DeviceAdminHelper
+import com.byron.trucaller.util.ThemePreferences
 import com.byron.trucaller.util.formatPhoneNumber
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
+import kotlinx.coroutines.launch
 
 @Composable
 fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel, deviceViewModel: DeviceViewModel) {
@@ -109,6 +120,11 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
 
     val roleManager = remember { context.getSystemService(Context.ROLE_SERVICE) as RoleManager }
     var isDefaultDialer by remember { mutableStateOf(roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) }
+
+    // Theme preferences
+    val themePreferences = remember { ThemePreferences(context.applicationContext) }
+    val currentThemeMode by themePreferences.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+    val themeScope = rememberCoroutineScope()
 
     val avatarPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
@@ -282,11 +298,13 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Box(
                     modifier = Modifier
-                        .clickable {
+                        .sizeIn(minWidth = 48.dp, minHeight = 48.dp)
+                        .clickable(onClickLabel = "Change profile photo") {
                             avatarPickerLauncher.launch(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
-                        },
+                        }
+                        .testTag("profile_avatar"),
                     contentAlignment = Alignment.Center
                 ) {
                     TruCallerAvatar(
@@ -337,6 +355,89 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
         }
 
         Column(modifier = Modifier.padding(Spacing.md)) {
+            // Appearance section — theme toggle
+            Text(
+                "Appearance",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier
+                    .padding(bottom = Spacing.sm, start = 4.dp)
+                    .semantics { heading() }
+            )
+            TruCallerCard(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("appearance_card"),
+                elevation = 1.dp,
+                containerColor = colorScheme.surfaceVariant
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    ThemeMode.entries.forEach { mode ->
+                        val isSelected = currentThemeMode == mode
+                        val icon = when (mode) {
+                            ThemeMode.SYSTEM -> Icons.Default.SettingsSuggest
+                            ThemeMode.LIGHT -> Icons.Default.LightMode
+                            ThemeMode.DARK -> Icons.Default.DarkMode
+                        }
+                        val label = when (mode) {
+                            ThemeMode.SYSTEM -> "System"
+                            ThemeMode.LIGHT -> "Light"
+                            ThemeMode.DARK -> "Dark"
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = if (isSelected) colorScheme.primary else Color.Transparent,
+                            modifier = Modifier
+                                .weight(1f)
+                                .sizeIn(minHeight = 48.dp)
+                                .clickable {
+                                    themeScope.launch { themePreferences.setThemeMode(mode) }
+                                }
+                                .testTag("theme_toggle_$label")
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center,
+                                modifier = Modifier.padding(vertical = 10.dp)
+                            ) {
+                                Icon(
+                                    icon,
+                                    contentDescription = "$label theme",
+                                    tint = if (isSelected) colorScheme.onPrimary else colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    label,
+                                    fontSize = 12.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    color = if (isSelected) colorScheme.onPrimary else colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.md))
+
+            // Settings section heading
+            Text(
+                "Settings",
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+                color = colorScheme.onSurfaceVariant,
+                letterSpacing = 0.5.sp,
+                modifier = Modifier
+                    .padding(bottom = Spacing.sm, start = 4.dp)
+                    .semantics { heading() }
+            )
+
             // Menu card using TruCallerCard
             TruCallerCard(
                 modifier = Modifier.fillMaxWidth(),
@@ -562,7 +663,10 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     Surface(
                         shape = RoundedCornerShape(20.dp),
                         color = colorScheme.primary.copy(alpha = 0.12f),
-                        modifier = Modifier.clickable { /* check for updates action */ }
+                        modifier = Modifier
+                            .sizeIn(minHeight = 48.dp)
+                            .clickable(onClickLabel = "Check for updates") { /* check for updates action */ }
+                            .testTag("check_for_updates_button")
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
@@ -623,8 +727,10 @@ private fun ProfileMenuItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
-            .padding(horizontal = Spacing.md, vertical = 14.dp),
+            .sizeIn(minHeight = 48.dp)
+            .clickable(onClickLabel = title) { onClick() }
+            .padding(horizontal = Spacing.md, vertical = 14.dp)
+            .testTag("profile_menu_${title.lowercase().replace(" ", "_").replace("(", "").replace(")", "")}"),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(
@@ -633,7 +739,7 @@ private fun ProfileMenuItem(
                 .background(iconColor.copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = iconColor, modifier = Modifier.size(20.dp))
+            Icon(icon, contentDescription = title, tint = iconColor, modifier = Modifier.size(20.dp))
         }
         Spacer(modifier = Modifier.width(14.dp))
         Text(
@@ -646,8 +752,8 @@ private fun ProfileMenuItem(
         Icon(
             imageVector = if (isExpandable) Icons.Default.ExpandMore else Icons.Default.ChevronRight,
             contentDescription = if (isExpandable) {
-                if (isExpanded) "Collapse" else "Expand"
-            } else null,
+                if (isExpanded) "Collapse $title" else "Expand $title"
+            } else "Navigate to $title",
             tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
             modifier = Modifier
                 .size(20.dp)
