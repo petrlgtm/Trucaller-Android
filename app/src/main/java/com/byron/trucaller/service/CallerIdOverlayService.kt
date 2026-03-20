@@ -109,11 +109,20 @@ class CallerIdOverlayService : Service() {
         }
 
         val callerIdRepo = app.container.callerIdRepository
-        val lookupResult = try {
-            runBlocking { callerIdRepo.lookupNumber(phoneNumber) }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error looking up number: $phoneNumber", e)
-            null
+
+        // Check the cache first — the call screening service may have already
+        // looked up this number, so we can avoid a redundant query.
+        val cachedResult = CallerIdCache.get(phoneNumber)
+        val lookupResult = if (cachedResult != null) {
+            Log.d(TAG, "Using cached caller ID result for $phoneNumber")
+            cachedResult
+        } else {
+            try {
+                runBlocking { callerIdRepo.lookupNumber(phoneNumber) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Error looking up number: $phoneNumber", e)
+                null
+            }
         }
 
         val entry = lookupResult?.callerIdEntry

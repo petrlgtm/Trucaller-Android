@@ -82,6 +82,9 @@ class TruCallerCallScreeningService : CallScreeningService() {
                 val lookupResult = callerIdRepo.lookupNumber(phoneNumber)
                 val entry = lookupResult.callerIdEntry
 
+                // Cache the result so the overlay service can reuse it
+                CallerIdCache.put(phoneNumber, lookupResult)
+
                 if (entry != null) {
                     Log.d(
                         TAG,
