@@ -91,6 +91,7 @@ import com.byron.trucaller.ui.theme.CardGradientEnd
 import com.byron.trucaller.ui.theme.CardGradientStart
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.ui.theme.ThemeMode
+import com.byron.trucaller.service.LocationService
 import com.byron.trucaller.util.DeviceAdminHelper
 import com.byron.trucaller.util.ThemePreferences
 import com.byron.trucaller.util.formatPhoneNumber
@@ -120,6 +121,16 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
 
     val roleManager = remember { context.getSystemService(Context.ROLE_SERVICE) as RoleManager }
     var isDefaultDialer by remember { mutableStateOf(roleManager.isRoleHeld(RoleManager.ROLE_DIALER)) }
+
+    // Background location permission state
+    var hasBackgroundLocation by remember {
+        mutableStateOf(LocationService.hasBackgroundLocationPermission(context))
+    }
+    val backgroundLocationLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        hasBackgroundLocation = granted
+    }
 
     // Theme preferences
     val themePreferences = remember { ThemePreferences(context.applicationContext) }
@@ -573,6 +584,20 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                         if (!isDefaultDialer) {
                             val intent = roleManager.createRequestRoleIntent(RoleManager.ROLE_DIALER)
                             dialerRoleLauncher.launch(intent)
+                        }
+                    }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // Background Location Permission
+                ProfileMenuItem(
+                    icon = Icons.Default.LocationOn,
+                    title = if (hasBackgroundLocation) "Background Location (Granted)" else "Background Location (Denied)",
+                    iconColor = if (hasBackgroundLocation) Color(0xFF4CAF50) else colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                    onClick = {
+                        hasBackgroundLocation = LocationService.hasBackgroundLocationPermission(context)
+                        if (!hasBackgroundLocation && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                            backgroundLocationLauncher.launch(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION)
                         }
                     }
                 )
