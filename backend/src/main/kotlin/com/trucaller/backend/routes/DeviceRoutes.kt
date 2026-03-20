@@ -27,7 +27,8 @@ data class DeviceRegisterRequest(
     val model: String,
     val manufacturer: String,
     val osVersion: String,
-    val deviceId: String
+    val deviceId: String,
+    val fcmToken: String? = null
 )
 
 @Serializable
@@ -41,7 +42,14 @@ data class DeviceResponse(
     val status: String,
     val lastIp: String,
     val lastSeen: String,
-    val registeredAt: String
+    val registeredAt: String,
+    val fcmToken: String? = null
+)
+
+@Serializable
+data class FcmTokenUpdateRequest(
+    val deviceId: String,
+    val fcmToken: String
 )
 
 @Serializable
@@ -68,6 +76,7 @@ fun Route.deviceRoutes() {
     authenticate("auth-jwt") {
         route("/api/devices") {
             registerDevice()
+            updateFcmToken()
             getDevicesByUser()
             getIpLogsByDevice()
         }
@@ -111,6 +120,7 @@ private fun Route.registerDevice() {
                 .append("status", "ACTIVE")
                 .append("lastIp", clientIp)
                 .append("lastSeen", now)
+                .append("fcmToken", request.fcmToken)
             ).append("\$setOnInsert", Document("registeredAt", now)),
             UpdateOptions().upsert(true)
         )
@@ -160,6 +170,84 @@ private fun Route.registerDevice() {
                 success = true,
                 data = device,
                 message = "Device registered successfully."
+            )
+        )
+    }
+}
+
+// ── PUT /api/devices/fcm-token ──────────────────────────────────────────
+
+private fun Route.updateFcmToken() {
+    put("/fcm-token") {
+        val userId = call.userId()
+
+        val request = try {
+            call.receive<FcmTokenUpdateRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body")
+            )
+            return@put
+        }
+
+        // Verify the device belongs to the requesting user
+        val deviceDoc = Collections.devices
+            .find(
+                Filters.and(
+                    Filters.eq("userId", userId),
+                    Filters.eq("deviceId", request.deviceId)
+                )
+            )
+            .firstOrNull()
+
+        if (deviceDoc == null) {
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiResponse<Unit>(
+                    success = false,
+                    error = "Device not found or does not belong to you."
+                )
+            )
+            return@put
+        }
+
+        // Update the FCM token
+        Collections.devices.updateOne(
+            Filters.and(
+                Filters.eq("userId", userId),
+                Filters.eq("deviceId", request.deviceId)
+            ),
+            Document("\$set", Document("fcmToken", request.fcmToken))
+        )
+
+        // Retrieve the updated device to return
+        val updatedDoc = Collections.devices
+            .find(
+                Filters.and(
+                    Filters.eq("userId", userId),
+                    Filters.eq("deviceId", request.deviceId)
+                )
+            )
+            .firstOrNull()
+
+        if (updatedDoc == null) {
+            call.respond(
+                HttpStatusCode.InternalServerError,
+                ApiResponse<Unit>(
+                    success = false,
+                    error = "Failed to retrieve device after FCM token update."
+                )
+            )
+            return@put
+        }
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse(
+                success = true,
+                data = updatedDoc.toDeviceResponse(),
+                message = "FCM token updated successfully."
             )
         )
     }
@@ -291,6 +379,7 @@ private fun Document.toDeviceResponse(): DeviceResponse {
         status = getString("status") ?: "ACTIVE",
         lastIp = getString("lastIp") ?: "",
         lastSeen = getString("lastSeen") ?: "",
-        registeredAt = getString("registeredAt") ?: ""
+        registeredAt = getString("registeredAt") ?: "",
+        fcmToken = getString("fcmToken")
     )
 }
