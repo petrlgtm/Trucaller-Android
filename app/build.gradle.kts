@@ -5,6 +5,23 @@ plugins {
     alias(libs.plugins.google.services)
 }
 
+// Load signing credentials from local.properties, keystore.properties, or environment variables.
+// Priority: keystore.properties > local.properties > environment variables.
+val localProps = java.util.Properties().apply {
+    val localFile = rootProject.file("local.properties")
+    if (localFile.exists()) localFile.inputStream().use { load(it) }
+}
+val keystoreProps = java.util.Properties().apply {
+    val ksFile = rootProject.file("keystore.properties")
+    if (ksFile.exists()) ksFile.inputStream().use { load(it) }
+}
+
+fun signingProp(key: String): String =
+    keystoreProps.getProperty(key)
+        ?: localProps.getProperty(key)
+        ?: System.getenv(key)
+        ?: ""
+
 android {
     namespace = "com.byron.trucaller"
     compileSdk = 35
@@ -14,21 +31,40 @@ android {
         minSdk = 29
         targetSdk = 35
         versionCode = 1
-        versionName = "1.0"
+        versionName = "1.0.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file("release-keystore.jks")
-            storePassword = "trucaller123"
-            keyAlias = "trucaller"
-            keyPassword = "trucaller123"
+            val storeFilePath = signingProp("RELEASE_STORE_FILE").ifBlank { signingProp("storeFile") }
+            if (storeFilePath.isNotBlank()) {
+                storeFile = file(storeFilePath)
+                storePassword = signingProp("RELEASE_STORE_PASSWORD").ifBlank { signingProp("storePassword") }
+                keyAlias = signingProp("RELEASE_KEY_ALIAS").ifBlank { signingProp("keyAlias") }
+                keyPassword = signingProp("RELEASE_KEY_PASSWORD").ifBlank { signingProp("keyPassword") }
+            }
         }
     }
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"https://trucaller-backend.onrender.com\"")
+            buildConfigField("Boolean", "ENABLE_CALL_RECORDING", "true")
+            buildConfigField("Boolean", "ENABLE_ANTI_THEFT", "true")
+            buildConfigField("Boolean", "ENABLE_FAMILY_GROUPS", "true")
+            buildConfigField("Boolean", "ENABLE_ANALYTICS", "true")
+            buildConfigField("Boolean", "ENABLE_GEOFENCING", "true")
+            buildConfigField("Boolean", "LOG_HTTP_REQUESTS", "true")
+        }
         release {
+            buildConfigField("String", "API_BASE_URL", "\"https://trucaller-backend.onrender.com\"")
+            buildConfigField("Boolean", "ENABLE_CALL_RECORDING", "true")
+            buildConfigField("Boolean", "ENABLE_ANTI_THEFT", "true")
+            buildConfigField("Boolean", "ENABLE_FAMILY_GROUPS", "true")
+            buildConfigField("Boolean", "ENABLE_ANALYTICS", "true")
+            buildConfigField("Boolean", "ENABLE_GEOFENCING", "true")
+            buildConfigField("Boolean", "LOG_HTTP_REQUESTS", "false")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -44,6 +80,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {

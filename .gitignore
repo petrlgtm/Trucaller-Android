@@ -19,6 +19,9 @@ backend/build/
 backend/bin/
 .kotlin/
 
+# Signing credentials
+keystore.properties
+
 # Backend environment files
 backend/.env
 .env

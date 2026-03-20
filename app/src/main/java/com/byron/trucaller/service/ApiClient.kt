@@ -1,10 +1,12 @@
 package com.byron.trucaller.service
 
 import android.util.Log
+import com.byron.trucaller.BuildConfig
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.CertificatePinner
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -27,14 +29,37 @@ object ApiClient {
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     private val gson = Gson()
 
+    /**
+     * Certificate pinner for the production backend (Render.com).
+     * Pins the Let's Encrypt ISRG Root X1 intermediate CA used by Render.
+     * Update these pins when the backend's TLS certificate chain changes.
+     */
+    private val certificatePinner = CertificatePinner.Builder()
+        .add(
+            "trucaller-backend.onrender.com",
+            // Let's Encrypt ISRG Root X1 — SHA-256 pin
+            "sha256/C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M="
+        )
+        .build()
+
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
+            .apply {
+                // Only pin certificates in release builds; debug needs flexibility
+                if (!BuildConfig.DEBUG) {
+                    certificatePinner(certificatePinner)
+                }
+            }
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
-                    level = HttpLoggingInterceptor.Level.BODY
+                    level = if (BuildConfig.LOG_HTTP_REQUESTS) {
+                        HttpLoggingInterceptor.Level.BODY
+                    } else {
+                        HttpLoggingInterceptor.Level.NONE
+                    }
                 }
             )
             .build()
@@ -74,6 +99,9 @@ object ApiClient {
             "code" to code,
             "newPassword" to newPassword
         ))
+
+    suspend fun deleteAccount(): ApiResult<Unit> =
+        delete("/api/auth/delete-account")
 
     // ── Device Endpoints ────────────────────────────────────────────────
 
