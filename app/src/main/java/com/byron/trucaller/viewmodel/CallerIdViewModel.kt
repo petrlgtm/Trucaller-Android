@@ -186,18 +186,124 @@ class CallerIdViewModel(
     fun addEntry(entry: CallerIdEntry) {
         viewModelScope.launch {
             callerIdRepository.insertEntry(entry)
+            // Fire-and-forget: sync new entry to backend
+            try {
+                val result = ApiClient.createAdminCallerId(
+                    id = entry.id,
+                    phoneNumber = entry.phoneNumber,
+                    name = entry.name,
+                    spamScore = entry.spamScore,
+                    reportCount = entry.reportCount,
+                    category = entry.category.name,
+                    lastUpdated = entry.lastUpdated
+                )
+                if (result.success) {
+                    _actionMessage.value = "Entry added and synced to server"
+                } else {
+                    _actionMessage.value = "Entry added locally (sync failed: ${result.error ?: "unknown"})"
+                    Log.w(TAG, "Backend sync failed for add: ${result.error}")
+                }
+            } catch (e: Exception) {
+                _actionMessage.value = "Entry added locally (sync error)"
+                Log.e(TAG, "Failed to sync new caller ID entry to backend", e)
+            }
         }
     }
 
     fun updateEntry(entry: CallerIdEntry) {
         viewModelScope.launch {
             callerIdRepository.updateEntry(entry)
+            // Fire-and-forget: sync update to backend
+            try {
+                val result = ApiClient.updateAdminCallerId(
+                    entryId = entry.id,
+                    spamScore = entry.spamScore,
+                    category = entry.category.name,
+                    name = entry.name
+                )
+                if (result.success) {
+                    _actionMessage.value = "Entry updated and synced to server"
+                } else {
+                    _actionMessage.value = "Entry updated locally (sync failed: ${result.error ?: "unknown"})"
+                    Log.w(TAG, "Backend sync failed for update: ${result.error}")
+                }
+            } catch (e: Exception) {
+                _actionMessage.value = "Entry updated locally (sync error)"
+                Log.e(TAG, "Failed to sync caller ID update to backend", e)
+            }
         }
     }
 
     fun deleteEntry(entry: CallerIdEntry) {
         viewModelScope.launch {
             callerIdRepository.deleteEntry(entry)
+            // Fire-and-forget: sync delete to backend
+            try {
+                val result = ApiClient.deleteAdminCallerId(entryId = entry.id)
+                if (result.success) {
+                    _actionMessage.value = "${entry.name} deleted and synced to server"
+                } else {
+                    _actionMessage.value = "${entry.name} deleted locally (sync failed: ${result.error ?: "unknown"})"
+                    Log.w(TAG, "Backend sync failed for delete: ${result.error}")
+                }
+            } catch (e: Exception) {
+                _actionMessage.value = "${entry.name} deleted locally (sync error)"
+                Log.e(TAG, "Failed to sync caller ID delete to backend", e)
+            }
+        }
+    }
+
+    // ── Bulk Operations ─────────────────────────────────────────────────
+
+    private val _isBulkOperationInProgress = MutableStateFlow(false)
+    val isBulkOperationInProgress: StateFlow<Boolean> = _isBulkOperationInProgress.asStateFlow()
+
+    fun bulkDeleteEntries(ids: Set<String>, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            _isBulkOperationInProgress.value = true
+            try {
+                callerIdRepository.deleteEntriesByIds(ids.toList())
+                // Fire-and-forget: sync deletions to backend
+                ids.forEach { id ->
+                    try {
+                        ApiClient.deleteAdminCallerId(id)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to sync bulk delete for $id to backend", e)
+                    }
+                }
+                _actionMessage.value = "Deleted ${ids.size} entries"
+            } catch (e: Exception) {
+                Log.e(TAG, "Bulk delete failed", e)
+                _actionMessage.value = "Bulk delete failed: ${e.message}"
+            } finally {
+                _isBulkOperationInProgress.value = false
+                onComplete()
+            }
+        }
+    }
+
+    fun bulkUpdateCategory(ids: Set<String>, category: SpamCategory, onComplete: () -> Unit = {}) {
+        viewModelScope.launch {
+            _isBulkOperationInProgress.value = true
+            try {
+                val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+                callerIdRepository.updateCategoryByIds(ids.toList(), category, now)
+                // Fire-and-forget: sync category updates to backend
+                ids.forEach { id ->
+                    try {
+                        ApiClient.updateAdminCallerId(entryId = id, category = category.name)
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to sync bulk category update for $id to backend", e)
+                    }
+                }
+                _actionMessage.value = "Updated ${ids.size} entries to ${category.name}"
+            } catch (e: Exception) {
+                Log.e(TAG, "Bulk category update failed", e)
+                _actionMessage.value = "Bulk category update failed: ${e.message}"
+            } finally {
+                _isBulkOperationInProgress.value = false
+                onComplete()
+            }
         }
     }
 

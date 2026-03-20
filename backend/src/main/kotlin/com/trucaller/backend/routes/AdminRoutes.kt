@@ -14,6 +14,7 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
 import org.bson.Document
+import org.bson.types.ObjectId
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -25,6 +26,17 @@ data class DashboardStats(
     val alarmCount: Long,
     val callerIdCount: Long,
     val smsSpamReportCount: Long
+)
+
+@Serializable
+data class CallerIdCreateRequest(
+    val id: String? = null,
+    val phoneNumber: String,
+    val name: String,
+    val spamScore: Int = 0,
+    val reportCount: Int = 0,
+    val category: String = "SAFE",
+    val lastUpdated: String? = null
 )
 
 @Serializable
@@ -52,6 +64,7 @@ data class UserWithDevices(
  * - `GET    /api/admin/users/{userId}`   -- single user + their devices
  * - `GET    /api/admin/devices`          -- paginated device list
  * - `GET    /api/admin/caller-ids`       -- paginated caller ID list
+ * - `POST   /api/admin/caller-ids`      -- create a caller ID entry
  * - `PUT    /api/admin/caller-ids/{id}`  -- update a caller ID entry
  * - `DELETE /api/admin/caller-ids/{id}`  -- delete a caller ID entry
  */
@@ -232,6 +245,57 @@ fun Route.adminRoutes() {
                         success = true,
                         data = callerIds.map { it.toJson() },
                         message = "Retrieved ${callerIds.size} caller ID entry/entries"
+                    )
+                )
+            }
+
+            // ── POST /api/admin/caller-ids ─────────────────────────────
+            post("/caller-ids") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@post
+                }
+
+                val request = try {
+                    call.receive<CallerIdCreateRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Invalid request body")
+                    )
+                    return@post
+                }
+
+                if (request.phoneNumber.isBlank() || request.name.isBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "phoneNumber and name are required")
+                    )
+                    return@post
+                }
+
+                val now = java.time.Instant.now().toString()
+                val doc = Document()
+                    .append("_id", request.id ?: ObjectId().toString())
+                    .append("phoneNumber", request.phoneNumber)
+                    .append("name", request.name)
+                    .append("spamScore", request.spamScore.coerceIn(0, 100))
+                    .append("reportCount", request.reportCount)
+                    .append("category", request.category)
+                    .append("lastUpdated", request.lastUpdated ?: now)
+
+                Collections.callerIds.insertOne(doc)
+
+                call.respond(
+                    HttpStatusCode.Created,
+                    ApiResponse<Nothing>(
+                        success = true,
+                        message = "Caller ID entry created"
                     )
                 )
             }

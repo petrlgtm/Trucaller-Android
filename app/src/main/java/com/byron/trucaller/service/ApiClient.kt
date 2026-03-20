@@ -201,6 +201,25 @@ object ApiClient {
     suspend fun getAdminUserDetail(userId: String): ApiResult<Map<String, Any>> =
         get("/api/admin/users/$userId")
 
+    suspend fun createAdminCallerId(
+        id: String,
+        phoneNumber: String,
+        name: String,
+        spamScore: Int,
+        reportCount: Int,
+        category: String,
+        lastUpdated: String
+    ): ApiResult<Unit> =
+        post("/api/admin/caller-ids", mapOf(
+            "id" to id,
+            "phoneNumber" to phoneNumber,
+            "name" to name,
+            "spamScore" to spamScore,
+            "reportCount" to reportCount,
+            "category" to category,
+            "lastUpdated" to lastUpdated
+        ))
+
     suspend fun updateAdminCallerId(
         entryId: String,
         spamScore: Int? = null,
