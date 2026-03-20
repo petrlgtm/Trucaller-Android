@@ -1,5 +1,10 @@
 package com.byron.trucaller.ui.stolen
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,12 +33,10 @@ import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -48,24 +51,21 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Divider
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerButtonStyle
+import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.BorderRadius
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
@@ -92,12 +92,26 @@ fun ReportStolenScreen(
 
     val device by deviceViewModel.userDevice.collectAsState()
 
+    val colorScheme = MaterialTheme.colorScheme
+
     LaunchedEffect(user?.id) {
         user?.id?.let { deviceViewModel.loadUserDevice(it) }
     }
 
     val hasPin = authViewModel.hasSecurityPin()
     val canReport = confirmed && pin.length == 4 && pin.all { it.isDigit() }
+
+    // Red pulse animation for the report confirmation overlay
+    val infiniteTransition = rememberInfiniteTransition(label = "reportPulse")
+    val pulseAlpha by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 0.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 1000),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulseAlpha"
+    )
 
     if (showSuccessDialog) {
         AlertDialog(
@@ -110,7 +124,7 @@ fun ReportStolenScreen(
                     navController.navigate("remote_actions") {
                         popUpTo("report_stolen") { inclusive = true }
                     }
-                }) { Text("Remote Actions", color = Danger) }
+                }) { Text("Remote Actions", color = colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = {
@@ -124,37 +138,44 @@ fun ReportStolenScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(colorScheme.background)
     ) {
         TopAppBar(
-            title = { Text("Report Stolen", fontWeight = FontWeight.Bold, color = Color.White) },
+            title = { Text("Report Stolen", fontWeight = FontWeight.Bold, color = colorScheme.onError) },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onError)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = Danger)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.error)
         )
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(16.dp)
+                .padding(Spacing.md)
         ) {
-            // Warning banner
+            // Warning banner with pulse effect when confirmed
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Danger.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                    .padding(16.dp)
+                    .drawBehind {
+                        if (confirmed) {
+                            drawRect(
+                                color = Color.Red.copy(alpha = pulseAlpha)
+                            )
+                        }
+                    }
+                    .background(colorScheme.error.copy(alpha = 0.1f), RoundedCornerShape(BorderRadius.md))
+                    .padding(Spacing.md)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Warning, null, tint = Danger, modifier = Modifier.size(24.dp))
+                    Icon(Icons.Default.Warning, null, tint = colorScheme.error, modifier = Modifier.size(24.dp))
                     Spacer(modifier = Modifier.width(12.dp))
                     Text(
                         "This action will flag your device as stolen in our system",
-                        color = Danger,
+                        color = colorScheme.error,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 14.sp
                     )
@@ -164,31 +185,28 @@ fun ReportStolenScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // What happens next card
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(SurfaceCard, RoundedCornerShape(16.dp))
-                    .border(1.dp, Color(0xFF333333), RoundedCornerShape(16.dp))
-                    .padding(20.dp)
-            ) {
-                Column {
-                    Text("What happens next", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-                    Spacer(modifier = Modifier.height(16.dp))
-                    InfoItem(Icons.Default.Warning, "Device flagged as stolen in system")
-                    InfoItem(Icons.Default.Alarm, "Remote alarm triggering enabled")
-                    InfoItem(Icons.Default.GpsFixed, "IP location logged on each access")
-                    InfoItem(Icons.Default.Notifications, "Report visible on admin dashboard")
-                }
+            TruCallerCard {
+                Text(
+                    "What happens next",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(Spacing.md))
+                InfoItem(Icons.Default.Warning, "Device flagged as stolen in system")
+                InfoItem(Icons.Default.Alarm, "Remote alarm triggering enabled")
+                InfoItem(Icons.Default.GpsFixed, "IP location logged on each access")
+                InfoItem(Icons.Default.Notifications, "Report visible on admin dashboard")
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(Spacing.lg))
 
             // Confirmation checkbox
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .clickable { confirmed = !confirmed }
-                    .padding(horizontal = 4.dp),
+                    .padding(horizontal = Spacing.xs),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Box(
@@ -196,17 +214,17 @@ fun ReportStolenScreen(
                         .size(24.dp)
                         .border(
                             2.dp,
-                            if (confirmed) Danger else Divider,
+                            if (confirmed) colorScheme.error else colorScheme.outline,
                             RoundedCornerShape(6.dp)
                         )
                         .background(
-                            if (confirmed) Danger else Background,
+                            if (confirmed) colorScheme.error else colorScheme.background,
                             RoundedCornerShape(6.dp)
                         ),
                     contentAlignment = Alignment.Center
                 ) {
                     if (confirmed) {
-                        Icon(Icons.Default.Check, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                        Icon(Icons.Default.Check, null, tint = colorScheme.onError, modifier = Modifier.size(16.dp))
                     }
                 }
                 Spacer(modifier = Modifier.width(12.dp))
@@ -214,28 +232,28 @@ fun ReportStolenScreen(
                     "I confirm that my device has been stolen and I want to flag it",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 14.sp,
-                    color = TextPrimary
+                    color = colorScheme.onSurface
                 )
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(Spacing.lg))
 
             // No PIN warning
             if (!hasPin) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Color(0xFF3D2E00), RoundedCornerShape(12.dp))
-                        .padding(16.dp)
+                        .background(colorScheme.tertiary.copy(alpha = 0.15f), RoundedCornerShape(BorderRadius.md))
+                        .padding(Spacing.md)
                 ) {
                     Text(
                         "You must set a Security PIN in Profile \u2192 Security before reporting. This PIN verifies your identity.",
-                        color = Color(0xFFE65100),
+                        color = colorScheme.tertiary,
                         fontWeight = FontWeight.SemiBold,
                         fontSize = 13.sp
                     )
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
             }
 
             // PIN error from ViewModel
@@ -243,12 +261,12 @@ fun ReportStolenScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Danger.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                        .padding(16.dp)
+                        .background(colorScheme.error.copy(alpha = 0.1f), RoundedCornerShape(BorderRadius.md))
+                        .padding(Spacing.md)
                 ) {
-                    Text(reportError!!, color = Danger, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+                    Text(reportError!!, color = colorScheme.error, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
                 }
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
             }
 
             // PIN entry
@@ -257,10 +275,10 @@ fun ReportStolenScreen(
                     "ENTER YOUR SECURITY PIN",
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 13.sp,
-                    color = TextSecondary,
+                    color = colorScheme.onSurfaceVariant,
                     letterSpacing = 0.5.sp
                 )
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
                 BasicTextField(
                     value = pin,
                     onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) pin = it },
@@ -279,12 +297,12 @@ fun ReportStolenScreen(
                                         .size(48.dp)
                                         .border(
                                             if (isFocused) 2.dp else 1.5.dp,
-                                            if (isFocused || char.isNotEmpty()) Danger else Divider,
-                                            RoundedCornerShape(12.dp)
+                                            if (isFocused || char.isNotEmpty()) colorScheme.error else colorScheme.outline,
+                                            RoundedCornerShape(BorderRadius.md)
                                         )
                                         .background(
-                                            if (char.isNotEmpty()) Color(0xFF252525) else Background,
-                                            RoundedCornerShape(12.dp)
+                                            if (char.isNotEmpty()) colorScheme.surfaceVariant else colorScheme.background,
+                                            RoundedCornerShape(BorderRadius.md)
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
@@ -292,7 +310,7 @@ fun ReportStolenScreen(
                                         if (char.isNotEmpty()) "\u2022" else "",
                                         fontSize = 22.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = TextPrimary
+                                        color = colorScheme.onSurface
                                     )
                                 }
                             }
@@ -303,62 +321,70 @@ fun ReportStolenScreen(
 
             Spacer(modifier = Modifier.height(28.dp))
 
-            // Report button
-            Button(
-                onClick = {
-                    val currentUser = user ?: return@Button
-                    val currentDevice = device ?: return@Button
-                    isLoading = true
-                    stolenReportViewModel.clearReportError()
-                    stolenReportViewModel.reportStolen(
-                        userId = currentUser.id,
-                        deviceId = currentDevice.id,
-                        description = "Device reported stolen by owner",
-                        pin = pin,
-                        onSuccess = {
-                            isLoading = false
-                            showSuccessDialog = true
+            // Report button with red pulse overlay on confirmation
+            Box(modifier = Modifier.fillMaxWidth()) {
+                TruCallerButton(
+                    text = "Report Stolen",
+                    onClick = {
+                        val currentUser = user ?: return@TruCallerButton
+                        val currentDevice = device ?: return@TruCallerButton
+                        isLoading = true
+                        stolenReportViewModel.clearReportError()
+                        stolenReportViewModel.reportStolen(
+                            userId = currentUser.id,
+                            deviceId = currentDevice.id,
+                            description = "Device reported stolen by owner",
+                            pin = pin,
+                            onSuccess = {
+                                isLoading = false
+                                showSuccessDialog = true
+                            }
+                        )
+                        // If reportError gets set, loading stops
+                        scope.launch {
+                            kotlinx.coroutines.delay(500)
+                            if (!showSuccessDialog) isLoading = false
                         }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TruCallerButtonStyle.Danger,
+                    enabled = canReport && !isLoading && user != null && device != null,
+                    isLoading = isLoading,
+                    leadingIcon = Icons.Default.Warning,
+                    iconSize = 20.dp
+                )
+
+                // Dramatic red pulse overlay on the button when confirmed
+                if (confirmed && canReport) {
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Color.Red.copy(alpha = pulseAlpha),
+                                RoundedCornerShape(BorderRadius.md)
+                            )
                     )
-                    // If reportError gets set, loading stops
-                    scope.launch {
-                        kotlinx.coroutines.delay(500)
-                        if (!showSuccessDialog) isLoading = false
-                    }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Danger),
-                enabled = canReport && !isLoading && user != null && device != null
-            ) {
-                if (isLoading) {
-                    CircularProgressIndicator(color = Brand, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                } else {
-                    Icon(Icons.Default.Warning, null, modifier = Modifier.size(20.dp))
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Report Stolen", fontSize = 16.sp, fontWeight = FontWeight.Bold)
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Spacing.md))
 
             // Cancel
-            TextButton(
+            TruCallerButton(
+                text = "Cancel",
                 onClick = { navController.popBackStack() },
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Cancel", color = TextSecondary, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-            }
+                modifier = Modifier.fillMaxWidth(),
+                style = TruCallerButtonStyle.Secondary
+            )
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(Spacing.lg))
         }
     }
 }
 
 @Composable
 private fun InfoItem(icon: ImageVector, text: String) {
+    val colorScheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier.padding(bottom = 14.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -366,12 +392,12 @@ private fun InfoItem(icon: ImageVector, text: String) {
         Box(
             modifier = Modifier
                 .size(34.dp)
-                .background(Danger.copy(alpha = 0.1f), CircleShape),
+                .background(colorScheme.error.copy(alpha = 0.1f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
-            Icon(icon, null, tint = Danger, modifier = Modifier.size(18.dp))
+            Icon(icon, null, tint = colorScheme.error, modifier = Modifier.size(18.dp))
         }
         Spacer(modifier = Modifier.width(14.dp))
-        Text(text, fontSize = 14.sp, color = TextPrimary)
+        Text(text, fontSize = 14.sp, color = colorScheme.onSurface)
     }
 }

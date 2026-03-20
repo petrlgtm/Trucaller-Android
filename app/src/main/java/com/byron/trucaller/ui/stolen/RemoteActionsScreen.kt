@@ -2,6 +2,16 @@ package com.byron.trucaller.ui.stolen
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.scaleIn
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,6 +30,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -36,13 +48,12 @@ import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Snackbar
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -58,6 +69,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
@@ -65,21 +77,21 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Background
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerButtonStyle
+import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.BorderRadius
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.ui.theme.Accent
 import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Inactive
 import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
 import com.byron.trucaller.ui.theme.Warning
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Locale
@@ -101,6 +113,7 @@ fun RemoteActionsScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val colorScheme = MaterialTheme.colorScheme
     var alarmLoading by remember { mutableStateOf(false) }
     var locationLoading by remember { mutableStateOf(false) }
     var lockLoading by remember { mutableStateOf(false) }
@@ -149,6 +162,36 @@ fun RemoteActionsScreen(
         } catch (_: Exception) { "Unknown" }
     } ?: "Unknown"
 
+    // Pulsing animation for alarm active banner
+    val alarmPulseTransition = rememberInfiniteTransition(label = "alarmPulse")
+    val alarmPulseScale by alarmPulseTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.03f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alarmScale"
+    )
+    val alarmPulseAlpha by alarmPulseTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 600),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "alarmAlpha"
+    )
+
+    // Map visibility state for fade-in animation
+    var mapVisible by remember { mutableStateOf(false) }
+    LaunchedEffect(lastIpLog) {
+        if (lastIpLog != null && lastIpLog.latitude != 0.0 && lastIpLog.longitude != 0.0) {
+            delay(200)
+            mapVisible = true
+        }
+    }
+
     // Auto-clear action message and stop location loading when request completes
     LaunchedEffect(actionMessage) {
         if (actionMessage != null) {
@@ -180,7 +223,7 @@ fun RemoteActionsScreen(
                         alarmLoading = false
                         showAlarmDialog = true
                     }
-                }) { Text("Trigger Alarm", color = Danger) }
+                }) { Text("Trigger Alarm", color = colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { showAlarmConfirm = false }) { Text("Cancel") }
@@ -215,7 +258,7 @@ fun RemoteActionsScreen(
                         triggeredByRole = "owner"
                     )
                     lockLoading = false
-                }) { Text("Lock Now", color = Danger) }
+                }) { Text("Lock Now", color = colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { showLockConfirm = false }) { Text("Cancel") }
@@ -262,23 +305,23 @@ fun RemoteActionsScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Background)
+                .background(colorScheme.background)
         ) {
             // Banner
             TopAppBar(
                 title = {},
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onError)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Danger)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.error)
             )
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Danger)
-                    .padding(bottom = 24.dp),
+                    .background(colorScheme.error)
+                    .padding(bottom = Spacing.lg),
                 contentAlignment = Alignment.Center
             ) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -289,15 +332,15 @@ fun RemoteActionsScreen(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Icon(Icons.Default.Warning, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                        Text("STOLEN", color = Color.White, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
+                        Icon(Icons.Default.Warning, null, tint = colorScheme.onError, modifier = Modifier.size(14.dp))
+                        Text("STOLEN", color = colorScheme.onError, fontSize = 12.sp, fontWeight = FontWeight.ExtraBold, letterSpacing = 1.5.sp)
                     }
                     Spacer(modifier = Modifier.height(12.dp))
                     Text(
                         device?.let { "${it.manufacturer} ${it.model}" } ?: "Loading...",
-                        color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold
+                        color = colorScheme.onError, fontSize = 22.sp, fontWeight = FontWeight.Bold
                     )
-                    Text("Reported $reportDate", color = Color.White.copy(alpha = 0.8f), fontSize = 14.sp)
+                    Text("Reported $reportDate", color = colorScheme.onError.copy(alpha = 0.8f), fontSize = 14.sp)
                 }
             }
 
@@ -305,207 +348,185 @@ fun RemoteActionsScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp)
+                    .padding(Spacing.md)
             ) {
-                // Alarm active banner
+                // Pulsing alarm active banner
                 if (alarmPlaying) {
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = Danger)
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp)
+                            .scale(alarmPulseScale)
+                            .alpha(alarmPulseAlpha)
+                            .background(colorScheme.error, RoundedCornerShape(BorderRadius.md))
                     ) {
                         Row(
-                            modifier = Modifier.padding(16.dp),
+                            modifier = Modifier.padding(Spacing.md),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(Icons.Default.Alarm, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                            Icon(Icons.Default.Alarm, null, tint = colorScheme.onError, modifier = Modifier.size(24.dp))
                             Spacer(modifier = Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text("ALARM ACTIVE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                Text("Alarm is sounding on device", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                                Text("ALARM ACTIVE", color = colorScheme.onError, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text("Alarm is sounding on device", color = colorScheme.onError.copy(alpha = 0.8f), fontSize = 12.sp)
                             }
                             Button(
                                 onClick = { alarmViewModel.stopAlarm() },
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.White)
+                                colors = ButtonDefaults.buttonColors(containerColor = colorScheme.onError)
                             ) {
-                                Text("STOP", color = Danger, fontWeight = FontWeight.Bold)
+                                Text("STOP", color = colorScheme.error, fontWeight = FontWeight.Bold)
                             }
                         }
                     }
                 }
 
                 // Remote Actions Grid: Alarm + Lock + Location
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text("Remote Actions", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
-                        Spacer(modifier = Modifier.height(16.dp))
+                TruCallerCard {
+                    Text("Remote Actions", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
+                    Spacer(modifier = Modifier.height(Spacing.md))
 
-                        // Trigger Alarm
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .background(Danger.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Alarm, null, tint = Danger, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Trigger Alarm", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
-                                Text("Sound a loud alarm, even on silent", fontSize = 12.sp, color = TextSecondary)
-                            }
-                            Button(
-                                onClick = { showAlarmConfirm = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = Danger),
-                                shape = RoundedCornerShape(10.dp),
-                                enabled = !alarmLoading && device != null && user != null
-                            ) {
-                                if (alarmLoading) {
-                                    CircularProgressIndicator(color = Brand, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Text("Trigger", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                            }
+                    // Trigger Alarm
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(colorScheme.error.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Alarm, null, tint = colorScheme.error, modifier = Modifier.size(24.dp))
                         }
-
-                        HorizontalDivider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 14.dp))
-
-                        // Lock Device
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .background(Warning.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Lock, null, tint = Warning, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Lock Device", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
-                                Text("Immediately lock the screen", fontSize = 12.sp, color = TextSecondary)
-                            }
-                            Button(
-                                onClick = { showLockConfirm = true },
-                                colors = ButtonDefaults.buttonColors(containerColor = Warning),
-                                shape = RoundedCornerShape(10.dp),
-                                enabled = !lockLoading && device != null && user != null
-                            ) {
-                                if (lockLoading) {
-                                    CircularProgressIndicator(color = Brand, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Text("Lock", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                            }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Trigger Alarm", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
+                            Text("Sound a loud alarm, even on silent", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
                         }
+                        TruCallerButton(
+                            text = "Trigger",
+                            onClick = { showAlarmConfirm = true },
+                            style = TruCallerButtonStyle.Danger,
+                            enabled = !alarmLoading && device != null && user != null,
+                            isLoading = alarmLoading
+                        )
+                    }
 
-                        HorizontalDivider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 14.dp))
+                    HorizontalDivider(color = colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 14.dp))
 
-                        // Request Location
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(44.dp)
-                                    .background(Brand.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.GpsFixed, null, tint = Brand, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(14.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Request Location", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
-                                Text("Refresh IP-based location data", fontSize = 12.sp, color = TextSecondary)
-                            }
-                            Button(
-                                onClick = {
-                                    val currentUser = user ?: return@Button
-                                    val currentDevice = device ?: return@Button
-                                    locationLoading = true
-                                    alarmViewModel.requestLocation(
-                                        deviceId = currentDevice.id,
-                                        triggeredBy = currentUser.id,
-                                        triggeredByName = currentUser.fullName,
-                                        triggeredByRole = "owner"
-                                    )
-                                },
-                                colors = ButtonDefaults.buttonColors(containerColor = Brand),
-                                shape = RoundedCornerShape(10.dp),
-                                enabled = !locationLoading && device != null && user != null
-                            ) {
-                                if (locationLoading) {
-                                    CircularProgressIndicator(color = Brand, modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
-                                } else {
-                                    Text("Refresh", fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                }
-                            }
+                    // Lock Device
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(colorScheme.primary.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Lock, null, tint = colorScheme.primary, modifier = Modifier.size(24.dp))
                         }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Lock Device", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
+                            Text("Immediately lock the screen", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                        }
+                        TruCallerButton(
+                            text = "Lock",
+                            onClick = { showLockConfirm = true },
+                            style = TruCallerButtonStyle.Primary,
+                            enabled = !lockLoading && device != null && user != null,
+                            isLoading = lockLoading
+                        )
+                    }
+
+                    HorizontalDivider(color = colorScheme.outlineVariant, modifier = Modifier.padding(vertical = 14.dp))
+
+                    // Request Location
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(44.dp)
+                                .background(Brand.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.GpsFixed, null, tint = Brand, modifier = Modifier.size(24.dp))
+                        }
+                        Spacer(modifier = Modifier.width(14.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Request Location", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
+                            Text("Refresh IP-based location data", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                        }
+                        TruCallerButton(
+                            text = "Refresh",
+                            onClick = {
+                                val currentUser = user ?: return@TruCallerButton
+                                val currentDevice = device ?: return@TruCallerButton
+                                locationLoading = true
+                                alarmViewModel.requestLocation(
+                                    deviceId = currentDevice.id,
+                                    triggeredBy = currentUser.id,
+                                    triggeredByName = currentUser.fullName,
+                                    triggeredByRole = "owner"
+                                )
+                            },
+                            style = TruCallerButtonStyle.Primary,
+                            enabled = !locationLoading && device != null && user != null,
+                            isLoading = locationLoading
+                        )
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
 
                 // Last Known Location card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Brand.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.LocationOn, null, tint = Brand, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("Last Known Location", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
+                TruCallerCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Brand.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.LocationOn, null, tint = Brand, modifier = Modifier.size(24.dp))
                         }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("Last Known Location", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
+                    }
 
-                        if (lastIpLog != null) {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Background, RoundedCornerShape(12.dp))
-                                    .padding(16.dp)
-                            ) {
-                                Column {
-                                    LocationRow("City", "${lastIpLog.city}, ${lastIpLog.country}")
-                                    HorizontalDivider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 8.dp))
-                                    LocationRow("ISP", lastIpLog.isp)
-                                    HorizontalDivider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 8.dp))
-                                    LocationRow("IP Address", lastIpLog.ipAddress, mono = true)
-                                    HorizontalDivider(color = Color(0xFF333333), modifier = Modifier.padding(vertical = 8.dp))
-                                    LocationRow("Last Seen", formatRelativeTime(lastIpLog.timestamp))
-                                }
+                    if (lastIpLog != null) {
+                        Spacer(modifier = Modifier.height(Spacing.md))
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(colorScheme.background, RoundedCornerShape(BorderRadius.md))
+                                .padding(Spacing.md)
+                        ) {
+                            Column {
+                                LocationRow("City", "${lastIpLog.city}, ${lastIpLog.country}")
+                                HorizontalDivider(color = colorScheme.outlineVariant, modifier = Modifier.padding(vertical = Spacing.sm))
+                                LocationRow("ISP", lastIpLog.isp)
+                                HorizontalDivider(color = colorScheme.outlineVariant, modifier = Modifier.padding(vertical = Spacing.sm))
+                                LocationRow("IP Address", lastIpLog.ipAddress, mono = true)
+                                HorizontalDivider(color = colorScheme.outlineVariant, modifier = Modifier.padding(vertical = Spacing.sm))
+                                LocationRow("Last Seen", formatRelativeTime(lastIpLog.timestamp))
                             }
-                        } else {
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text("No IP data available", color = TextSecondary, fontSize = 14.sp)
                         }
+                    } else {
+                        Spacer(modifier = Modifier.height(Spacing.md))
+                        Text("No IP data available", color = colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                    }
 
-                        // Embedded Map View
-                        Spacer(modifier = Modifier.height(16.dp))
-                        if (lastIpLog != null && lastIpLog.latitude != 0.0 && lastIpLog.longitude != 0.0) {
-                            val lat = lastIpLog.latitude
-                            val lon = lastIpLog.longitude
+                    // Embedded Map View with fade-in + zoom animation
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    if (lastIpLog != null && lastIpLog.latitude != 0.0 && lastIpLog.longitude != 0.0) {
+                        val lat = lastIpLog.latitude
+                        val lon = lastIpLog.longitude
 
-                            // osmdroid MapView
+                        AnimatedVisibility(
+                            visible = mapVisible,
+                            enter = fadeIn(tween(600)) + scaleIn(initialScale = 0.95f, animationSpec = tween(600))
+                        ) {
                             AndroidView(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(200.dp)
-                                    .clip(RoundedCornerShape(12.dp)),
+                                    .clip(RoundedCornerShape(BorderRadius.md)),
                                 factory = { ctx ->
                                     org.osmdroid.config.Configuration.getInstance().userAgentValue = ctx.packageName
                                     org.osmdroid.views.MapView(ctx).apply {
@@ -532,159 +553,187 @@ fun RemoteActionsScreen(
                                     mapView.invalidate()
                                 }
                             )
+                        }
 
-                            Spacer(modifier = Modifier.height(10.dp))
+                        Spacer(modifier = Modifier.height(10.dp))
 
-                            // Open in Google Maps button
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .background(Brand.copy(alpha = 0.05f), RoundedCornerShape(10.dp))
-                                    .clickable {
-                                        val geoUri = Uri.parse(
-                                            "geo:$lat,$lon?q=$lat,$lon(Last+Known+Location)"
-                                        )
-                                        val intent = Intent(Intent.ACTION_VIEW, geoUri).apply {
-                                            setPackage("com.google.android.apps.maps")
-                                        }
-                                        if (intent.resolveActivity(context.packageManager) != null) {
-                                            context.startActivity(intent)
-                                        } else {
-                                            context.startActivity(
-                                                Intent(
-                                                    Intent.ACTION_VIEW,
-                                                    Uri.parse("https://www.google.com/maps?q=$lat,$lon")
-                                                )
-                                            )
-                                        }
+                        // Open in Google Maps button
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(Brand.copy(alpha = 0.05f), RoundedCornerShape(10.dp))
+                                .clickable {
+                                    val geoUri = Uri.parse(
+                                        "geo:$lat,$lon?q=$lat,$lon(Last+Known+Location)"
+                                    )
+                                    val intent = Intent(Intent.ACTION_VIEW, geoUri).apply {
+                                        setPackage("com.google.android.apps.maps")
                                     }
-                                    .padding(horizontal = 16.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.Center
-                            ) {
-                                @Suppress("DEPRECATION")
-                                Icon(Icons.Default.OpenInNew, null, tint = Accent, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Open in Google Maps", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    "${String.format("%.4f", lat)}, ${String.format("%.4f", lon)}",
-                                    color = TextSecondary, fontSize = 12.sp, fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        } else {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(80.dp)
-                                    .background(Background, RoundedCornerShape(12.dp)),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Text("No coordinates available", color = Inactive, fontSize = 14.sp)
-                            }
+                                    if (intent.resolveActivity(context.packageManager) != null) {
+                                        context.startActivity(intent)
+                                    } else {
+                                        context.startActivity(
+                                            Intent(
+                                                Intent.ACTION_VIEW,
+                                                Uri.parse("https://www.google.com/maps?q=$lat,$lon")
+                                            )
+                                        )
+                                    }
+                                }
+                                .padding(horizontal = Spacing.md, vertical = 12.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            @Suppress("DEPRECATION")
+                            Icon(Icons.Default.OpenInNew, null, tint = Accent, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(Spacing.sm))
+                            Text("Open in Google Maps", color = Accent, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Text(
+                                "${String.format("%.4f", lat)}, ${String.format("%.4f", lon)}",
+                                color = colorScheme.onSurfaceVariant, fontSize = 12.sp, fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    } else {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(80.dp)
+                                .background(colorScheme.background, RoundedCornerShape(BorderRadius.md)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text("No coordinates available", color = colorScheme.onSurfaceVariant, fontSize = 14.sp)
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
 
-                // IP Trail card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Box(
-                                modifier = Modifier
-                                    .size(40.dp)
-                                    .background(Brand.copy(alpha = 0.1f), CircleShape),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                Icon(Icons.Default.Timeline, null, tint = Brand, modifier = Modifier.size(24.dp))
-                            }
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text("IP Trail Since Report", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
+                // IP Trail card with animated timeline
+                TruCallerCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(40.dp)
+                                .background(Brand.copy(alpha = 0.1f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Timeline, null, tint = Brand, modifier = Modifier.size(24.dp))
                         }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text("IP Trail Since Report", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
+                    }
 
-                        Spacer(modifier = Modifier.height(16.dp))
+                    Spacer(modifier = Modifier.height(Spacing.md))
 
-                        if (sortedIpLogs.isEmpty()) {
-                            Text("No IP trail data available", color = TextSecondary, fontSize = 14.sp)
-                        } else {
-                            sortedIpLogs.forEachIndexed { index, log ->
-                                val dotColor = TIMELINE_DOT_COLORS[index % TIMELINE_DOT_COLORS.size]
-                                val isLast = index == sortedIpLogs.lastIndex
+                    if (sortedIpLogs.isEmpty()) {
+                        Text("No IP trail data available", color = colorScheme.onSurfaceVariant, fontSize = 14.sp)
+                    } else {
+                        sortedIpLogs.forEachIndexed { index, log ->
+                            val dotColor = TIMELINE_DOT_COLORS[index % TIMELINE_DOT_COLORS.size]
+                            val isLast = index == sortedIpLogs.lastIndex
 
-                                Row(modifier = Modifier.fillMaxWidth()) {
-                                    // Timeline left
-                                    Column(
-                                        horizontalAlignment = Alignment.CenterHorizontally,
-                                        modifier = Modifier.width(24.dp)
-                                    ) {
+                            // Sequential dot animation: each dot fades in with a staggered delay
+                            val dotAlpha = remember { Animatable(0f) }
+                            LaunchedEffect(log.timestamp) {
+                                delay(index * 120L)
+                                dotAlpha.animateTo(
+                                    targetValue = 1f,
+                                    animationSpec = tween(durationMillis = 400)
+                                )
+                            }
+
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .alpha(dotAlpha.value)
+                            ) {
+                                // Timeline left column with Canvas connecting line
+                                Box(
+                                    modifier = Modifier.width(24.dp),
+                                    contentAlignment = Alignment.TopCenter
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        // Animated dot
                                         Box(
                                             modifier = Modifier
                                                 .size(12.dp)
                                                 .background(dotColor, CircleShape)
                                         )
+                                        // Connecting line drawn with Canvas for crisp rendering
                                         if (!isLast) {
-                                            Box(
+                                            Canvas(
                                                 modifier = Modifier
                                                     .width(2.dp)
                                                     .height(56.dp)
-                                                    .background(Brand)
-                                            )
-                                        }
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    // Content
-                                    Column(modifier = Modifier.weight(1f).padding(bottom = 16.dp)) {
-                                        Text(
-                                            log.ipAddress,
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 15.sp,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = TextPrimary
-                                        )
-                                        Text(
-                                            "${log.isp} \u2022 ${log.city}",
-                                            fontSize = 13.sp,
-                                            color = TextSecondary
-                                        )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                                        ) {
-                                            Text(formatRelativeTime(log.timestamp), fontSize = 12.sp, color = Inactive)
-                                            val isWifi = log.networkType == "wifi"
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(
-                                                        if (isWifi) Success.copy(alpha = 0.1f) else Warning.copy(alpha = 0.1f),
-                                                        RoundedCornerShape(10.dp)
-                                                    )
-                                                    .padding(horizontal = 8.dp, vertical = 3.dp)
                                             ) {
-                                                Row(
-                                                    verticalAlignment = Alignment.CenterVertically,
-                                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                                ) {
-                                                    Icon(
-                                                        if (isWifi) Icons.Default.Wifi else Icons.Default.CellTower,
-                                                        null,
-                                                        tint = if (isWifi) Success else Warning,
-                                                        modifier = Modifier.size(12.dp)
-                                                    )
-                                                    Text(
-                                                        if (isWifi) "WiFi" else "Mobile",
-                                                        fontSize = 11.sp,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = if (isWifi) Success else Warning
+                                                val lineColor = Brand
+                                                drawLine(
+                                                    color = lineColor.copy(alpha = 0.5f),
+                                                    start = Offset(size.width / 2, 0f),
+                                                    end = Offset(size.width / 2, size.height),
+                                                    strokeWidth = 2.dp.toPx()
+                                                )
+                                                // Dot accents along the line
+                                                val dotCount = 3
+                                                val segmentHeight = size.height / (dotCount + 1)
+                                                for (i in 1..dotCount) {
+                                                    drawCircle(
+                                                        color = lineColor.copy(alpha = 0.3f),
+                                                        radius = 1.5.dp.toPx(),
+                                                        center = Offset(size.width / 2, segmentHeight * i)
                                                     )
                                                 }
+                                            }
+                                        }
+                                    }
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                // Content
+                                Column(modifier = Modifier.weight(1f).padding(bottom = Spacing.md)) {
+                                    Text(
+                                        log.ipAddress,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = colorScheme.onSurface
+                                    )
+                                    Text(
+                                        "${log.isp} \u2022 ${log.city}",
+                                        fontSize = 13.sp,
+                                        color = colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(Spacing.xs))
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        Text(formatRelativeTime(log.timestamp), fontSize = 12.sp, color = colorScheme.onSurfaceVariant.copy(alpha = 0.6f))
+                                        val isWifi = log.networkType == "wifi"
+                                        Box(
+                                            modifier = Modifier
+                                                .background(
+                                                    if (isWifi) Success.copy(alpha = 0.1f) else Warning.copy(alpha = 0.1f),
+                                                    RoundedCornerShape(10.dp)
+                                                )
+                                                .padding(horizontal = Spacing.sm, vertical = 3.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    if (isWifi) Icons.Default.Wifi else Icons.Default.CellTower,
+                                                    null,
+                                                    tint = if (isWifi) Success else Warning,
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    if (isWifi) "WiFi" else "Mobile",
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.SemiBold,
+                                                    color = if (isWifi) Success else Warning
+                                                )
                                             }
                                         }
                                     }
@@ -694,28 +743,21 @@ fun RemoteActionsScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
 
                 // Mark as Recovered button
-                Button(
+                TruCallerButton(
+                    text = "Mark as Recovered",
                     onClick = { showRecoverConfirm = true },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Success),
-                    shape = RoundedCornerShape(12.dp),
-                    enabled = !recoverLoading && device != null
-                ) {
-                    if (recoverLoading) {
-                        CircularProgressIndicator(color = Brand, modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
-                    } else {
-                        Icon(Icons.Default.CheckCircle, null, modifier = Modifier.size(22.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Mark as Recovered", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                    }
-                }
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TruCallerButtonStyle.Primary,
+                    enabled = !recoverLoading && device != null,
+                    isLoading = recoverLoading,
+                    leadingIcon = Icons.Default.CheckCircle,
+                    iconSize = 22.dp
+                )
 
-                Spacer(modifier = Modifier.height(32.dp))
+                Spacer(modifier = Modifier.height(Spacing.xl))
             }
         }
 
@@ -724,10 +766,10 @@ fun RemoteActionsScreen(
             Snackbar(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(16.dp),
+                    .padding(Spacing.md),
                 action = {
                     TextButton(onClick = { alarmViewModel.clearActionMessage() }) {
-                        Text("OK", color = Color.White)
+                        Text("OK", color = colorScheme.onError)
                     }
                 }
             ) {
@@ -739,17 +781,18 @@ fun RemoteActionsScreen(
 
 @Composable
 private fun LocationRow(label: String, value: String, mono: Boolean = false) {
+    val colorScheme = MaterialTheme.colorScheme
     Row(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+        Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colorScheme.onSurfaceVariant)
         Text(
             value,
             fontSize = 14.sp,
             fontWeight = FontWeight.SemiBold,
-            color = TextPrimary,
+            color = colorScheme.onSurface,
             fontFamily = if (mono) FontFamily.Monospace else FontFamily.Default
         )
     }
