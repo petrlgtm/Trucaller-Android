@@ -9,18 +9,21 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.runBlocking
 
 /**
- * System CallScreeningService that intercepts incoming calls before they ring.
+ * System [CallScreeningService] that intercepts incoming calls before they ring.
  *
  * For each incoming call the service:
  * 1. Checks whether the number is on the user's block list — if so the call
  *    is silently rejected (no ring, no notification).
  * 2. Looks the number up in the central caller-ID / spam database so the
  *    result can be logged and, in the future, surfaced in the UI.
+ *
+ * Named `TruCallerCallScreeningService` to avoid a naming conflict with the
+ * framework's [android.telecom.CallScreeningService] superclass.
  */
-class CallScreeningService : CallScreeningService() {
+class TruCallerCallScreeningService : CallScreeningService() {
 
     companion object {
-        private const val TAG = "CallScreeningService"
+        private const val TAG = "TruCallerCallScreeningService"
     }
 
     override fun onScreenCall(callDetails: Call.Details) {

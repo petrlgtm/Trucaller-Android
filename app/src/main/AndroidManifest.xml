@@ -57,7 +57,7 @@
             </intent-filter>
         </receiver>
         <service
-            android:name=".service.CallScreeningService"
+            android:name=".service.TruCallerCallScreeningService"
             android:permission="android.permission.BIND_SCREENING_SERVICE"
             android:exported="true">
             <intent-filter>
