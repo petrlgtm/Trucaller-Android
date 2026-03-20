@@ -338,6 +338,118 @@ fun AdminDeviceDetailScreen(
 
             Spacer(modifier = Modifier.height(Spacing.md))
 
+            // ── Change Status Section ────────────────────────────────────
+            TruCallerCard {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Icon(
+                        Icons.Default.Shield,
+                        contentDescription = null,
+                        tint = colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Change Status",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = colorScheme.onSurface
+                    )
+                    if (statusUpdating) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = colorScheme.primary
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Status button group — 2x2 grid
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        DeviceStatusButton(
+                            status = DeviceStatus.ACTIVE,
+                            currentStatus = dev.status,
+                            enabled = !statusUpdating,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val admin = adminUser ?: return@DeviceStatusButton
+                                deviceViewModel.adminUpdateDeviceStatus(
+                                    deviceId = deviceId,
+                                    newStatus = DeviceStatus.ACTIVE,
+                                    adminId = admin.id,
+                                    adminName = admin.name,
+                                    onAutoResolved = {
+                                        stolenReportViewModel.markDeviceRecovered(deviceId)
+                                        showAutoResolvedDialog = true
+                                    }
+                                )
+                            }
+                        )
+                        DeviceStatusButton(
+                            status = DeviceStatus.INACTIVE,
+                            currentStatus = dev.status,
+                            enabled = !statusUpdating,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val admin = adminUser ?: return@DeviceStatusButton
+                                deviceViewModel.adminUpdateDeviceStatus(
+                                    deviceId = deviceId,
+                                    newStatus = DeviceStatus.INACTIVE,
+                                    adminId = admin.id,
+                                    adminName = admin.name
+                                )
+                            }
+                        )
+                    }
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        DeviceStatusButton(
+                            status = DeviceStatus.FLAGGED,
+                            currentStatus = dev.status,
+                            enabled = !statusUpdating,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val admin = adminUser ?: return@DeviceStatusButton
+                                deviceViewModel.adminUpdateDeviceStatus(
+                                    deviceId = deviceId,
+                                    newStatus = DeviceStatus.FLAGGED,
+                                    adminId = admin.id,
+                                    adminName = admin.name
+                                )
+                            }
+                        )
+                        DeviceStatusButton(
+                            status = DeviceStatus.STOLEN,
+                            currentStatus = dev.status,
+                            enabled = !statusUpdating,
+                            modifier = Modifier.weight(1f),
+                            onClick = {
+                                val admin = adminUser ?: return@DeviceStatusButton
+                                deviceViewModel.adminUpdateDeviceStatus(
+                                    deviceId = deviceId,
+                                    newStatus = DeviceStatus.STOLEN,
+                                    adminId = admin.id,
+                                    adminName = admin.name,
+                                    onStolenPrompt = { showStolenPromptDialog = true }
+                                )
+                            }
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(Spacing.md))
+
             // Actions
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -538,6 +650,53 @@ fun AdminDeviceDetailScreen(
 
             Spacer(modifier = Modifier.height(Spacing.lg))
         }
+    }
+}
+
+/**
+ * A selectable status button used in the admin device status management grid.
+ * Shows the status name with color coding. The currently active status is
+ * rendered with a filled background; others use an outlined style.
+ */
+@Composable
+private fun DeviceStatusButton(
+    status: DeviceStatus,
+    currentStatus: DeviceStatus,
+    enabled: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    val colorScheme = MaterialTheme.colorScheme
+    val isSelected = status == currentStatus
+
+    val statusColor = when (status) {
+        DeviceStatus.ACTIVE -> Color(0xFF4CAF50)
+        DeviceStatus.INACTIVE -> colorScheme.onSurfaceVariant
+        DeviceStatus.FLAGGED -> Color(0xFFFF9800)
+        DeviceStatus.STOLEN -> colorScheme.error
+    }
+
+    OutlinedButton(
+        onClick = onClick,
+        enabled = enabled && !isSelected,
+        modifier = modifier.height(40.dp),
+        shape = RoundedCornerShape(8.dp),
+        border = BorderStroke(
+            width = if (isSelected) 2.dp else 1.dp,
+            color = if (isSelected) statusColor else statusColor.copy(alpha = 0.4f)
+        ),
+        colors = ButtonDefaults.outlinedButtonColors(
+            containerColor = if (isSelected) statusColor.copy(alpha = 0.15f) else Color.Transparent,
+            contentColor = statusColor,
+            disabledContainerColor = if (isSelected) statusColor.copy(alpha = 0.15f) else Color.Transparent,
+            disabledContentColor = if (isSelected) statusColor else statusColor.copy(alpha = 0.4f)
+        )
+    ) {
+        Text(
+            text = status.name,
+            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+            fontSize = 12.sp
+        )
     }
 }
 

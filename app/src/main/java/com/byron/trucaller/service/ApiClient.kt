@@ -236,6 +236,18 @@ object ApiClient {
     suspend fun deleteAdminCallerId(entryId: String): ApiResult<Unit> =
         delete("/api/admin/caller-ids/$entryId")
 
+    suspend fun adminUpdateDeviceStatus(
+        deviceId: String,
+        status: String,
+        changedBy: String,
+        changedByName: String
+    ): ApiResult<Unit> =
+        put("/api/admin/devices/$deviceId/status", mapOf(
+            "status" to status,
+            "changedBy" to changedBy,
+            "changedByName" to changedByName
+        ))
+
     // ── Internal HTTP methods ───────────────────────────────────────────
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> = withContext(Dispatchers.IO) {

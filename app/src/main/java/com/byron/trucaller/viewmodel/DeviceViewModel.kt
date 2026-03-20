@@ -7,12 +7,14 @@ import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.AP
 import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import android.util.Log
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.Device
 import com.byron.trucaller.data.model.DeviceStatus
 import com.byron.trucaller.data.model.IpLog
 import com.byron.trucaller.data.repository.DeviceRepository
 import com.byron.trucaller.data.repository.UserRepository
+import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.service.DeviceRegistrationService
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -35,6 +37,16 @@ class DeviceViewModel(
 
     private val _userDevice = MutableStateFlow<Device?>(null)
     val userDevice: StateFlow<Device?> = _userDevice.asStateFlow()
+
+    /** True while an admin status update is in progress. */
+    private val _statusUpdating = MutableStateFlow(false)
+    val statusUpdating: StateFlow<Boolean> = _statusUpdating.asStateFlow()
+
+    /** Transient message shown after admin status change. */
+    private val _statusMessage = MutableStateFlow<String?>(null)
+    val statusMessage: StateFlow<String?> = _statusMessage.asStateFlow()
+
+    fun clearStatusMessage() { _statusMessage.value = null }
 
     private var deviceObserverJob: Job? = null
 
@@ -76,7 +88,74 @@ class DeviceViewModel(
         }
     }
 
+    /**
+     * Admin-only: update device status with backend sync and audit logging.
+     *
+     * @param onStolenPrompt callback invoked when changing to STOLEN so the UI
+     *   can prompt the admin to optionally create a stolen report.
+     * @param onAutoResolved callback invoked when pending stolen reports are
+     *   auto-resolved (transition away from STOLEN to ACTIVE).
+     */
+    fun adminUpdateDeviceStatus(
+        deviceId: String,
+        newStatus: DeviceStatus,
+        adminId: String,
+        adminName: String,
+        onStolenPrompt: (() -> Unit)? = null,
+        onAutoResolved: ((count: Int) -> Unit)? = null
+    ) {
+        viewModelScope.launch {
+            _statusUpdating.value = true
+            try {
+                val oldDevice = deviceRepository.getDeviceById(deviceId)
+                val oldStatus = oldDevice?.status
+
+                // 1. Update Room locally
+                deviceRepository.updateDeviceStatus(deviceId, newStatus)
+
+                // 2. Best-effort sync to backend
+                try {
+                    val result = ApiClient.adminUpdateDeviceStatus(
+                        deviceId = deviceId,
+                        status = newStatus.name,
+                        changedBy = adminId,
+                        changedByName = adminName
+                    )
+                    if (result.success) {
+                        Log.d(TAG, "Admin status change synced: $deviceId -> $newStatus by $adminName")
+                    } else {
+                        Log.w(TAG, "Backend sync failed for admin status change: ${result.error}")
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Backend sync error for admin status change on $deviceId", e)
+                }
+
+                Log.i(TAG, "ADMIN_STATUS_CHANGE: device=$deviceId " +
+                        "from=${oldStatus?.name ?: "UNKNOWN"} to=${newStatus.name} " +
+                        "by=$adminName ($adminId)")
+
+                // 3. If changing to STOLEN, prompt admin for optional stolen report
+                if (newStatus == DeviceStatus.STOLEN && oldStatus != DeviceStatus.STOLEN) {
+                    onStolenPrompt?.invoke()
+                }
+
+                // 4. If transitioning from STOLEN to ACTIVE, auto-resolve pending stolen reports
+                if (oldStatus == DeviceStatus.STOLEN && newStatus == DeviceStatus.ACTIVE) {
+                    onAutoResolved?.invoke(0) // signal the UI; actual resolution handled by StolenReportViewModel
+                }
+
+                _statusMessage.value = "Status changed to ${newStatus.name}"
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to update device status for $deviceId", e)
+                _statusMessage.value = "Failed to update status: ${e.message}"
+            } finally {
+                _statusUpdating.value = false
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "DeviceViewModel"
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as TruCallerApplication

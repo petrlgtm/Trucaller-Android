@@ -281,7 +281,8 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 deviceId = deviceId,
                 deviceViewModel = deviceViewModel,
                 alarmViewModel = alarmViewModel,
-                authViewModel = authViewModel
+                authViewModel = authViewModel,
+                stolenReportViewModel = stolenReportViewModel
             )
         }
         composable("admin_users") {
