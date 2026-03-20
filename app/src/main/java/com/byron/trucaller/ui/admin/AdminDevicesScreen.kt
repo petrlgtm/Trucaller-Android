@@ -2,7 +2,6 @@ package com.byron.trucaller.ui.admin
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -19,11 +18,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -45,16 +43,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.byron.trucaller.data.model.DeviceStatus
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Inactive
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
-import com.byron.trucaller.ui.theme.Warning
+import com.byron.trucaller.ui.components.BadgeType
+import com.byron.trucaller.ui.components.EmptyStateIcon
+import com.byron.trucaller.ui.components.EmptyStateView
+import com.byron.trucaller.ui.components.ShimmerLoadingList
+import com.byron.trucaller.ui.components.TruCallerBadge
+import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.DeviceViewModel
 
@@ -62,7 +57,12 @@ import com.byron.trucaller.viewmodel.DeviceViewModel
 @Composable
 fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceViewModel) {
     var searchQuery by remember { mutableStateOf("") }
+    var isInitialLoad by remember { mutableStateOf(true) }
     val allDevices by deviceViewModel.allDevices.collectAsState(initial = emptyList())
+
+    if (allDevices.isNotEmpty() && isInitialLoad) {
+        isInitialLoad = false
+    }
 
     val filtered by remember(searchQuery, allDevices) {
         derivedStateOf {
@@ -79,71 +79,113 @@ fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceView
         }
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Background)) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
         TopAppBar(
-            title = { Text("Devices (${filtered.size})", fontWeight = FontWeight.Bold, color = Color.White) },
+            title = {
+                Text(
+                    "Devices (${filtered.size})",
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onPrimary
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
         )
 
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
             placeholder = { Text("Search device, model...") },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = Brand) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = colorScheme.primary) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(Spacing.md),
             shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colorScheme.primary,
+                unfocusedBorderColor = colorScheme.outline,
+                focusedContainerColor = colorScheme.surfaceVariant,
+                unfocusedContainerColor = colorScheme.surfaceVariant
+            )
         )
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-            items(filtered, key = { it.id }) { device ->
-                val statusColor = when (device.status) {
-                    DeviceStatus.ACTIVE -> Success
-                    DeviceStatus.STOLEN -> Danger
-                    DeviceStatus.INACTIVE -> Inactive
-                    DeviceStatus.FLAGGED -> Warning
-                }
-
-                Card(
+        when {
+            isInitialLoad && allDevices.isEmpty() -> {
+                ShimmerLoadingList(modifier = Modifier.padding(horizontal = Spacing.md))
+            }
+            filtered.isEmpty() -> {
+                EmptyStateView(
+                    title = "No Devices Found",
+                    subtitle = if (searchQuery.isNotBlank()) "No devices match \"$searchQuery\""
+                    else "No devices have been registered yet",
+                    icon = EmptyStateIcon.GENERIC
+                )
+            }
+            else -> {
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 4.dp)
-                        .clickable { navController.navigate("admin_device_detail/${device.id}") },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = Spacing.md)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text("${device.manufacturer} ${device.model}", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = TextPrimary)
+                    items(filtered, key = { it.id }) { device ->
+                        val statusBadgeType = when (device.status) {
+                            DeviceStatus.ACTIVE -> BadgeType.Success
+                            DeviceStatus.STOLEN -> BadgeType.Spam
+                            DeviceStatus.INACTIVE -> BadgeType.Info
+                            DeviceStatus.FLAGGED -> BadgeType.Warning
+                        }
+
+                        TruCallerCard(
+                            modifier = Modifier
+                                .padding(vertical = 4.dp)
+                                .clickable { navController.navigate("admin_device_detail/${device.id}") },
+                            elevation = 1.dp
+                        ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(device.lastIp, fontSize = 12.sp, color = Inactive, fontFamily = FontFamily.Monospace)
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "${device.manufacturer} ${device.model}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 15.sp,
+                                        color = colorScheme.onSurface
+                                    )
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            device.lastIp,
+                                            fontSize = 12.sp,
+                                            color = colorScheme.onSurfaceVariant,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(
+                                            formatRelativeTime(device.lastSeen),
+                                            fontSize = 11.sp,
+                                            color = colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                TruCallerBadge(
+                                    text = device.status.name,
+                                    type = statusBadgeType
+                                )
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text(formatRelativeTime(device.lastSeen), fontSize = 11.sp, color = Inactive)
+                                Icon(
+                                    Icons.Default.ChevronRight,
+                                    null,
+                                    tint = colorScheme.onSurfaceVariant,
+                                    modifier = Modifier.size(20.dp)
+                                )
                             }
                         }
-                        Box(
-                            modifier = Modifier
-                                .background(statusColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 4.dp)
-                        ) {
-                            Text(device.status.name, color = statusColor, fontSize = 11.sp, fontWeight = FontWeight.Bold)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Icon(Icons.Default.ChevronRight, null, tint = Inactive, modifier = Modifier.size(20.dp))
                     }
+                    item { Spacer(modifier = Modifier.height(Spacing.md)) }
                 }
             }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }

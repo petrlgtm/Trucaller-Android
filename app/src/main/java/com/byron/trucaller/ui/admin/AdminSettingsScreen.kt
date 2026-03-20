@@ -17,14 +17,11 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Snackbar
@@ -49,12 +46,12 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
+import com.byron.trucaller.ui.components.BadgeType
+import com.byron.trucaller.ui.components.TruCallerBadge
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerButtonStyle
+import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AdminSettingsViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
 
@@ -93,145 +90,176 @@ fun AdminSettingsScreen(
         }
     }
 
+    val colorScheme = MaterialTheme.colorScheme
+
     Box(modifier = Modifier.fillMaxSize()) {
-        Column(modifier = Modifier.fillMaxSize().background(Background)) {
+        Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
             TopAppBar(
-                title = { Text("Settings", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = {
+                    Text(
+                        "Settings",
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onPrimary
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
             )
 
             Column(
-                modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spacing.md)
             ) {
                 // Profile section
-                Card(
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Admin Profile", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Box(
-                            modifier = Modifier.background(Color(0xFF6A1B9A).copy(alpha = 0.1f), RoundedCornerShape(6.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text("Super Admin", color = Color(0xFF6A1B9A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                        }
+                TruCallerCard {
+                    Text(
+                        "Admin Profile",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    TruCallerBadge(
+                        text = "Super Admin",
+                        type = BadgeType.Custom,
+                        color = Color(0xFF6A1B9A),
+                        backgroundColor = Color(0xFF6A1B9A).copy(alpha = 0.1f)
+                    )
 
-                        Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = name, onValueChange = { name = it }, label = { Text("Name") },
-                            singleLine = true, modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    OutlinedTextField(
+                        value = name, onValueChange = { name = it }, label = { Text("Name") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colorScheme.primary,
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedContainerColor = colorScheme.surfaceVariant,
+                            unfocusedContainerColor = colorScheme.surfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = email, onValueChange = { email = it }, label = { Text("Email") },
-                            singleLine = true, modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = email, onValueChange = { email = it }, label = { Text("Email") },
+                        singleLine = true, modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colorScheme.primary,
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedContainerColor = colorScheme.surfaceVariant,
+                            unfocusedContainerColor = colorScheme.surfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = { adminSettingsViewModel.saveProfile(name, email) },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Brand),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text("Save Profile", fontWeight = FontWeight.Bold) }
-                    }
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    TruCallerButton(
+                        text = "Save Profile",
+                        onClick = { adminSettingsViewModel.saveProfile(name, email) },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
 
                 // Notifications
-                Card(
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Notifications, null, tint = Brand, modifier = Modifier.size(20.dp))
-                            Spacer(modifier = Modifier.width(8.dp))
-                            Text("Notifications", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-                        }
-                        Spacer(modifier = Modifier.height(12.dp))
-                        NotifToggle("Notify on new stolen report", stolenReportNotifState) {
-                            adminSettingsViewModel.setStolenReportNotif(it)
-                        }
-                        HorizontalDivider(color = Color(0xFF333333))
-                        NotifToggle("Notify on alarm trigger", alarmNotifState) {
-                            adminSettingsViewModel.setAlarmNotif(it)
-                        }
-                        HorizontalDivider(color = Color(0xFF333333))
-                        NotifToggle("Daily activity digest", dailyDigestState) {
-                            adminSettingsViewModel.setDailyDigest(it)
-                        }
-                        HorizontalDivider(color = Color(0xFF333333))
-                        NotifToggle("Weekly summary report", weeklyReportState) {
-                            adminSettingsViewModel.setWeeklyReport(it)
-                        }
+                TruCallerCard {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Notifications,
+                            null,
+                            tint = colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "Notifications",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 16.sp,
+                            color = colorScheme.onSurface
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                    NotifToggle("Notify on new stolen report", stolenReportNotifState) {
+                        adminSettingsViewModel.setStolenReportNotif(it)
+                    }
+                    HorizontalDivider(color = colorScheme.outlineVariant)
+                    NotifToggle("Notify on alarm trigger", alarmNotifState) {
+                        adminSettingsViewModel.setAlarmNotif(it)
+                    }
+                    HorizontalDivider(color = colorScheme.outlineVariant)
+                    NotifToggle("Daily activity digest", dailyDigestState) {
+                        adminSettingsViewModel.setDailyDigest(it)
+                    }
+                    HorizontalDivider(color = colorScheme.outlineVariant)
+                    NotifToggle("Weekly summary report", weeklyReportState) {
+                        adminSettingsViewModel.setWeeklyReport(it)
                     }
                 }
 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(Spacing.md))
 
                 // Security
-                Card(
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Text("Security", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-                        Spacer(modifier = Modifier.height(16.dp))
-                        OutlinedTextField(
-                            value = currentPassword, onValueChange = { currentPassword = it },
-                            label = { Text("Current Password") }, singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
-                            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                TruCallerCard {
+                    Text(
+                        "Security",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    OutlinedTextField(
+                        value = currentPassword, onValueChange = { currentPassword = it },
+                        label = { Text("Current Password") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colorScheme.primary,
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedContainerColor = colorScheme.surfaceVariant,
+                            unfocusedContainerColor = colorScheme.surfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        OutlinedTextField(
-                            value = newPassword, onValueChange = { newPassword = it },
-                            label = { Text("New Password") }, singleLine = true,
-                            visualTransformation = PasswordVisualTransformation(),
-                            modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = newPassword, onValueChange = { newPassword = it },
+                        label = { Text("New Password") }, singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = colorScheme.primary,
+                            unfocusedBorderColor = colorScheme.outline,
+                            focusedContainerColor = colorScheme.surfaceVariant,
+                            unfocusedContainerColor = colorScheme.surfaceVariant
                         )
-                        Spacer(modifier = Modifier.height(16.dp))
-                        Button(
-                            onClick = {
-                                val admin = adminUser
-                                if (admin != null) {
-                                    adminSettingsViewModel.updatePassword(admin.id, currentPassword, newPassword)
-                                    currentPassword = ""
-                                    newPassword = ""
-                                }
-                            },
-                            modifier = Modifier.fillMaxWidth().height(44.dp),
-                            colors = ButtonDefaults.buttonColors(containerColor = Brand),
-                            shape = RoundedCornerShape(12.dp)
-                        ) { Text("Update Password", fontWeight = FontWeight.Bold) }
-                    }
+                    )
+                    Spacer(modifier = Modifier.height(Spacing.md))
+                    TruCallerButton(
+                        text = "Update Password",
+                        onClick = {
+                            val admin = adminUser
+                            if (admin != null) {
+                                adminSettingsViewModel.updatePassword(admin.id, currentPassword, newPassword)
+                                currentPassword = ""
+                                newPassword = ""
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
 
-                Spacer(modifier = Modifier.height(24.dp))
+                Spacer(modifier = Modifier.height(Spacing.lg))
             }
         }
 
         // Snackbar
         saveMessage?.let { msg ->
             Snackbar(
-                modifier = Modifier.align(Alignment.BottomCenter).padding(16.dp),
+                modifier = Modifier.align(Alignment.BottomCenter).padding(Spacing.md),
                 action = {
                     TextButton(onClick = { adminSettingsViewModel.clearSaveMessage() }) {
                         Text("OK", color = Color.White)
@@ -246,14 +274,21 @@ fun AdminSettingsScreen(
 
 @Composable
 private fun NotifToggle(label: String, checked: Boolean, onChanged: (Boolean) -> Unit) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, fontSize = 14.sp, color = TextPrimary, modifier = Modifier.weight(1f))
+        Text(
+            label,
+            fontSize = 14.sp,
+            color = colorScheme.onSurface,
+            modifier = Modifier.weight(1f)
+        )
         Switch(
             checked = checked, onCheckedChange = onChanged,
-            colors = SwitchDefaults.colors(checkedTrackColor = Brand)
+            colors = SwitchDefaults.colors(checkedTrackColor = colorScheme.primary)
         )
     }
 }

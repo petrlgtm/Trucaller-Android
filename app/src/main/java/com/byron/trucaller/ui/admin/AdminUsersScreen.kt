@@ -2,7 +2,6 @@ package com.byron.trucaller.ui.admin
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -10,20 +9,17 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -46,25 +42,31 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.byron.trucaller.TruCallerApplication
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.Inactive
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
+import com.byron.trucaller.ui.components.BadgeType
+import com.byron.trucaller.ui.components.EmptyStateIcon
+import com.byron.trucaller.ui.components.EmptyStateView
+import com.byron.trucaller.ui.components.ShimmerLoadingList
+import com.byron.trucaller.ui.components.TruCallerAvatar
+import com.byron.trucaller.ui.components.TruCallerBadge
+import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.components.TruCallerHeader
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.util.getInitials
-import kotlin.math.absoluteValue
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminUsersScreen(navController: NavController) {
     var searchQuery by remember { mutableStateOf("") }
+    var isInitialLoad by remember { mutableStateOf(true) }
 
     val app = LocalContext.current.applicationContext as TruCallerApplication
     val users by app.container.userRepository.getAllUsers().collectAsState(initial = emptyList())
+
+    // Mark initial load complete once we have data
+    if (users.isNotEmpty() && isInitialLoad) {
+        isInitialLoad = false
+    }
 
     val filtered by remember(searchQuery, users) {
         derivedStateOf {
@@ -76,80 +78,104 @@ fun AdminUsersScreen(navController: NavController) {
         }
     }
 
-    val avatarColors = listOf(
-        Color(0xFF1565C0), Color(0xFF2E7D32), Color(0xFFC62828), Color(0xFF6A1B9A),
-        Color(0xFFE65100), Color(0xFF00838F), Color(0xFF4E342E), Color(0xFF37474F)
-    )
+    val colorScheme = MaterialTheme.colorScheme
 
-    Column(modifier = Modifier.fillMaxSize().background(Background)) {
+    Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
         TopAppBar(
-            title = { Text("Users (${filtered.size})", fontWeight = FontWeight.Bold, color = Color.White) },
+            title = {
+                Text(
+                    "Users (${filtered.size})",
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onPrimary
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
         )
 
         OutlinedTextField(
             value = searchQuery, onValueChange = { searchQuery = it },
             placeholder = { Text("Search by name or phone...") },
-            leadingIcon = { Icon(Icons.Default.Search, null, tint = Brand) },
+            leadingIcon = { Icon(Icons.Default.Search, null, tint = colorScheme.primary) },
             singleLine = true,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
+            modifier = Modifier.fillMaxWidth().padding(Spacing.md),
             shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = colorScheme.primary,
+                unfocusedBorderColor = colorScheme.outline,
+                focusedContainerColor = colorScheme.surfaceVariant,
+                unfocusedContainerColor = colorScheme.surfaceVariant
+            )
         )
 
-        LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-            items(filtered, key = { it.id }) { user ->
-                val color = avatarColors[user.fullName.hashCode().absoluteValue % avatarColors.size]
-                Card(
+        when {
+            isInitialLoad && users.isEmpty() -> {
+                ShimmerLoadingList(modifier = Modifier.padding(horizontal = Spacing.md))
+            }
+            filtered.isEmpty() -> {
+                EmptyStateView(
+                    title = "No Users Found",
+                    subtitle = if (searchQuery.isNotBlank()) "No users match \"$searchQuery\""
+                    else "No users have registered yet",
+                    icon = EmptyStateIcon.CONTACTS
+                )
+            }
+            else -> {
+                LazyColumn(
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = 3.dp)
-                        .clickable { navController.navigate("admin_user_detail/${user.id}") },
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                        .fillMaxSize()
+                        .padding(horizontal = Spacing.md)
                 ) {
-                    Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier.size(44.dp).background(color, CircleShape),
-                            contentAlignment = Alignment.Center
+                    items(filtered, key = { it.id }) { user ->
+                        TruCallerCard(
+                            modifier = Modifier
+                                .padding(vertical = 3.dp)
+                                .clickable { navController.navigate("admin_user_detail/${user.id}") },
+                            elevation = 0.5.dp
                         ) {
-                            Text(getInitials(user.fullName), color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                        }
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(user.fullName, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, color = TextPrimary)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Box(
-                                    modifier = Modifier.background(
-                                        if (user.isActive) Success.copy(alpha = 0.1f) else Inactive.copy(alpha = 0.1f),
-                                        RoundedCornerShape(6.dp)
-                                    ).padding(horizontal = 6.dp, vertical = 2.dp)
-                                ) {
+                                TruCallerAvatar(name = user.fullName, size = 44.dp)
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Text(
+                                            user.fullName,
+                                            fontWeight = FontWeight.SemiBold,
+                                            fontSize = 15.sp,
+                                            color = colorScheme.onSurface
+                                        )
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        TruCallerBadge(
+                                            text = if (user.isActive) "Active" else "Inactive",
+                                            type = if (user.isActive) BadgeType.Success else BadgeType.Info
+                                        )
+                                    }
                                     Text(
-                                        if (user.isActive) "Active" else "Inactive",
-                                        fontSize = 10.sp, fontWeight = FontWeight.Bold,
-                                        color = if (user.isActive) Success else Inactive
+                                        user.phoneNumber,
+                                        fontSize = 13.sp,
+                                        color = colorScheme.onSurfaceVariant,
+                                        fontFamily = FontFamily.Monospace
                                     )
-                                }
-                            }
-                            Text(user.phoneNumber, fontSize = 13.sp, color = TextSecondary, fontFamily = FontFamily.Monospace)
-                            Row {
-                                user.lastLogin?.let {
-                                    Text("Last: ${formatRelativeTime(it)}", fontSize = 11.sp, color = Inactive)
+                                    Row {
+                                        user.lastLogin?.let {
+                                            Text(
+                                                "Last: ${formatRelativeTime(it)}",
+                                                fontSize = 11.sp,
+                                                color = colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
                     }
+                    item { Spacer(modifier = Modifier.height(Spacing.md)) }
                 }
             }
-            item { Spacer(modifier = Modifier.height(16.dp)) }
         }
     }
 }

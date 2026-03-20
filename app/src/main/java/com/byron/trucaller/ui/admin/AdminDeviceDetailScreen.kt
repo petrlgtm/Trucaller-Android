@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -21,14 +20,11 @@ import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -50,16 +46,15 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.byron.trucaller.data.model.Device
 import com.byron.trucaller.data.model.DeviceStatus
-import com.byron.trucaller.ui.theme.Background
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Inactive
-import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
-import com.byron.trucaller.ui.theme.Warning
+import com.byron.trucaller.ui.components.BadgeType
+import com.byron.trucaller.ui.components.EmptyStateIcon
+import com.byron.trucaller.ui.components.EmptyStateView
+import com.byron.trucaller.ui.components.ShimmerLoadingCard
+import com.byron.trucaller.ui.components.TruCallerBadge
+import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.components.TruCallerButtonStyle
+import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -82,32 +77,40 @@ fun AdminDeviceDetailScreen(
     val ipLogs by deviceViewModel.getIpLogs(deviceId).collectAsState(initial = emptyList())
     val alarmLogs by alarmViewModel.getLogsByDevice(deviceId).collectAsState(initial = emptyList())
 
+    val colorScheme = MaterialTheme.colorScheme
+
     LaunchedEffect(deviceId) {
         device = deviceViewModel.getDeviceById(deviceId)
     }
 
     if (device == null) {
-        Column(modifier = Modifier.fillMaxSize().background(Background)) {
+        Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
             TopAppBar(
-                title = { Text("Device Detail", fontWeight = FontWeight.Bold, color = Color.White) },
+                title = {
+                    Text(
+                        "Device Detail",
+                        fontWeight = FontWeight.Bold,
+                        color = colorScheme.onPrimary
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
             )
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("Loading...", fontSize = 18.sp, color = TextSecondary)
-            }
+            ShimmerLoadingCard(modifier = Modifier.padding(Spacing.md))
         }
         return
     }
 
     val dev = device!!
-    val statusColor = when (dev.status) {
-        DeviceStatus.ACTIVE -> Success; DeviceStatus.STOLEN -> Danger
-        DeviceStatus.INACTIVE -> Inactive; DeviceStatus.FLAGGED -> Warning
+    val statusBadgeType = when (dev.status) {
+        DeviceStatus.ACTIVE -> BadgeType.Success
+        DeviceStatus.STOLEN -> BadgeType.Spam
+        DeviceStatus.INACTIVE -> BadgeType.Info
+        DeviceStatus.FLAGGED -> BadgeType.Warning
     }
 
     if (showAlarmDialog) {
@@ -119,77 +122,98 @@ fun AdminDeviceDetailScreen(
         )
     }
 
-    Column(modifier = Modifier.fillMaxSize().background(Background)) {
+    Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
         TopAppBar(
-            title = { Text("${dev.manufacturer} ${dev.model}", fontWeight = FontWeight.Bold, color = Color.White) },
+            title = {
+                Text(
+                    "${dev.manufacturer} ${dev.model}",
+                    fontWeight = FontWeight.Bold,
+                    color = colorScheme.onPrimary
+                )
+            },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
         )
 
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp)
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(Spacing.md)
         ) {
             // Alarm active banner
             if (alarmPlaying) {
-                Card(
-                    modifier = Modifier.fillMaxWidth().padding(bottom = 12.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = Danger)
+                TruCallerCard(
+                    modifier = Modifier.padding(bottom = 12.dp),
+                    containerColor = colorScheme.error
                 ) {
-                    Row(
-                        modifier = Modifier.padding(16.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(Icons.Default.Alarm, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Default.Alarm,
+                            null,
+                            tint = colorScheme.onError,
+                            modifier = Modifier.size(24.dp)
+                        )
                         Spacer(modifier = Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("ALARM ACTIVE", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                            Text("Alarm is sounding on device", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                            Text(
+                                "ALARM ACTIVE",
+                                color = colorScheme.onError,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                            Text(
+                                "Alarm is sounding on device",
+                                color = colorScheme.onError.copy(alpha = 0.8f),
+                                fontSize = 12.sp
+                            )
                         }
-                        Button(
+                        TruCallerButton(
+                            text = "STOP",
                             onClick = { alarmViewModel.stopAlarm() },
-                            colors = ButtonDefaults.buttonColors(containerColor = Color.White)
-                        ) {
-                            Text("STOP", color = Danger, fontWeight = FontWeight.Bold)
-                        }
+                            style = TruCallerButtonStyle.Secondary
+                        )
                     }
                 }
             }
 
             // Device info card
-            Card(
-                modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text("Device Information", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    InfoRow("Model", "${dev.manufacturer} ${dev.model}")
-                    InfoRow("OS", dev.osVersion)
-                    InfoRow("Device ID", dev.deviceId)
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("Status", color = TextSecondary, fontSize = 13.sp, modifier = Modifier.width(100.dp))
-                        Box(
-                            modifier = Modifier.background(statusColor.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                                .padding(horizontal = 8.dp, vertical = 2.dp)
-                        ) {
-                            Text(dev.status.name, color = statusColor, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                        }
-                    }
-                    InfoRow("Last IP", dev.lastIp)
-                    InfoRow("Last Seen", formatRelativeTime(dev.lastSeen))
+            TruCallerCard {
+                Text(
+                    "Device Information",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = colorScheme.onSurface
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                InfoRow("Model", "${dev.manufacturer} ${dev.model}")
+                InfoRow("OS", dev.osVersion)
+                InfoRow("Device ID", dev.deviceId)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Status",
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        modifier = Modifier.width(100.dp)
+                    )
+                    TruCallerBadge(
+                        text = dev.status.name,
+                        type = statusBadgeType
+                    )
                 }
+                InfoRow("Last IP", dev.lastIp)
+                InfoRow("Last Seen", formatRelativeTime(dev.lastSeen))
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(Spacing.md))
 
             // Actions
-            Button(
+            TruCallerButton(
+                text = "Trigger Alarm",
                 onClick = {
                     val admin = adminUser
                     if (admin != null) {
@@ -202,52 +226,80 @@ fun AdminDeviceDetailScreen(
                     }
                     showAlarmDialog = true
                 },
-                modifier = Modifier.fillMaxWidth().height(48.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Danger),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Icon(Icons.Default.Alarm, null, modifier = Modifier.size(20.dp))
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Trigger Alarm", fontWeight = FontWeight.Bold)
-            }
+                modifier = Modifier.fillMaxWidth(),
+                style = TruCallerButtonStyle.Danger,
+                leadingIcon = Icons.Default.Alarm
+            )
 
             Spacer(modifier = Modifier.height(20.dp))
 
             // IP History
-            Text("IP History (${ipLogs.size})", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
+            Text(
+                "IP History (${ipLogs.size})",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = colorScheme.onBackground
+            )
             Spacer(modifier = Modifier.height(12.dp))
 
             if (ipLogs.isEmpty()) {
-                Text("No IP logs available", color = TextSecondary, fontSize = 14.sp)
+                Text(
+                    "No IP logs available",
+                    color = colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp
+                )
             } else {
-                Card(
-                    modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard)
-                ) {
-                    Column {
-                        val sortedLogs = ipLogs.sortedByDescending { it.timestamp }
-                        sortedLogs.forEachIndexed { index, log ->
-                            Row(
-                                modifier = Modifier.fillMaxWidth().padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(log.ipAddress, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, fontFamily = FontFamily.Monospace, color = TextPrimary)
-                                    Text("${log.isp} - ${log.city}, ${log.country}", fontSize = 12.sp, color = TextSecondary)
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
-                                    Text(formatRelativeTime(log.timestamp), fontSize = 11.sp, color = Inactive)
-                                    val isWifi = log.networkType == "wifi"
-                                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                        Icon(
-                                            if (isWifi) Icons.Default.Wifi else Icons.Default.CellTower, null,
-                                            tint = if (isWifi) Success else Warning, modifier = Modifier.size(12.dp)
-                                        )
-                                        Text(if (isWifi) "WiFi" else "Mobile", fontSize = 11.sp, color = if (isWifi) Success else Warning)
-                                    }
+                TruCallerCard(elevation = 0.dp) {
+                    val sortedLogs = ipLogs.sortedByDescending { it.timestamp }
+                    sortedLogs.forEachIndexed { index, log ->
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    log.ipAddress,
+                                    fontWeight = FontWeight.SemiBold,
+                                    fontSize = 14.sp,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = colorScheme.onSurface
+                                )
+                                Text(
+                                    "${log.isp} - ${log.city}, ${log.country}",
+                                    fontSize = 12.sp,
+                                    color = colorScheme.onSurfaceVariant
+                                )
+                            }
+                            Column(horizontalAlignment = Alignment.End) {
+                                Text(
+                                    formatRelativeTime(log.timestamp),
+                                    fontSize = 11.sp,
+                                    color = colorScheme.onSurfaceVariant
+                                )
+                                val isWifi = log.networkType == "wifi"
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        if (isWifi) Icons.Default.Wifi else Icons.Default.CellTower,
+                                        null,
+                                        tint = if (isWifi) Color(0xFF4CAF50) else colorScheme.primary,
+                                        modifier = Modifier.size(12.dp)
+                                    )
+                                    Text(
+                                        if (isWifi) "WiFi" else "Mobile",
+                                        fontSize = 11.sp,
+                                        color = if (isWifi) Color(0xFF4CAF50) else colorScheme.primary
+                                    )
                                 }
                             }
-                            if (index < sortedLogs.lastIndex) HorizontalDivider(color = Color(0xFF333333))
+                        }
+                        if (index < sortedLogs.lastIndex) {
+                            HorizontalDivider(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                color = colorScheme.outlineVariant
+                            )
                         }
                     }
                 }
@@ -256,43 +308,87 @@ fun AdminDeviceDetailScreen(
             Spacer(modifier = Modifier.height(20.dp))
 
             // Alarm Logs
-            Text("Alarm Logs (${alarmLogs.size})", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = TextPrimary)
+            Text(
+                "Alarm Logs (${alarmLogs.size})",
+                fontWeight = FontWeight.Bold,
+                fontSize = 16.sp,
+                color = colorScheme.onBackground
+            )
             Spacer(modifier = Modifier.height(12.dp))
 
             if (alarmLogs.isEmpty()) {
-                Text("No alarm logs", color = TextSecondary, fontSize = 14.sp)
+                Text(
+                    "No alarm logs",
+                    color = colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp
+                )
             } else {
                 alarmLogs.sortedByDescending { it.triggeredAt }.forEach { log ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 3.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 0.5.dp)
+                    val resultBadgeType = when (log.result.name) {
+                        "SUCCESS" -> BadgeType.Success
+                        "FAILED" -> BadgeType.Spam
+                        else -> BadgeType.Warning
+                    }
+
+                    TruCallerCard(
+                        modifier = Modifier.padding(vertical = 3.dp),
+                        elevation = 0.5.dp
                     ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(log.type.name, fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextPrimary, modifier = Modifier.weight(1f))
-                                Text(log.result.name, fontSize = 12.sp, fontWeight = FontWeight.Bold, color = when (log.result.name) {
-                                    "SUCCESS" -> Success; "FAILED" -> Danger; else -> Warning
-                                })
-                            }
-                            Text("By: ${log.triggeredByName} (${log.triggeredByRole})", fontSize = 12.sp, color = TextSecondary)
-                            log.notes?.let { Text(it, fontSize = 11.sp, color = Inactive) }
-                            Text(formatRelativeTime(log.triggeredAt), fontSize = 11.sp, color = Inactive)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                log.type.name,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 13.sp,
+                                color = colorScheme.onSurface,
+                                modifier = Modifier.weight(1f)
+                            )
+                            TruCallerBadge(
+                                text = log.result.name,
+                                type = resultBadgeType
+                            )
                         }
+                        Text(
+                            "By: ${log.triggeredByName} (${log.triggeredByRole})",
+                            fontSize = 12.sp,
+                            color = colorScheme.onSurfaceVariant
+                        )
+                        log.notes?.let {
+                            Text(
+                                it,
+                                fontSize = 11.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Text(
+                            formatRelativeTime(log.triggeredAt),
+                            fontSize = 11.sp,
+                            color = colorScheme.onSurfaceVariant
+                        )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.height(Spacing.lg))
         }
     }
 }
 
 @Composable
 private fun InfoRow(label: String, value: String) {
+    val colorScheme = MaterialTheme.colorScheme
+
     Row(modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(label, color = TextSecondary, fontSize = 13.sp, modifier = Modifier.width(100.dp))
-        Text(value, color = TextPrimary, fontWeight = FontWeight.SemiBold, fontSize = 13.sp)
+        Text(
+            label,
+            color = colorScheme.onSurfaceVariant,
+            fontSize = 13.sp,
+            modifier = Modifier.width(100.dp)
+        )
+        Text(
+            value,
+            color = colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp
+        )
     }
 }
