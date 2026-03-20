@@ -708,7 +708,7 @@ private fun GeofenceEventTimelineItem(
 ) {
     val colorScheme = MaterialTheme.colorScheme
     val dotColor = TIMELINE_DOT_COLORS[index % TIMELINE_DOT_COLORS.size]
-    val typeColor = EVENT_TYPE_COLORS[event.transitionType] ?: Brand
+    val typeColor = EVENT_TYPE_COLORS[event.transitionType.name] ?: Brand
 
     // Sequential dot fade-in animation
     val dotAlpha = remember { Animatable(0f) }
@@ -780,7 +780,7 @@ private fun GeofenceEventTimelineItem(
                         .padding(horizontal = Spacing.sm, vertical = 2.dp)
                 ) {
                     Text(
-                        event.transitionType,
+                        event.transitionType.name,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         color = typeColor

@@ -161,6 +161,14 @@ fun RemoteActionsScreen(
 
     val hasPin = authViewModel.hasSecurityPin()
 
+    val alarmPlaying by alarmViewModel.alarmPlaying.collectAsState()
+    val actionMessage by alarmViewModel.actionMessage.collectAsState()
+
+    val authState by authViewModel.authState.collectAsState()
+    val user = authState.user
+
+    val device by deviceViewModel.userDevice.collectAsState()
+
     /** Gate an action behind PIN verification */
     fun requirePin(action: PendingRemoteAction) {
         if (!hasPin) {
@@ -214,14 +222,6 @@ fun RemoteActionsScreen(
             }
         }
     }
-
-    val alarmPlaying by alarmViewModel.alarmPlaying.collectAsState()
-    val actionMessage by alarmViewModel.actionMessage.collectAsState()
-
-    val authState by authViewModel.authState.collectAsState()
-    val user = authState.user
-
-    val device by deviceViewModel.userDevice.collectAsState()
 
     LaunchedEffect(user?.id) {
         user?.id?.let { deviceViewModel.loadUserDevice(it) }
