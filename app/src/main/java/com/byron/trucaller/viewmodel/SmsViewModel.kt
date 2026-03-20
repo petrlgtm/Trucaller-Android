@@ -10,6 +10,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.BlockedNumber
+import android.util.Log
 import com.byron.trucaller.data.model.SmsCategory
 import com.byron.trucaller.data.model.SmsConversation
 import com.byron.trucaller.data.model.SmsMessage
@@ -65,6 +66,9 @@ class SmsViewModel(
             } finally {
                 _isLoading.value = false
             }
+
+            // Sync any pending unsynced SMS spam reports to backend
+            syncUnsyncedReports()
         }
     }
 
@@ -152,6 +156,9 @@ class SmsViewModel(
 
             _actionMessage.value = "Reported as spam"
 
+            // Sync the new report (and any previously unsynced) to backend
+            syncUnsyncedReports()
+
             // Refresh conversations
             loadConversations(contentResolver, userId)
         }
@@ -187,7 +194,22 @@ class SmsViewModel(
         _actionMessage.value = null
     }
 
+    /**
+     * Sync all unsynced SMS spam reports to the backend.
+     * Failures are silently logged so the UI is never disrupted.
+     */
+    private fun syncUnsyncedReports() {
+        viewModelScope.launch {
+            try {
+                smsRepository.syncUnsyncedReports()
+            } catch (e: Exception) {
+                Log.e(TAG, "Background SMS spam report sync failed", e)
+            }
+        }
+    }
+
     companion object {
+        private const val TAG = "SmsViewModel"
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as TruCallerApplication

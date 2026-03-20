@@ -8,7 +8,9 @@ import com.byron.trucaller.data.model.SmsMessage
 import com.byron.trucaller.data.model.SmsSpamReport
 import com.byron.trucaller.data.model.SmsType
 import com.byron.trucaller.data.model.SpamCategory
+import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.util.SmsReader
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
 
 class SmsRepository(
@@ -16,6 +18,9 @@ class SmsRepository(
     private val callerIdRepository: CallerIdRepository,
     private val blockedNumberRepository: BlockedNumberRepository
 ) {
+    companion object {
+        private const val TAG = "SmsRepository"
+    }
     /**
      * Read all SMS messages and enrich with spam data.
      */
@@ -89,6 +94,33 @@ class SmsRepository(
 
     suspend fun markReportSynced(id: String) =
         smsSpamDao.markSynced(id)
+
+    /**
+     * Upload all unsynced SMS spam reports to the backend.
+     * Each report is uploaded individually; on success it is marked as synced.
+     * Failures are silently logged so the sync can be retried later.
+     */
+    suspend fun syncUnsyncedReports() {
+        val unsynced = smsSpamDao.getUnsynced()
+        if (unsynced.isEmpty()) return
+
+        for (report in unsynced) {
+            try {
+                val result = ApiClient.reportSmsSpam(
+                    senderNumber = report.senderNumber,
+                    messageBody = report.messageBody,
+                    reason = report.reason
+                )
+                if (result.success) {
+                    smsSpamDao.markSynced(report.id)
+                } else {
+                    Log.w(TAG, "Backend rejected SMS spam report ${report.id}: ${result.error}")
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to sync SMS spam report ${report.id}", e)
+            }
+        }
+    }
 
     // ── Private helpers ────────────────────────────────────────────────
 
