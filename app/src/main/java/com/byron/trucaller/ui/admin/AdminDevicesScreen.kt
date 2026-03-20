@@ -2,6 +2,7 @@ package com.byron.trucaller.ui.admin
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -13,11 +14,13 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -28,17 +31,21 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
@@ -52,6 +59,8 @@ import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.DeviceViewModel
+
+private const val PAGE_SIZE = 20
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -75,6 +84,36 @@ fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceView
                             d.deviceId.lowercase().contains(q) ||
                             d.lastIp.contains(q)
                 }
+            }
+        }
+    }
+
+    // Pagination state
+    var currentPage by remember { mutableIntStateOf(1) }
+    val lazyListState = rememberLazyListState()
+
+    // Reset page when filter changes
+    LaunchedEffect(searchQuery) {
+        currentPage = 1
+    }
+
+    val paginatedItems by remember(filtered, currentPage) {
+        derivedStateOf { filtered.take(PAGE_SIZE * currentPage) }
+    }
+    val hasMoreItems by remember(paginatedItems, filtered) {
+        derivedStateOf { paginatedItems.size < filtered.size }
+    }
+
+    // Detect scroll near bottom to load next page
+    LaunchedEffect(lazyListState, hasMoreItems) {
+        snapshotFlow {
+            val layoutInfo = lazyListState.layoutInfo
+            val totalItems = layoutInfo.totalItemsCount
+            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
+            lastVisibleIndex to totalItems
+        }.collect { (lastVisible, total) ->
+            if (total > 0 && lastVisible >= total - 3 && hasMoreItems) {
+                currentPage++
             }
         }
     }
@@ -128,11 +167,12 @@ fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceView
             }
             else -> {
                 LazyColumn(
+                    state = lazyListState,
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(horizontal = Spacing.md)
                 ) {
-                    items(filtered, key = { it.id }) { device ->
+                    items(paginatedItems, key = { it.id }) { device ->
                         val statusBadgeType = when (device.status) {
                             DeviceStatus.ACTIVE -> BadgeType.Success
                             DeviceStatus.STOLEN -> BadgeType.Spam
@@ -181,6 +221,33 @@ fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceView
                                     modifier = Modifier.size(20.dp)
                                 )
                             }
+                        }
+                    }
+                    // Pagination footer
+                    item {
+                        if (hasMoreItems) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(Spacing.md),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.dp,
+                                    color = colorScheme.primary
+                                )
+                            }
+                        } else if (paginatedItems.size > PAGE_SIZE) {
+                            Text(
+                                "All items loaded",
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(Spacing.md),
+                                textAlign = TextAlign.Center,
+                                fontSize = 13.sp,
+                                color = colorScheme.onSurfaceVariant
+                            )
                         }
                     }
                     item { Spacer(modifier = Modifier.height(Spacing.md)) }
