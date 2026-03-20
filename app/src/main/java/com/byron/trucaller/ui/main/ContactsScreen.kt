@@ -12,6 +12,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -108,6 +109,7 @@ import kotlinx.coroutines.launch
 
 private val defaultSegments = listOf("Family", "Work", "Friends", "VIP")
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsViewModel) {
     val authState by authViewModel.authState.collectAsState()
@@ -523,45 +525,47 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                         }
                         items(contacts, key = { it.id }) { contact ->
                             val itemIndex = globalIndex++
-                            AnimatedVisibility(
-                                visible = true,
-                                enter = fadeIn(
-                                    animationSpec = tween(
-                                        durationMillis = 300,
-                                        delayMillis = if (!hasAnimated) 0 else (itemIndex * 30).coerceAtMost(600)
+                            Column {
+                                AnimatedVisibility(
+                                    visible = true,
+                                    enter = fadeIn(
+                                        animationSpec = tween(
+                                            durationMillis = 300,
+                                            delayMillis = if (!hasAnimated) 0 else (itemIndex * 30).coerceAtMost(600)
+                                        )
+                                    ) + slideInVertically(
+                                        animationSpec = tween(
+                                            durationMillis = 300,
+                                            delayMillis = if (!hasAnimated) 0 else (itemIndex * 30).coerceAtMost(600)
+                                        ),
+                                        initialOffsetY = { it / 4 }
                                     )
-                                ) + slideInVertically(
-                                    animationSpec = tween(
-                                        durationMillis = 300,
-                                        delayMillis = if (!hasAnimated) 0 else (itemIndex * 30).coerceAtMost(600)
-                                    ),
-                                    initialOffsetY = { it / 4 }
-                                )
-                            ) {
-                                ContactCard(
-                                    contact = contact,
-                                    onCardClick = {
-                                        selectedContact = contact
-                                        scope.launch {
-                                            isSelectedBlocked = contactsViewModel.isContactBlocked(user.id, contact.phoneNumber)
-                                        }
-                                        showActionsDialog = true
-                                    },
-                                    onStarClick = {
-                                        if (contact.isFavourite) {
-                                            contactsViewModel.removeFromFavourites(contact)
-                                        } else {
+                                ) {
+                                    ContactCard(
+                                        contact = contact,
+                                        onCardClick = {
                                             selectedContact = contact
-                                            showFavouriteDialog = true
+                                            scope.launch {
+                                                isSelectedBlocked = contactsViewModel.isContactBlocked(user.id, contact.phoneNumber)
+                                            }
+                                            showActionsDialog = true
+                                        },
+                                        onStarClick = {
+                                            if (contact.isFavourite) {
+                                                contactsViewModel.removeFromFavourites(contact)
+                                            } else {
+                                                selectedContact = contact
+                                                showFavouriteDialog = true
+                                            }
+                                        },
+                                        onCallClick = {
+                                            val intent = Intent(Intent.ACTION_DIAL).apply {
+                                                data = Uri.parse("tel:${contact.phoneNumber}")
+                                            }
+                                            context.startActivity(intent)
                                         }
-                                    },
-                                    onCallClick = {
-                                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                                            data = Uri.parse("tel:${contact.phoneNumber}")
-                                        }
-                                        context.startActivity(intent)
-                                    }
-                                )
+                                    )
+                                }
                             }
                         }
                     }
