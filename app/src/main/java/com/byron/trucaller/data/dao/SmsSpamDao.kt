@@ -27,6 +27,9 @@ interface SmsSpamDao {
     @Query("SELECT COUNT(*) FROM sms_spam_reports WHERE userId = :userId")
     fun getCountByUser(userId: String): Flow<Int>
 
+    @Query("SELECT COUNT(*) FROM sms_spam_reports")
+    fun countFlow(): Flow<Int>
+
     @Query("DELETE FROM sms_spam_reports WHERE id = :id")
     suspend fun delete(id: String)
 }

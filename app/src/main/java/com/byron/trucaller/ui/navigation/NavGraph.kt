@@ -88,6 +88,7 @@ import com.byron.trucaller.ui.main.ProfileScreen
 import com.byron.trucaller.ui.main.SecurityScreen
 import com.byron.trucaller.ui.stolen.RemoteActionsScreen
 import com.byron.trucaller.ui.stolen.ReportStolenScreen
+import com.byron.trucaller.viewmodel.AdminDashboardViewModel
 import com.byron.trucaller.viewmodel.AdminSettingsViewModel
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -132,6 +133,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val stolenReportViewModel: StolenReportViewModel = viewModel(factory = StolenReportViewModel.Factory)
     val alarmViewModel: AlarmViewModel = viewModel(factory = AlarmViewModel.Factory)
     val adminSettingsViewModel: AdminSettingsViewModel = viewModel(factory = AdminSettingsViewModel.Factory)
+    val adminDashboardViewModel: AdminDashboardViewModel = viewModel(factory = AdminDashboardViewModel.Factory)
     val smsViewModel: SmsViewModel = viewModel(factory = SmsViewModel.Factory)
     val callLogViewModel: CallLogViewModel = viewModel(factory = CallLogViewModel.Factory)
 
@@ -264,10 +266,9 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
             AdminDashboardScreen(
                 navController = navController,
                 authViewModel = authViewModel,
-                deviceViewModel = deviceViewModel,
+                dashboardViewModel = adminDashboardViewModel,
                 stolenReportViewModel = stolenReportViewModel,
-                alarmViewModel = alarmViewModel,
-                contactsViewModel = contactsViewModel
+                alarmViewModel = alarmViewModel
             )
         }
         composable("admin_devices") {

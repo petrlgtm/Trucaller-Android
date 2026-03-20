@@ -86,6 +86,9 @@ class SmsRepository(
     fun getSpamReportCount(userId: String): Flow<Int> =
         smsSpamDao.getCountByUser(userId)
 
+    fun getTotalSpamReportCount(): Flow<Int> =
+        smsSpamDao.countFlow()
+
     suspend fun isReportedAsSpam(userId: String, number: String): Boolean =
         smsSpamDao.isReported(userId, number)
 

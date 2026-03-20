@@ -1,6 +1,7 @@
 package com.byron.trucaller.ui.admin
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.animateIntAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -20,12 +21,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.MarkEmailUnread
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.NotificationsActive
 import androidx.compose.material.icons.filled.People
@@ -34,11 +37,13 @@ import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -48,6 +53,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
@@ -63,10 +71,9 @@ import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.components.TruCallerHeader
 import com.byron.trucaller.ui.theme.Spacing
+import com.byron.trucaller.viewmodel.AdminDashboardViewModel
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
-import com.byron.trucaller.viewmodel.ContactsViewModel
-import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -97,22 +104,23 @@ private data class AdminActivityItem(
     val navigationRoute: String
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AdminDashboardScreen(
     navController: NavController,
     authViewModel: AuthViewModel,
-    deviceViewModel: DeviceViewModel,
+    dashboardViewModel: AdminDashboardViewModel,
     stolenReportViewModel: StolenReportViewModel,
-    alarmViewModel: AlarmViewModel,
-    contactsViewModel: ContactsViewModel
+    alarmViewModel: AlarmViewModel
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
-    val devices by deviceViewModel.allDevices.collectAsState(initial = emptyList())
+    val stats by dashboardViewModel.stats.collectAsState()
+    val isLoading by dashboardViewModel.isLoading.collectAsState()
+    val error by dashboardViewModel.error.collectAsState()
+
     val reports by stolenReportViewModel.allReports.collectAsState(initial = emptyList())
     val alarmLogs by alarmViewModel.allLogs.collectAsState(initial = emptyList())
-    val pendingAlarms by alarmViewModel.pendingCount.collectAsState(initial = 0)
-    val userCount by deviceViewModel.userCount.collectAsState(initial = 0)
 
     // Build unified activity feed from stolen reports + alarm logs
     val recentActivity = remember(reports, alarmLogs) {
@@ -162,73 +170,164 @@ fun AdminDashboardScreen(
             gradientColors = listOf(colorScheme.surface, colorScheme.background)
         )
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(Spacing.md)
+        PullToRefreshBox(
+            isRefreshing = isLoading,
+            onRefresh = { dashboardViewModel.refresh() },
+            modifier = Modifier.fillMaxSize()
         ) {
-            // Stats cards row 1
-            AnimatedVisibility(
-                visible = statsVisible,
-                enter = fadeIn(animationSpec = tween(400)) +
-                        slideInVertically(
-                            animationSpec = tween(400),
-                            initialOffsetY = { it / 4 }
-                        )
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(Spacing.md)
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AnimatedStatCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Users",
-                        targetValue = userCount,
-                        accentColor = colorScheme.onSurface
-                    )
-                    AnimatedStatCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Devices",
-                        targetValue = devices.size,
-                        accentColor = Color(0xFF4CAF50)
+                // Last updated timestamp & error
+                if (stats.lastUpdated > 0L) {
+                    val minutesAgo = ((System.currentTimeMillis() - stats.lastUpdated) / 60_000).toInt()
+                    val timeText = when {
+                        minutesAgo < 1 -> "just now"
+                        minutesAgo == 1 -> "1 min ago"
+                        minutesAgo < 60 -> "$minutesAgo min ago"
+                        else -> "${minutesAgo / 60}h ago"
+                    }
+                    Text(
+                        "Last updated: $timeText",
+                        fontSize = 12.sp,
+                        color = colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Stats cards row 2
-            AnimatedVisibility(
-                visible = statsVisible,
-                enter = fadeIn(animationSpec = tween(400, delayMillis = 150)) +
-                        slideInVertically(
-                            animationSpec = tween(400, delayMillis = 150),
-                            initialOffsetY = { it / 4 }
-                        )
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    AnimatedStatCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Stolen",
-                        targetValue = reports.size,
-                        accentColor = colorScheme.error
-                    )
-                    AnimatedStatCard(
-                        modifier = Modifier.weight(1f),
-                        title = "Alarms",
-                        targetValue = pendingAlarms,
-                        accentColor = colorScheme.primary
+                error?.let {
+                    Text(
+                        it,
+                        fontSize = 12.sp,
+                        color = colorScheme.error,
+                        modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
-            }
 
-            Spacer(modifier = Modifier.height(Spacing.lg))
+                // Stats cards row 1: Users & Devices
+                AnimatedVisibility(
+                    visible = statsVisible,
+                    enter = fadeIn(animationSpec = tween(400)) +
+                            slideInVertically(
+                                animationSpec = tween(400),
+                                initialOffsetY = { it / 4 }
+                            )
+                ) {
+                    if (isLoading && stats.lastUpdated == 0L) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Users",
+                                targetValue = stats.userCount,
+                                accentColor = colorScheme.onSurface
+                            )
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Devices",
+                                targetValue = stats.deviceCount,
+                                accentColor = Color(0xFF4CAF50)
+                            )
+                        }
+                    }
+                }
 
-            // Recent Activity
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Stats cards row 2: Stolen Reports & Alarms
+                AnimatedVisibility(
+                    visible = statsVisible,
+                    enter = fadeIn(animationSpec = tween(400, delayMillis = 150)) +
+                            slideInVertically(
+                                animationSpec = tween(400, delayMillis = 150),
+                                initialOffsetY = { it / 4 }
+                            )
+                ) {
+                    if (isLoading && stats.lastUpdated == 0L) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Stolen",
+                                targetValue = stats.reportCount,
+                                accentColor = colorScheme.error
+                            )
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Alarms",
+                                targetValue = stats.alarmCount,
+                                accentColor = colorScheme.primary
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Stats cards row 3: Caller IDs & SMS Spam Reports
+                AnimatedVisibility(
+                    visible = statsVisible,
+                    enter = fadeIn(animationSpec = tween(400, delayMillis = 300)) +
+                            slideInVertically(
+                                animationSpec = tween(400, delayMillis = 300),
+                                initialOffsetY = { it / 4 }
+                            )
+                ) {
+                    if (isLoading && stats.lastUpdated == 0L) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Caller IDs",
+                                targetValue = stats.callerIdCount,
+                                accentColor = Color(0xFF2196F3)
+                            )
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "SMS Reports",
+                                targetValue = stats.smsSpamReportCount,
+                                accentColor = Color(0xFFFF9800)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(Spacing.lg))
+
+                // Recent Activity
             AnimatedVisibility(
                 visible = activityVisible,
                 enter = fadeIn(animationSpec = tween(400, delayMillis = 50)) +
@@ -303,7 +402,7 @@ fun AdminDashboardScreen(
                             AdminMenuItem(
                                 Icons.Default.PhoneAndroid,
                                 "Devices",
-                                "${devices.size} registered",
+                                "${stats.deviceCount} registered",
                                 colorScheme.onSurface
                             ) {
                                 navController.navigate("admin_devices")
@@ -311,7 +410,7 @@ fun AdminDashboardScreen(
                             AdminMenuItem(
                                 Icons.Default.People,
                                 "Users",
-                                "$userCount users",
+                                "${stats.userCount} users",
                                 Color(0xFF4CAF50)
                             ) {
                                 navController.navigate("admin_users")
@@ -319,7 +418,7 @@ fun AdminDashboardScreen(
                             AdminMenuItem(
                                 Icons.Default.Warning,
                                 "Stolen Reports",
-                                "${reports.size} reports",
+                                "${stats.reportCount} reports",
                                 colorScheme.error
                             ) {
                                 navController.navigate("admin_stolen_reports")
@@ -327,18 +426,26 @@ fun AdminDashboardScreen(
                             AdminMenuItem(
                                 Icons.Default.Phone,
                                 "Caller ID Database",
-                                "Manage spam database",
-                                colorScheme.onSurface
+                                "${stats.callerIdCount} entries",
+                                Color(0xFF2196F3)
                             ) {
                                 navController.navigate("admin_caller_id")
                             }
                             AdminMenuItem(
                                 Icons.Default.Alarm,
                                 "Alarm Logs",
-                                "${alarmLogs.size} logs",
+                                "${stats.alarmCount} logs",
                                 colorScheme.primary
                             ) {
                                 navController.navigate("admin_alarm_logs")
+                            }
+                            AdminMenuItem(
+                                Icons.Default.MarkEmailUnread,
+                                "SMS Spam Reports",
+                                "${stats.smsSpamReportCount} reports",
+                                Color(0xFFFF9800)
+                            ) {
+                                navController.navigate("admin_sms_spam_reports")
                             }
                             AdminMenuItem(
                                 Icons.Default.Settings,
@@ -362,7 +469,49 @@ fun AdminDashboardScreen(
             }
 
             Spacer(modifier = Modifier.height(Spacing.lg))
+            }
         }
+    }
+}
+
+@Composable
+private fun ShimmerStatCard(modifier: Modifier) {
+    val shimmerAlpha by animateFloatAsState(
+        targetValue = 1f,
+        animationSpec = tween(durationMillis = 800),
+        label = "shimmer"
+    )
+    val colorScheme = MaterialTheme.colorScheme
+    val shimmerColor = colorScheme.onSurface.copy(alpha = 0.08f * shimmerAlpha)
+
+    TruCallerCard(modifier = modifier) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.5f)
+                .height(14.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(shimmerColor, shimmerColor.copy(alpha = 0.15f), shimmerColor),
+                        start = Offset.Zero,
+                        end = Offset(300f, 0f)
+                    )
+                )
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Box(
+            modifier = Modifier
+                .fillMaxWidth(0.35f)
+                .height(28.dp)
+                .clip(RoundedCornerShape(4.dp))
+                .background(
+                    Brush.linearGradient(
+                        colors = listOf(shimmerColor, shimmerColor.copy(alpha = 0.15f), shimmerColor),
+                        start = Offset.Zero,
+                        end = Offset(200f, 0f)
+                    )
+                )
+        )
     }
 }
 
