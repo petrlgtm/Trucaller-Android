@@ -22,6 +22,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import android.util.Log
+import com.byron.trucaller.service.ApiClient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -99,6 +101,29 @@ class StolenReportViewModel(
                     _reportError.value = "Failed to create stolen report: ${e.message}"
                     return@launch
                 }
+
+                // Best-effort sync to backend — failure is logged but does not block the user
+                try {
+                    val reportData = mutableMapOf<String, Any>(
+                        "reportId" to report.id,
+                        "deviceId" to deviceId,
+                        "reportedBy" to userId,
+                        "reportedAt" to now,
+                        "status" to report.status.name,
+                        "description" to description,
+                        "pinVerified" to true,
+                        "lastKnownIp" to (report.lastKnownIp ?: "")
+                    )
+                    if (location.latitude != 0.0 || location.longitude != 0.0) {
+                        reportData["latitude"] = location.latitude
+                        reportData["longitude"] = location.longitude
+                        reportData["city"] = location.city
+                    }
+                    ApiClient.reportStolen(reportData)
+                } catch (e: Exception) {
+                    Log.e("StolenReportVM", "Backend sync failed for stolen report ${report.id}", e)
+                }
+
                 _reportError.value = null
                 onSuccess()
             } catch (e: Exception) {
