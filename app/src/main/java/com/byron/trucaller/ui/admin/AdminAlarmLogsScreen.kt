@@ -18,16 +18,23 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberDateRangePickerState
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -57,8 +64,37 @@ import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 private const val PAGE_SIZE = 20
+
+private val isoDateFormats = listOf(
+    "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+    "yyyy-MM-dd'T'HH:mm:ss'Z'",
+    "yyyy-MM-dd'T'HH:mm:ssXXX"
+)
+
+/** Parse an ISO date string to epoch millis, or null on failure. */
+private fun parseIsoToMillis(dateStr: String): Long? {
+    for (fmt in isoDateFormats) {
+        try {
+            val sdf = SimpleDateFormat(fmt, Locale.US)
+            sdf.timeZone = TimeZone.getTimeZone("UTC")
+            val date = sdf.parse(dateStr)
+            if (date != null) return date.time
+        } catch (_: Exception) { }
+    }
+    return null
+}
+
+/** Format epoch millis to a short date label like "Mar 1". */
+private fun formatShortDate(millis: Long): String {
+    val sdf = SimpleDateFormat("MMM d", Locale.US)
+    return sdf.format(Date(millis))
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -73,11 +109,27 @@ fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmView
     var selectedType by remember { mutableStateOf<AlarmType?>(null) }
     var selectedResult by remember { mutableStateOf<AlarmResult?>(null) }
 
-    val filteredLogs by remember(allLogs, selectedType, selectedResult) {
+    // Date range filter state
+    var startDate by remember { mutableStateOf<Long?>(null) }
+    var endDate by remember { mutableStateOf<Long?>(null) }
+    var showDateRangePicker by remember { mutableStateOf(false) }
+
+    val filteredLogs by remember(allLogs, selectedType, selectedResult, startDate, endDate) {
         derivedStateOf {
             allLogs
                 .let { logs -> if (selectedType != null) logs.filter { it.type == selectedType } else logs }
                 .let { logs -> if (selectedResult != null) logs.filter { it.result == selectedResult } else logs }
+                .let { logs ->
+                    if (startDate != null || endDate != null) {
+                        logs.filter { log ->
+                            val logMillis = parseIsoToMillis(log.triggeredAt) ?: return@filter false
+                            val afterStart = startDate?.let { logMillis >= it } ?: true
+                            // endDate selection represents the start of that day; include the full day
+                            val beforeEnd = endDate?.let { logMillis < it + 86_400_000L } ?: true
+                            afterStart && beforeEnd
+                        }
+                    } else logs
+                }
                 .sortedByDescending { it.triggeredAt }
         }
     }
@@ -87,7 +139,7 @@ fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmView
     val lazyListState = rememberLazyListState()
 
     // Reset page when filters change
-    LaunchedEffect(selectedType, selectedResult) {
+    LaunchedEffect(selectedType, selectedResult, startDate, endDate) {
         currentPage = 1
     }
 
@@ -206,6 +258,115 @@ fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmView
                             selectedContainerColor = resultColor.copy(alpha = 0.15f),
                             selectedLabelColor = resultColor
                         )
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Date Range",
+                fontSize = 12.sp,
+                color = colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.SemiBold
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                val hasDateFilter = startDate != null || endDate != null
+                val dateLabel = if (hasDateFilter) {
+                    val start = startDate?.let { formatShortDate(it) } ?: "..."
+                    val end = endDate?.let { formatShortDate(it) } ?: "..."
+                    "$start - $end"
+                } else {
+                    "Select dates"
+                }
+
+                FilterChip(
+                    selected = hasDateFilter,
+                    onClick = { showDateRangePicker = true },
+                    label = { Text(dateLabel) },
+                    leadingIcon = {
+                        Icon(
+                            Icons.Default.DateRange,
+                            contentDescription = "Date range",
+                            modifier = Modifier.size(18.dp)
+                        )
+                    },
+                    colors = FilterChipDefaults.filterChipColors(
+                        selectedContainerColor = colorScheme.primary.copy(alpha = 0.15f),
+                        selectedLabelColor = colorScheme.primary
+                    )
+                )
+                if (hasDateFilter) {
+                    FilterChip(
+                        selected = false,
+                        onClick = {
+                            startDate = null
+                            endDate = null
+                        },
+                        label = { Text("Clear") },
+                        leadingIcon = {
+                            Icon(
+                                Icons.Default.Close,
+                                contentDescription = "Clear date filter",
+                                modifier = Modifier.size(16.dp)
+                            )
+                        }
+                    )
+                }
+            }
+        }
+
+        // Date range picker bottom sheet
+        if (showDateRangePicker) {
+            val dateRangePickerState = rememberDateRangePickerState(
+                initialSelectedStartDateMillis = startDate,
+                initialSelectedEndDateMillis = endDate
+            )
+            val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+
+            ModalBottomSheet(
+                onDismissRequest = { showDateRangePicker = false },
+                sheetState = sheetState,
+                containerColor = colorScheme.surface
+            ) {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = Spacing.md),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(onClick = { showDateRangePicker = false }) {
+                            Text("Cancel")
+                        }
+                        Text(
+                            "Select Date Range",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold
+                        )
+                        TextButton(
+                            onClick = {
+                                startDate = dateRangePickerState.selectedStartDateMillis
+                                endDate = dateRangePickerState.selectedEndDateMillis
+                                showDateRangePicker = false
+                            },
+                            enabled = dateRangePickerState.selectedStartDateMillis != null
+                        ) {
+                            Text("Apply")
+                        }
+                    }
+                    DateRangePicker(
+                        state = dateRangePickerState,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(500.dp),
+                        title = null,
+                        showModeToggle = true
                     )
                 }
             }
