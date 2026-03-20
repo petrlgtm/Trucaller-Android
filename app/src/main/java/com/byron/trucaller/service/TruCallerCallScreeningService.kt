@@ -92,9 +92,39 @@ class TruCallerCallScreeningService : CallScreeningService() {
                     Log.d(TAG, "No caller ID match for $phoneNumber")
                 }
 
-                // Allow the call through — the lookup result is logged above
-                // and can be used by the UI layer to display caller info.
-                respondToCall(callDetails, CallResponse.Builder().build())
+                // --- 3. Auto-reject high-spam calls ---
+                val spamScore = entry?.spamScore ?: 0
+                when {
+                    spamScore >= 80 -> {
+                        // FRAUD-level spam — silently reject (no notification)
+                        Log.d(TAG, "FRAUD spam score ($spamScore) for $phoneNumber — rejecting silently")
+                        val response = CallResponse.Builder()
+                            .setDisallowCall(true)
+                            .setRejectCall(true)
+                            .setSkipCallLog(false)
+                            .setSkipNotification(true)
+                            .build()
+                        respondToCall(callDetails, response)
+                        return@runBlocking
+                    }
+                    spamScore >= 60 -> {
+                        // SPAM-level — reject but show notification so user is aware
+                        Log.d(TAG, "SPAM score ($spamScore) for $phoneNumber — rejecting with notification")
+                        val response = CallResponse.Builder()
+                            .setDisallowCall(true)
+                            .setRejectCall(true)
+                            .setSkipCallLog(false)
+                            .setSkipNotification(false)
+                            .build()
+                        respondToCall(callDetails, response)
+                        return@runBlocking
+                    }
+                    else -> {
+                        // Low or no spam — allow the call through
+                        Log.d(TAG, "Spam score ($spamScore) for $phoneNumber — allowing call")
+                        respondToCall(callDetails, CallResponse.Builder().build())
+                    }
+                }
 
             } catch (e: Exception) {
                 Log.e(TAG, "Error screening call from $phoneNumber", e)
