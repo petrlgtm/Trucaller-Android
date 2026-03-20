@@ -480,7 +480,7 @@ fun HomeScreen(
                                 icon = Icons.Default.LocationOn,
                                 label = "View\nIP Log",
                                 color = colorScheme.primary,
-                                onClick = { rootNavController.navigate("remote_actions") }
+                                onClick = { rootNavController.navigate("ip_logs") }
                             )
                             QuickActionCard(
                                 modifier = Modifier

@@ -79,6 +79,7 @@ import com.byron.trucaller.ui.auth.OtpVerificationScreen
 import com.byron.trucaller.ui.auth.RegisterScreen
 import com.byron.trucaller.ui.auth.SplashScreen
 import com.byron.trucaller.ui.main.AnalyticsScreen
+import com.byron.trucaller.ui.main.IpLogsScreen
 import com.byron.trucaller.ui.main.CallerIdScreen
 import com.byron.trucaller.ui.main.CallLogScreen
 import com.byron.trucaller.ui.main.ContactsScreen
@@ -295,6 +296,13 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 navController = navController,
                 deviceId = deviceId,
                 networkForensicsViewModel = networkForensicsViewModel
+            )
+        }
+        composable("ip_logs") {
+            IpLogsScreen(
+                navController = navController,
+                authViewModel = authViewModel,
+                deviceViewModel = deviceViewModel
             )
         }
         composable("security") {

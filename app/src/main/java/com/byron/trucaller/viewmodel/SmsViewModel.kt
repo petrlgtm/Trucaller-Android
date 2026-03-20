@@ -56,9 +56,16 @@ class SmsViewModel(
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val all = smsRepository.getConversations(contentResolver, userId)
-                _conversations.value = all.take(MAX_LIST_SIZE)
-                _spamConversations.value = all.filter {
+                // Show raw conversations IMMEDIATELY (no enrichment — instant)
+                val rawMessages = com.byron.trucaller.util.SmsReader.readAllMessages(contentResolver, MAX_LIST_SIZE)
+                val rawConversations = smsRepository.buildConversationsRaw(rawMessages)
+                _conversations.value = rawConversations.take(MAX_LIST_SIZE)
+                _isLoading.value = false
+
+                // Then enrich in background (local-only lookups, fast)
+                val enriched = smsRepository.getConversations(contentResolver, userId)
+                _conversations.value = enriched.take(MAX_LIST_SIZE)
+                _spamConversations.value = enriched.filter {
                     it.category == SmsCategory.SPAM || it.category == SmsCategory.PROMOTIONAL
                 }.take(MAX_LIST_SIZE)
             } catch (e: Exception) {

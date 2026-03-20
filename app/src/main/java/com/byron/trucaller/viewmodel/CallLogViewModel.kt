@@ -52,17 +52,13 @@ class CallLogViewModel(
                 _callLogEntries.value = rawEntries.take(MAX_LIST_SIZE)
                 _isLoading.value = false
 
-                // Enrich in background — update entries as each lookup completes
-                val enriched = rawEntries.take(MAX_LIST_SIZE).toMutableList()
-                for (i in enriched.indices) {
-                    try {
-                        val updated = enrichWithCallerIdData(enriched[i])
-                        if (updated != enriched[i]) {
-                            enriched[i] = updated
-                            _callLogEntries.value = enriched.toList()
-                        }
-                    } catch (_: Exception) { }
+                // Enrich ALL entries on IO in one batch, emit once when done
+                val enriched = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    rawEntries.take(MAX_LIST_SIZE).map { entry ->
+                        try { enrichWithCallerIdData(entry) } catch (_: Exception) { entry }
+                    }
                 }
+                _callLogEntries.value = enriched
             } catch (e: Exception) {
                 _actionMessage.value = "Failed to load call log: ${e.message}"
                 _isLoading.value = false
