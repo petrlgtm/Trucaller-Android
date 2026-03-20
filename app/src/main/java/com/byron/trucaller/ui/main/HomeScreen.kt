@@ -30,6 +30,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Report
@@ -490,6 +491,27 @@ fun HomeScreen(
                                 color = colorScheme.secondary,
                                 onClick = { rootNavController.navigate("remote_actions") }
                             )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            QuickActionCard(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("quick_action_analytics"),
+                                icon = Icons.Default.BarChart,
+                                label = "My\nAnalytics",
+                                color = colorScheme.tertiary,
+                                onClick = { rootNavController.navigate("analytics") }
+                            )
+                            // Spacer cards to keep layout consistent
+                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.weight(1f))
+                            Spacer(modifier = Modifier.weight(1f))
                         }
                     }
                 }

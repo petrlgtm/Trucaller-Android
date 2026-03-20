@@ -78,6 +78,7 @@ import com.byron.trucaller.ui.auth.LoginScreen
 import com.byron.trucaller.ui.auth.OtpVerificationScreen
 import com.byron.trucaller.ui.auth.RegisterScreen
 import com.byron.trucaller.ui.auth.SplashScreen
+import com.byron.trucaller.ui.main.AnalyticsScreen
 import com.byron.trucaller.ui.main.CallerIdScreen
 import com.byron.trucaller.ui.main.CallLogScreen
 import com.byron.trucaller.ui.main.ContactsScreen
@@ -99,6 +100,7 @@ import com.byron.trucaller.ui.stolen.GeofenceManagementScreen
 import com.byron.trucaller.ui.stolen.NetworkForensicsScreen
 import com.byron.trucaller.ui.stolen.RemoteActionsScreen
 import com.byron.trucaller.ui.stolen.ReportStolenScreen
+import com.byron.trucaller.viewmodel.AnalyticsViewModel
 import com.byron.trucaller.viewmodel.AdminDashboardViewModel
 import com.byron.trucaller.viewmodel.AdminSettingsViewModel
 import com.byron.trucaller.viewmodel.AlarmViewModel
@@ -159,6 +161,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val smsRulesViewModel: SmsRulesViewModel = viewModel(factory = SmsRulesViewModel.Factory)
     val blockingScheduleViewModel: BlockingScheduleViewModel = viewModel(factory = BlockingScheduleViewModel.Factory)
     val familyGroupViewModel: FamilyGroupViewModel = viewModel(factory = FamilyGroupViewModel.Factory)
+    val analyticsViewModel: AnalyticsViewModel = viewModel(factory = AnalyticsViewModel.Factory)
 
     NavHost(
         navController = navController,
@@ -360,6 +363,13 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 groupId = groupId,
                 authViewModel = authViewModel,
                 familyGroupViewModel = familyGroupViewModel
+            )
+        }
+        // Analytics route
+        composable("analytics") {
+            AnalyticsScreen(
+                navController = navController,
+                analyticsViewModel = analyticsViewModel
             )
         }
         // Admin routes

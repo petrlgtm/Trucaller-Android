@@ -43,6 +43,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.FiberManualRecord
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.foundation.text.KeyboardOptions
@@ -734,6 +735,15 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     title = "Family & Groups",
                     iconColor = colorScheme.primary,
                     onClick = { rootNavController.navigate("family_groups") }
+                )
+                HorizontalDivider(color = colorScheme.outlineVariant)
+
+                // My Analytics
+                ProfileMenuItem(
+                    icon = Icons.Default.BarChart,
+                    title = "My Analytics",
+                    iconColor = colorScheme.tertiary,
+                    onClick = { rootNavController.navigate("analytics") }
                 )
                 HorizontalDivider(color = colorScheme.outlineVariant)
 
