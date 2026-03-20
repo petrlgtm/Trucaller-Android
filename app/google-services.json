@@ -14,12 +14,24 @@
       },
       "oauth_client": [
         {
+          "client_id": "827232813478-6a7k8g92bo5kej9trfnh8oovpjp838hb.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.byron.trucaller",
+            "certificate_hash": "22a25b493f3dfdfa7d6a4a8775d1e17506852172"
+          }
+        },
+        {
           "client_id": "827232813478-hnk2cqod62pnsfgdkg2mjqqiqjo38t1p.apps.googleusercontent.com",
           "client_type": 1,
           "android_info": {
             "package_name": "com.byron.trucaller",
             "certificate_hash": "fb7499d8efa14e5c0bb3eef9a623314e174bb380"
           }
+        },
+        {
+          "client_id": "827232813478-1q9maig90qv3p95259av2pkejj0gk4nr.apps.googleusercontent.com",
+          "client_type": 3
         }
       ],
       "api_key": [
@@ -29,7 +41,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "827232813478-1q9maig90qv3p95259av2pkejj0gk4nr.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

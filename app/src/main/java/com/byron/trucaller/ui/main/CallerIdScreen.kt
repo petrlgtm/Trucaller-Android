@@ -263,7 +263,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 IconButton(
                                     onClick = {
-                                        val phone = entry.phoneNumber.replace("+", "").replace(" ", "")
+                                        val phone = entry.phoneNumber.replace("+", "").replace(" ", "").replace("-", "")
                                         val intent = Intent(Intent.ACTION_VIEW).apply {
                                             data = Uri.parse("https://wa.me/$phone")
                                         }

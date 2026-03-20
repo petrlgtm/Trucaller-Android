@@ -12,6 +12,7 @@ import com.byron.trucaller.data.dao.DeviceDao
 import com.byron.trucaller.data.dao.IpLogDao
 import com.byron.trucaller.data.dao.StolenReportDao
 import com.byron.trucaller.data.dao.SmsSpamDao
+import com.byron.trucaller.data.dao.ContactAliasDao
 import com.byron.trucaller.data.dao.UserDao
 import com.byron.trucaller.data.model.AdminUser
 import com.byron.trucaller.data.model.AlarmLog
@@ -20,6 +21,7 @@ import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.Contact
 import com.byron.trucaller.data.model.Device
 import com.byron.trucaller.data.model.IpLog
+import com.byron.trucaller.data.model.ContactAlias
 import com.byron.trucaller.data.model.SmsSpamReport
 import com.byron.trucaller.data.model.StolenReport
 import com.byron.trucaller.data.model.User
@@ -35,9 +37,10 @@ import com.byron.trucaller.data.model.User
         AlarmLog::class,
         AdminUser::class,
         BlockedNumber::class,
-        SmsSpamReport::class
+        SmsSpamReport::class,
+        ContactAlias::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -52,4 +55,5 @@ abstract class TruCallerDatabase : RoomDatabase() {
     abstract fun adminUserDao(): AdminUserDao
     abstract fun blockedNumberDao(): BlockedNumberDao
     abstract fun smsSpamDao(): SmsSpamDao
+    abstract fun contactAliasDao(): ContactAliasDao
 }

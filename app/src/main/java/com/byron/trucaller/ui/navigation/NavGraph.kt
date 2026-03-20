@@ -16,6 +16,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
@@ -56,6 +57,7 @@ import com.byron.trucaller.ui.auth.OtpVerificationScreen
 import com.byron.trucaller.ui.auth.RegisterScreen
 import com.byron.trucaller.ui.auth.SplashScreen
 import com.byron.trucaller.ui.main.CallerIdScreen
+import com.byron.trucaller.ui.main.CallLogScreen
 import com.byron.trucaller.ui.main.ContactsScreen
 import com.byron.trucaller.ui.main.ConversationScreen
 import com.byron.trucaller.ui.main.HomeScreen
@@ -73,6 +75,7 @@ import com.byron.trucaller.viewmodel.AdminSettingsViewModel
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.CallerIdViewModel
+import com.byron.trucaller.viewmodel.CallLogViewModel
 import com.byron.trucaller.viewmodel.ContactsViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.SmsViewModel
@@ -80,12 +83,13 @@ import com.byron.trucaller.viewmodel.StolenReportViewModel
 
 sealed class TabItem(val route: String, val title: String, val icon: ImageVector) {
     data object Home : TabItem("tab_home", "Home", Icons.Default.Home)
+    data object CallLog : TabItem("tab_call_log", "Calls", Icons.Default.Phone)
     data object Messages : TabItem("tab_messages", "Messages", Icons.AutoMirrored.Filled.Chat)
     data object Contacts : TabItem("tab_contacts", "Contacts", Icons.Outlined.People)
     data object Profile : TabItem("tab_profile", "Profile", Icons.Default.Person)
 }
 
-val tabs = listOf(TabItem.Home, TabItem.Messages, TabItem.Contacts, TabItem.Profile)
+val tabs = listOf(TabItem.Home, TabItem.CallLog, TabItem.Messages, TabItem.Contacts, TabItem.Profile)
 
 // Shared transition specs
 private val slideInDuration = 300
@@ -101,6 +105,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val alarmViewModel: AlarmViewModel = viewModel(factory = AlarmViewModel.Factory)
     val adminSettingsViewModel: AdminSettingsViewModel = viewModel(factory = AdminSettingsViewModel.Factory)
     val smsViewModel: SmsViewModel = viewModel(factory = SmsViewModel.Factory)
+    val callLogViewModel: CallLogViewModel = viewModel(factory = CallLogViewModel.Factory)
 
     NavHost(
         navController = navController,
@@ -168,7 +173,8 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 callerIdViewModel = callerIdViewModel,
                 stolenReportViewModel = stolenReportViewModel,
                 alarmViewModel = alarmViewModel,
-                smsViewModel = smsViewModel
+                smsViewModel = smsViewModel,
+                callLogViewModel = callLogViewModel
             )
         }
         composable("sms_conversation/{address}") { backStackEntry ->
@@ -180,6 +186,20 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 address = address,
                 authViewModel = authViewModel,
                 smsViewModel = smsViewModel
+            )
+        }
+        composable("caller_id_lookup/{number}") { backStackEntry ->
+            val number = java.net.URLDecoder.decode(
+                backStackEntry.arguments?.getString("number") ?: "", "UTF-8"
+            )
+            androidx.compose.runtime.LaunchedEffect(number) {
+                if (number.isNotBlank()) {
+                    callerIdViewModel.lookup(number)
+                }
+            }
+            CallerIdScreen(
+                callerIdViewModel = callerIdViewModel,
+                authViewModel = authViewModel
             )
         }
         composable("report_stolen") {
@@ -275,7 +295,8 @@ fun MainScreen(
     callerIdViewModel: CallerIdViewModel,
     stolenReportViewModel: StolenReportViewModel,
     alarmViewModel: AlarmViewModel,
-    smsViewModel: SmsViewModel
+    smsViewModel: SmsViewModel,
+    callLogViewModel: CallLogViewModel
 ) {
     val tabNavController = rememberNavController()
 
@@ -360,6 +381,12 @@ fun MainScreen(
                     contactsViewModel = contactsViewModel,
                     alarmViewModel = alarmViewModel,
                     stolenReportViewModel = stolenReportViewModel
+                )
+            }
+            composable(TabItem.CallLog.route) {
+                CallLogScreen(
+                    rootNavController = rootNavController,
+                    callLogViewModel = callLogViewModel
                 )
             }
             composable(TabItem.Messages.route) {

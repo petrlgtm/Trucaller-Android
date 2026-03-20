@@ -1,0 +1,121 @@
+package com.byron.trucaller.viewmodel
+
+import android.app.Application
+import android.content.Context
+import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.ViewModelProvider
+import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
+import androidx.lifecycle.viewModelScope
+import androidx.lifecycle.viewmodel.initializer
+import androidx.lifecycle.viewmodel.viewModelFactory
+import com.byron.trucaller.TruCallerApplication
+import com.byron.trucaller.data.model.CallLogEntry
+import com.byron.trucaller.data.model.CallType
+import com.byron.trucaller.data.repository.CallerIdRepository
+import com.byron.trucaller.util.CallLogReader
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
+
+class CallLogViewModel(
+    application: Application,
+    private val callerIdRepository: CallerIdRepository
+) : AndroidViewModel(application) {
+
+    private val _callLogEntries = MutableStateFlow<List<CallLogEntry>>(emptyList())
+    val callLogEntries: StateFlow<List<CallLogEntry>> = _callLogEntries.asStateFlow()
+
+    private val _isLoading = MutableStateFlow(false)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _selectedFilter = MutableStateFlow(CallLogFilter.ALL)
+    val selectedFilter: StateFlow<CallLogFilter> = _selectedFilter.asStateFlow()
+
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _actionMessage = MutableStateFlow<String?>(null)
+    val actionMessage: StateFlow<String?> = _actionMessage.asStateFlow()
+
+    fun loadCallLog(context: Context) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            try {
+                val rawEntries = CallLogReader.readCallLog(context, limit = 200)
+                val enriched = rawEntries.map { entry -> enrichWithCallerIdData(entry) }
+                _callLogEntries.value = enriched
+            } catch (e: Exception) {
+                _actionMessage.value = "Failed to load call log: ${e.message}"
+            } finally {
+                _isLoading.value = false
+            }
+        }
+    }
+
+    private suspend fun enrichWithCallerIdData(entry: CallLogEntry): CallLogEntry {
+        return try {
+            val lookup = callerIdRepository.lookupNumber(entry.phoneNumber)
+            if (lookup.callerIdEntry != null) {
+                entry.copy(
+                    name = entry.name ?: lookup.callerIdEntry.name,
+                    isSpam = lookup.callerIdEntry.spamScore > 30,
+                    spamScore = lookup.callerIdEntry.spamScore
+                )
+            } else {
+                entry
+            }
+        } catch (_: Exception) {
+            entry
+        }
+    }
+
+    fun setFilter(filter: CallLogFilter) {
+        _selectedFilter.value = filter
+    }
+
+    fun setSearchQuery(query: String) {
+        _searchQuery.value = query
+    }
+
+    fun getFilteredEntries(): List<CallLogEntry> {
+        val all = _callLogEntries.value
+        val query = _searchQuery.value.lowercase()
+
+        val filtered = when (_selectedFilter.value) {
+            CallLogFilter.ALL -> all
+            CallLogFilter.INCOMING -> all.filter { it.callType == CallType.INCOMING }
+            CallLogFilter.OUTGOING -> all.filter { it.callType == CallType.OUTGOING }
+            CallLogFilter.MISSED -> all.filter { it.callType == CallType.MISSED }
+        }
+
+        return if (query.isBlank()) {
+            filtered
+        } else {
+            filtered.filter { entry ->
+                (entry.name?.lowercase()?.contains(query) == true) ||
+                    entry.phoneNumber.contains(query)
+            }
+        }
+    }
+
+    fun clearActionMessage() {
+        _actionMessage.value = null
+    }
+
+    companion object {
+        val Factory: ViewModelProvider.Factory = viewModelFactory {
+            initializer {
+                val app = this[APPLICATION_KEY] as TruCallerApplication
+                CallLogViewModel(
+                    app,
+                    app.container.callerIdRepository
+                )
+            }
+        }
+    }
+}
+
+enum class CallLogFilter {
+    ALL, INCOMING, OUTGOING, MISSED
+}

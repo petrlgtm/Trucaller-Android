@@ -96,26 +96,26 @@ class SmsRepository(
         messages: List<SmsMessage>,
         userId: String
     ): List<SmsMessage> {
-        // Cache lookups to avoid repeated DB queries
-        val cache = mutableMapOf<String, Pair<String?, SmsCategory>>()
+        // Cache sender lookups to avoid repeated DB queries
+        val senderCache = mutableMapOf<String, Pair<String?, SmsCategory>>()
 
         return messages.map { msg ->
-            val cached = cache[msg.address]
-            if (cached != null) {
-                msg.copy(
-                    contactName = cached.first,
-                    category = cached.second,
-                    spamScore = if (cached.second == SmsCategory.SPAM) 80 else 0
-                )
-            } else {
-                val result = lookupSender(msg.address, userId)
-                cache[msg.address] = result
-                msg.copy(
-                    contactName = result.first,
-                    category = result.second,
-                    spamScore = if (result.second == SmsCategory.SPAM) 80 else 0
-                )
+            val senderResult = senderCache.getOrPut(msg.address) {
+                lookupSender(msg.address, userId)
             }
+            // Refine category using message body content analysis
+            val finalCategory = classifyMessage(msg.address, msg.body, senderResult.second)
+            val spamScore = when (finalCategory) {
+                SmsCategory.SPAM -> 80
+                SmsCategory.PROMOTIONAL -> 40
+                SmsCategory.TRANSACTIONAL -> 0
+                SmsCategory.PERSONAL -> 0
+            }
+            msg.copy(
+                contactName = senderResult.first,
+                category = finalCategory,
+                spamScore = spamScore
+            )
         }
     }
 
@@ -128,6 +128,11 @@ class SmsRepository(
             return Pair(null, SmsCategory.SPAM)
         }
 
+        // Check if user reported this number as spam
+        if (smsSpamDao.isReported(userId, address)) {
+            return Pair(null, SmsCategory.SPAM)
+        }
+
         // Check caller ID database
         val lookup = callerIdRepository.lookupNumber(address)
         val entry = lookup.callerIdEntry
@@ -136,28 +141,164 @@ class SmsRepository(
             val category = when (entry.category) {
                 SpamCategory.SPAM, SpamCategory.FRAUD -> SmsCategory.SPAM
                 SpamCategory.SUSPECTED_SPAM -> SmsCategory.PROMOTIONAL
-                SpamCategory.SAFE -> categorizeByContent(entry.name)
+                SpamCategory.SAFE -> SmsCategory.PERSONAL // will be refined by message body
             }
             return Pair(entry.name, category)
         }
 
-        // No entry found — categorize as personal
+        // Non-numeric / shortcode sender → likely business
+        if (isShortCodeOrAlpha(address)) {
+            return Pair(null, SmsCategory.TRANSACTIONAL)
+        }
+
         return Pair(null, SmsCategory.PERSONAL)
     }
 
+    // ── Message body classifier ──────────────────────────────────────
+
     /**
-     * Simple heuristic: if the name looks like a business/service, categorize as transactional.
+     * Classifies a message using sender analysis + body content scoring.
+     * Called after lookupSender to refine the category when it's PERSONAL.
      */
-    private fun categorizeByContent(name: String): SmsCategory {
-        val businessKeywords = listOf(
-            "bank", "mtn", "airtel", "hospital", "delivery", "jumia",
-            "umeme", "nwsc", "ura", "safeboda", "uber", "bolt"
-        )
-        return if (businessKeywords.any { name.lowercase().contains(it) }) {
-            SmsCategory.TRANSACTIONAL
-        } else {
-            SmsCategory.PERSONAL
+    private fun classifyMessage(address: String, body: String, senderCategory: SmsCategory): SmsCategory {
+        // If already SPAM from blocked/reported, keep it
+        if (senderCategory == SmsCategory.SPAM) return SmsCategory.SPAM
+
+        val lowerBody = body.lowercase()
+
+        // Score each category based on body keywords
+        val spamScore = scoreSpam(lowerBody)
+        val promoScore = scorePromotional(lowerBody)
+        val transactionalScore = scoreTransactional(lowerBody)
+
+        // Strong spam signals override everything
+        if (spamScore >= 3) return SmsCategory.SPAM
+
+        // Shortcode / alphanumeric senders are never personal
+        val isBusinessSender = isShortCodeOrAlpha(address)
+
+        if (isBusinessSender) {
+            return when {
+                promoScore > transactionalScore -> SmsCategory.PROMOTIONAL
+                transactionalScore > 0 -> SmsCategory.TRANSACTIONAL
+                spamScore > 0 -> SmsCategory.PROMOTIONAL
+                else -> SmsCategory.TRANSACTIONAL
+            }
         }
+
+        // Regular phone number senders
+        return when {
+            spamScore >= 2 -> SmsCategory.SPAM
+            promoScore >= 3 -> SmsCategory.PROMOTIONAL
+            transactionalScore >= 2 -> SmsCategory.TRANSACTIONAL
+            promoScore >= 2 && senderCategory != SmsCategory.PERSONAL -> SmsCategory.PROMOTIONAL
+            else -> senderCategory
+        }
+    }
+
+    private fun scoreSpam(body: String): Int {
+        var score = 0
+        val spamPatterns = listOf(
+            // Prize / lottery scams
+            "you have won", "you've won", "congratulations you", "winner",
+            "lottery", "claim your prize", "selected as winner",
+            // Money scams
+            "free money", "earn money fast", "make money online",
+            "double your money", "investment opportunity",
+            // Urgency / phishing
+            "act now", "click here immediately", "your account will be",
+            "suspended", "verify immediately or",
+            "urgent action required", "confirm your identity",
+            // Nigerian/advance fee patterns
+            "beneficiary", "next of kin", "inheritance",
+            "million dollars", "million usd", "diplomat",
+            // Mobile money scams (Uganda-specific)
+            "send airtime", "wrong transfer", "mistakenly sent",
+            "reverse the money", "mobile money pin",
+            "confirm withdrawal"
+        )
+        for (p in spamPatterns) {
+            if (body.contains(p)) score++
+        }
+        // Suspicious URL patterns
+        if (body.contains(Regex("https?://bit\\.ly|https?://t\\.co|https?://tinyurl|https?://[a-z]{2,5}\\.[a-z]{2}/[a-z0-9]"))) score += 2
+        // Excessive caps
+        val capsRatio = body.count { it.isUpperCase() }.toFloat() / body.length.coerceAtLeast(1)
+        if (capsRatio > 0.6f && body.length > 20) score++
+        // Multiple exclamation/question marks
+        if (body.contains(Regex("[!]{3,}|[?]{3,}"))) score++
+        return score
+    }
+
+    private fun scorePromotional(body: String): Int {
+        var score = 0
+        val promoPatterns = listOf(
+            // Offers & deals
+            "% off", "percent off", "discount", "sale", "flash sale",
+            "limited time", "limited offer", "exclusive offer",
+            "special offer", "best deal", "mega deal",
+            // Marketing
+            "subscribe", "unsubscribe", "opt out", "reply stop",
+            "promo code", "coupon", "voucher", "cashback", "cash back",
+            "redeem", "reward points", "loyalty",
+            // Call to action
+            "shop now", "buy now", "order now", "download now",
+            "get yours", "don't miss", "hurry",
+            // Telco promotions (Uganda-specific)
+            "data bundle", "bonus data", "free airtime", "voice bundle",
+            "mtn pulse", "airtel money", "daily bundle", "weekly bundle",
+            "dial *", "activate now", "unlimited calls"
+        )
+        for (p in promoPatterns) {
+            if (body.contains(p)) score++
+        }
+        return score
+    }
+
+    private fun scoreTransactional(body: String): Int {
+        var score = 0
+        val transactionalPatterns = listOf(
+            // Authentication
+            "otp", "verification code", "verify your", "one-time password",
+            "one-time pin", "security code", "login code", "2fa",
+            // Financial
+            "transaction", "payment received", "payment of", "balance is",
+            "account balance", "credited", "debited", "receipt",
+            "statement", "invoice",
+            // Delivery / order
+            "delivered", "shipped", "out for delivery", "tracking",
+            "order confirmed", "order #", "booking confirmed",
+            // Mobile money (Uganda-specific)
+            "you have received", "sent to", "mobile money",
+            "transaction id", "new balance", "withdraw",
+            "float balance", "agent", "approved",
+            // Alerts
+            "alert:", "reminder:", "appointment", "scheduled",
+            "password changed", "login from", "new device"
+        )
+        for (p in transactionalPatterns) {
+            if (body.contains(p)) score++
+        }
+        // OTP pattern: 4-8 digit codes
+        if (body.contains(Regex("\\b\\d{4,8}\\b")) &&
+            body.contains(Regex("code|otp|pin|verify|confirm", RegexOption.IGNORE_CASE))) {
+            score += 2
+        }
+        return score
+    }
+
+    /**
+     * Checks if the sender address is a shortcode or alphanumeric (non-phone-number) sender.
+     * These are almost always businesses.
+     */
+    private fun isShortCodeOrAlpha(address: String): Boolean {
+        val cleaned = address.replace(Regex("[^a-zA-Z0-9+]"), "")
+        // Alphanumeric sender (e.g., "MTN", "AIRTEL", "M-PESA")
+        if (cleaned.any { it.isLetter() }) return true
+        // Short code (4-6 digits)
+        val digits = cleaned.replace(Regex("[^\\d]"), "")
+        if (digits.length in 3..6) return true
+        return false
     }
 
     private suspend fun buildConversations(

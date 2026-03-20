@@ -456,7 +456,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable {
-                                val phone = contact.phoneNumber.replace("+", "").replace(" ", "")
+                                val phone = contact.phoneNumber.replace("+", "").replace(" ", "").replace("-", "")
                                 val intent = Intent(Intent.ACTION_VIEW).apply {
                                     data = Uri.parse("https://wa.me/$phone")
                                 }

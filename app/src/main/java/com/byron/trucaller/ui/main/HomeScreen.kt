@@ -1,5 +1,6 @@
 package com.byron.trucaller.ui.main
 
+import android.app.Activity
 import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -173,6 +174,15 @@ fun HomeScreen(
         contactsViewModel.syncContacts(user.id)
     }
 
+    // Google Drive sign-in launcher for backup
+    val driveSignInLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            contactsViewModel.syncToGoogleDrive()
+        }
+    }
+
     val activities = remember(ipLogs, alarmLogs, stolenReports) {
         val items = mutableListOf<ActivityItem>()
         ipLogs.forEach { log ->
@@ -251,11 +261,21 @@ fun HomeScreen(
         Column(modifier = Modifier.padding(16.dp)) {
             // Sync message snackbar
             if (syncMessage != null) {
+                val needsDriveSignIn = !contactsViewModel.isDriveSignedIn()
                 Snackbar(
                     modifier = Modifier.padding(bottom = 8.dp),
                     action = {
-                        TextButton(onClick = { contactsViewModel.clearSyncMessage() }) {
-                            Text("OK", color = Color.White)
+                        if (needsDriveSignIn) {
+                            TextButton(onClick = {
+                                driveSignInLauncher.launch(contactsViewModel.getDriveSignInIntent())
+                                contactsViewModel.clearSyncMessage()
+                            }) {
+                                Text("SIGN IN", color = Brand)
+                            }
+                        } else {
+                            TextButton(onClick = { contactsViewModel.clearSyncMessage() }) {
+                                Text("OK", color = Color.White)
+                            }
                         }
                     }
                 ) {
@@ -281,61 +301,116 @@ fun HomeScreen(
                     }
                     val isStolenOrFlagged = device.status == DeviceStatus.STOLEN || device.status == DeviceStatus.FLAGGED
 
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(20.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isStolenOrFlagged) Color(0xFF2A0000) else Color.White
-                        ),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                    if (isStolenOrFlagged) {
+                        // Compact oval stolen/flagged badge
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(50),
+                            colors = CardDefaults.cardColors(containerColor = Color(0xFF2A0000)),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
                         ) {
-                            Box(
+                            Row(
                                 modifier = Modifier
-                                    .size(52.dp)
-                                    .background(statusColor.copy(alpha = 0.15f), CircleShape),
-                                contentAlignment = Alignment.Center
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 16.dp, vertical = 10.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(
-                                    imageVector = if (isStolenOrFlagged) Icons.Default.Warning else Icons.Default.PhoneAndroid,
-                                    contentDescription = null,
-                                    tint = statusColor,
-                                    modifier = Modifier.size(26.dp)
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .background(statusColor.copy(alpha = 0.25f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Warning, null,
+                                        tint = statusColor,
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "${device.manufacturer} ${device.model}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 14.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        device.status.name,
+                                        color = statusColor,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 11.sp
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .background(statusColor.copy(alpha = 0.25f), RoundedCornerShape(50))
+                                        .padding(horizontal = 10.dp, vertical = 3.dp)
+                                ) {
+                                    Text(
+                                        device.status.name,
+                                        color = statusColor,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.ExtraBold
+                                    )
+                                }
                             }
-                            Spacer(modifier = Modifier.width(16.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    "${device.manufacturer} ${device.model}",
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize = 16.sp,
-                                    color = if (isStolenOrFlagged) Color.White else Color(0xFF1A1A1A)
-                                )
-                                Spacer(modifier = Modifier.height(2.dp))
-                                Text(
-                                    device.status.name,
-                                    color = statusColor,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 13.sp
-                                )
-                            }
-                            Box(
+                        }
+                    } else {
+                        // Normal active device card
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(20.dp),
+                            colors = CardDefaults.cardColors(containerColor = Color.White),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+                        ) {
+                            Row(
                                 modifier = Modifier
-                                    .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                                    .padding(horizontal = 14.dp, vertical = 6.dp)
+                                    .fillMaxWidth()
+                                    .padding(18.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text(
-                                    device.status.name,
-                                    color = statusColor,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.ExtraBold,
-                                    letterSpacing = 0.5.sp
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .size(52.dp)
+                                        .background(statusColor.copy(alpha = 0.15f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.PhoneAndroid, null,
+                                        tint = statusColor,
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+                                Spacer(modifier = Modifier.width(16.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        "${device.manufacturer} ${device.model}",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = Color(0xFF1A1A1A)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        device.status.name,
+                                        color = statusColor,
+                                        fontWeight = FontWeight.SemiBold,
+                                        fontSize = 13.sp
+                                    )
+                                }
+                                Box(
+                                    modifier = Modifier
+                                        .background(statusColor.copy(alpha = 0.15f), RoundedCornerShape(50))
+                                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                                ) {
+                                    Text(
+                                        device.status.name,
+                                        color = statusColor,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.ExtraBold,
+                                        letterSpacing = 0.5.sp
+                                    )
+                                }
                             }
                         }
                     }
