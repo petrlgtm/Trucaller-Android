@@ -9,6 +9,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.byron.trucaller.TruCallerApplication
+import com.byron.trucaller.data.preferences.UserPreferences
 import com.byron.trucaller.data.repository.AlarmRepository
 import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
@@ -19,6 +20,7 @@ import com.byron.trucaller.service.ApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
@@ -53,7 +55,8 @@ class AnalyticsViewModel(
     private val contactRepository: ContactRepository,
     private val smsRepository: SmsRepository,
     private val stolenReportRepository: StolenReportRepository,
-    private val alarmRepository: AlarmRepository
+    private val alarmRepository: AlarmRepository,
+    private val userPreferences: UserPreferences
 ) : AndroidViewModel(application) {
 
     companion object {
@@ -69,7 +72,8 @@ class AnalyticsViewModel(
                     app.container.contactRepository,
                     app.container.smsRepository,
                     app.container.stolenReportRepository,
-                    app.container.alarmRepository
+                    app.container.alarmRepository,
+                    app.container.userPreferences
                 )
             }
         }
@@ -90,110 +94,97 @@ class AnalyticsViewModel(
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
 
+            // Always compute accurate local stats first
+            val localStats = computeLocalStats()
+
+            // Try API for monthly history (optional enrichment)
+            var history = emptyList<MonthlyDataPoint>()
             try {
-                val result = ApiClient.getUserAnalytics()
                 val historyResult = ApiClient.getUserAnalyticsHistory()
-
-                if (result.success && result.data != null) {
-                    val data = result.data
-                    val stats = AnalyticsStats(
-                        callsBlocked = (data["callsBlocked"] as? Number)?.toInt() ?: 0,
-                        smsBlocked = (data["smsBlocked"] as? Number)?.toInt() ?: 0,
-                        spamIdentified = (data["spamIdentified"] as? Number)?.toInt() ?: 0,
-                        numbersLookedUp = (data["numbersLookedUp"] as? Number)?.toInt() ?: 0,
-                        contactsSynced = (data["contactsSynced"] as? Number)?.toInt() ?: 0,
-                        stolenReports = (data["stolenReports"] as? Number)?.toInt() ?: 0,
-                        weeklyBlockedDelta = (data["weeklyBlockedDelta"] as? Number)?.toInt() ?: 0
-                    )
-
-                    val history = if (historyResult.success && historyResult.data != null) {
-                        historyResult.data.map { item ->
-                            MonthlyDataPoint(
-                                month = item["month"] as? String ?: "",
-                                callsBlocked = (item["callsBlocked"] as? Number)?.toInt() ?: 0,
-                                smsBlocked = (item["smsBlocked"] as? Number)?.toInt() ?: 0
-                            )
-                        }
-                    } else emptyList()
-
-                    _uiState.value = AnalyticsUiState(
-                        stats = stats,
-                        history = history,
-                        insights = generateInsights(stats, history),
-                        isLoading = false
-                    )
-                    return@launch
+                if (historyResult.success && historyResult.data != null) {
+                    history = historyResult.data.map { item ->
+                        MonthlyDataPoint(
+                            month = item["month"] as? String ?: "",
+                            callsBlocked = (item["callsBlocked"] as? Number)?.toInt() ?: 0,
+                            smsBlocked = (item["smsBlocked"] as? Number)?.toInt() ?: 0
+                        )
+                    }
                 }
-
-                Log.w(TAG, "API fetch failed: ${result.error}, falling back to local data")
-                fallbackToLocal()
-            } catch (e: Exception) {
-                Log.e(TAG, "Failed to fetch analytics from API", e)
-                fallbackToLocal()
+            } catch (_: Exception) {
+                Log.d(TAG, "API history unavailable, using local stats only")
             }
+
+            _uiState.value = AnalyticsUiState(
+                stats = localStats,
+                history = history,
+                insights = generateInsights(localStats, history),
+                isLoading = false
+            )
         }
     }
 
-    private suspend fun fallbackToLocal() {
-        try {
-            val blocked = callerIdRepository.getEntryCount().firstOrNull() ?: 0
-            val smsSpam = smsRepository.getTotalSpamReportCount().firstOrNull() ?: 0
-            val reports = stolenReportRepository.getReportCount().firstOrNull() ?: 0
-            val alarms = alarmRepository.getLogCount().firstOrNull() ?: 0
+    /**
+     * Computes analytics stats entirely from local Room DB — always accurate.
+     */
+    private suspend fun computeLocalStats(): AnalyticsStats {
+        val userId = userPreferences.loggedInUserId.first()
 
-            val stats = AnalyticsStats(
-                callsBlocked = blocked,
-                smsBlocked = smsSpam,
-                spamIdentified = blocked + smsSpam,
-                numbersLookedUp = blocked,
-                contactsSynced = 0,
-                stolenReports = reports,
-                weeklyBlockedDelta = 0
-            )
+        // Blocked numbers count (for this user)
+        val blockedCount = if (userId != null) {
+            blockedNumberRepository.getBlockedCount(userId).firstOrNull() ?: 0
+        } else 0
 
-            // Generate sample monthly history from local counts
-            val months = listOf("Oct", "Nov", "Dec", "Jan", "Feb", "Mar")
-            val history = months.mapIndexed { index, month ->
-                val factor = (index + 1).toFloat() / months.size
-                MonthlyDataPoint(
-                    month = month,
-                    callsBlocked = (stats.callsBlocked * factor * 0.3f).toInt().coerceAtLeast(0),
-                    smsBlocked = (stats.smsBlocked * factor * 0.25f).toInt().coerceAtLeast(0)
-                )
-            }
+        // Caller ID entries (spam numbers identified in the database)
+        val callerIdCount = callerIdRepository.getEntryCount().firstOrNull() ?: 0
 
-            _uiState.value = AnalyticsUiState(
-                stats = stats,
-                history = history,
-                insights = generateInsights(stats, history),
-                isLoading = false,
-                error = "Showing local data (offline)"
-            )
-        } catch (e: Exception) {
-            Log.e(TAG, "Local fallback also failed", e)
-            _uiState.value = AnalyticsUiState(
-                isLoading = false,
-                error = "Unable to load analytics"
-            )
+        // SMS spam reports filed by the user
+        val smsSpamCount = smsRepository.getTotalSpamReportCount().firstOrNull() ?: 0
+
+        // Contacts synced for this user
+        val contactCount = if (userId != null) {
+            contactRepository.getContactCountByUser(userId).firstOrNull() ?: 0
+        } else {
+            contactRepository.getTotalContactCount().firstOrNull() ?: 0
         }
+
+        // Stolen reports
+        val stolenCount = stolenReportRepository.getReportCount().firstOrNull() ?: 0
+
+        // Alarm/remote action logs
+        val alarmCount = alarmRepository.getLogCount().firstOrNull() ?: 0
+
+        return AnalyticsStats(
+            callsBlocked = blockedCount,
+            smsBlocked = smsSpamCount,
+            spamIdentified = callerIdCount,
+            numbersLookedUp = callerIdCount,
+            contactsSynced = contactCount,
+            stolenReports = stolenCount,
+            weeklyBlockedDelta = 0
+        )
     }
 
     private fun generateInsights(stats: AnalyticsStats, history: List<MonthlyDataPoint>): List<String> {
         val insights = mutableListOf<String>()
 
-        val totalBlocked = stats.callsBlocked + stats.smsBlocked
-        if (totalBlocked > 0) {
-            insights.add("You've blocked a total of $totalBlocked unwanted calls and messages. Your phone is well-protected.")
+        if (stats.callsBlocked > 0) {
+            insights.add("You've blocked ${stats.callsBlocked} unwanted numbers. Your phone is protected.")
+        }
+
+        if (stats.smsBlocked > 0) {
+            insights.add("${stats.smsBlocked} SMS spam reports filed, helping protect the community.")
         }
 
         if (stats.spamIdentified > 0) {
-            insights.add("${stats.spamIdentified} spam numbers have been identified, helping protect you and the community.")
+            insights.add("${stats.spamIdentified} caller IDs in your database for instant identification.")
         }
 
-        if (stats.weeklyBlockedDelta > 0) {
-            insights.add("Blocking activity increased by ${stats.weeklyBlockedDelta} this week compared to last week.")
-        } else if (stats.weeklyBlockedDelta < 0) {
-            insights.add("Blocking activity decreased by ${-stats.weeklyBlockedDelta} this week. Spam attempts may be slowing down.")
+        if (stats.contactsSynced > 0) {
+            insights.add("${stats.contactsSynced} contacts synced and protected with caller ID.")
+        }
+
+        if (stats.stolenReports > 0) {
+            insights.add("${stats.stolenReports} stolen device report(s) on file. Your devices are monitored.")
         }
 
         if (history.size >= 2) {
@@ -202,22 +193,14 @@ class AnalyticsViewModel(
             val recentTotal = recent.callsBlocked + recent.smsBlocked
             val previousTotal = previous.callsBlocked + previous.smsBlocked
             if (recentTotal > previousTotal) {
-                insights.add("${recent.month} saw more blocked activity than ${previous.month}. Stay vigilant against spam.")
+                insights.add("${recent.month} saw more blocked activity than ${previous.month}. Stay vigilant.")
             } else if (recentTotal < previousTotal && previousTotal > 0) {
-                insights.add("Spam activity dropped in ${recent.month} compared to ${previous.month}. Keep up the good habits!")
+                insights.add("Spam activity dropped in ${recent.month}. Keep up the good habits!")
             }
         }
 
-        if (stats.stolenReports > 0) {
-            insights.add("You have ${stats.stolenReports} stolen device report(s) on file. Your devices are being monitored.")
-        }
-
-        if (stats.contactsSynced > 0) {
-            insights.add("${stats.contactsSynced} contacts have been synced and protected with caller ID.")
-        }
-
         if (insights.isEmpty()) {
-            insights.add("Start using TruCaller's blocking features to see personalized insights here.")
+            insights.add("Start blocking spam callers and reporting numbers to see insights here.")
         }
 
         return insights
