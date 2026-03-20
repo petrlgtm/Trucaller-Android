@@ -13,13 +13,19 @@ val Accent = Color(0xFFD90000)
 val AccentLight = Color(0xFFEF2020)
 val AccentDark = Color(0xFFB71C1C)
 
-// ── Surface & background ────────────────────────────────────────────────
+// ── Dark Surface & background ─────────────────────────────────────────
 val Surface = Color(0xFF1E1E1E)
 val SurfaceElevated = Color(0xFF252525)
 val Background = Color(0xFF121212)
 val BackgroundDark = Color(0xFF0D0D0D)
 val SurfaceCard = Color(0xFF1E1E1E)
 val SurfaceLight = Color(0xFF2A2A2A)
+
+// ── Light Surface & background ────────────────────────────────────────
+val LightBackground = Color(0xFFFAFAFA)
+val LightSurface = Color(0xFFFFFFFF)
+val LightSurfaceElevated = Color(0xFFF5F5F5)
+val LightSurfaceCard = Color(0xFFFFFFFF)
 
 // ── Status colors ───────────────────────────────────────────────────────
 val Danger = Color(0xFFD90000)         // Uganda Red
@@ -32,18 +38,26 @@ val Warning = Color(0xFFFFCD00)        // Uganda Yellow
 val WarningLight = Color(0xFFFFE04D)
 val WarningBg = Color(0x1AFFCD00)
 
-// ── Text colors ─────────────────────────────────────────────────────────
+// ── Dark Text colors ──────────────────────────────────────────────────
 val TextPrimary = Color(0xFFF5F5F5)    // Light text on dark bg
 val TextSecondary = Color(0xFFB0B0B0)
 val TextDisabled = Color(0xFF666666)
 val TextOnDark = Color(0xFFF5F5F5)
 val TextOnYellow = Color(0xFF1A1A1A)
 
-// ── Other ───────────────────────────────────────────────────────────────
+// ── Light Text colors ─────────────────────────────────────────────────
+val LightTextPrimary = Color(0xFF1A1A1A)   // Dark text on light bg
+val LightTextSecondary = Color(0xFF616161)
+
+// ── Other (Dark) ────────────────────────────────────────────────────────
 val Inactive = Color(0xFF757575)
 val Divider = Color(0xFF333333)
 val Overlay = Color(0x80000000)
 val Shimmer = Color(0x33FFCD00)
+
+// ── Other (Light) ───────────────────────────────────────────────────────
+val LightDivider = Color(0xFFE0E0E0)
+val LightOutlineVariant = Color(0xFFBDBDBD)
 
 // ── Material3 scheme support ────────────────────────────────────────────
 val BrandOnPrimary = Color(0xFF1A1A1A) // Black text on yellow

@@ -1,7 +1,6 @@
 package com.byron.trucaller.ui.theme
 
 import android.app.Activity
-import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
@@ -13,34 +12,38 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+/** User-selectable theme mode, persisted via [com.byron.trucaller.util.ThemePreferences]. */
+enum class ThemeMode { SYSTEM, LIGHT, DARK }
+
 private val LightColorScheme = lightColorScheme(
-    primary = Brand,                    // Yellow
-    onPrimary = BrandDark,              // Black on yellow
+    primary = Brand,                        // Uganda Yellow
+    onPrimary = BrandDark,                  // Black on yellow
     primaryContainer = BrandLight,
     onPrimaryContainer = BrandDark,
-    secondary = Accent,                 // Red
+    secondary = Accent,                     // Uganda Red
     onSecondary = Color.White,
-    secondaryContainer = AccentLight,
-    onSecondaryContainer = Color.White,
+    secondaryContainer = Color(0xFFFFDAD4), // Light red container
+    onSecondaryContainer = AccentDark,
     tertiary = BrandGold,
     onTertiary = BrandDark,
-    background = Background,            // Dark background
-    onBackground = TextPrimary,         // Light text
-    surface = Surface,                  // Dark surface
-    onSurface = TextPrimary,            // Light text
-    surfaceVariant = SurfaceElevated,
-    error = Danger,                     // Red
+    background = LightBackground,           // Off-white (#FAFAFA)
+    onBackground = LightTextPrimary,        // Dark text
+    surface = LightSurface,                 // White (#FFFFFF)
+    onSurface = LightTextPrimary,           // Dark text
+    surfaceVariant = LightSurfaceElevated,  // Light grey (#F5F5F5)
+    onSurfaceVariant = LightTextSecondary,
+    error = Danger,                         // Uganda Red
     onError = Color.White,
-    outline = Divider,
-    outlineVariant = Color(0xFF333333)
+    outline = LightDivider,                 // #E0E0E0
+    outlineVariant = LightOutlineVariant    // #BDBDBD
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = Brand,                    // Yellow stays bold in dark
-    onPrimary = BrandDark,              // Black on yellow
+    primary = Brand,                        // Yellow stays bold in dark
+    onPrimary = BrandDark,                  // Black on yellow
     primaryContainer = Color(0xFF3A3A00),
     onPrimaryContainer = BrandLight,
-    secondary = AccentLight,            // Red
+    secondary = AccentLight,                // Red
     onSecondary = Color.White,
     tertiary = BrandGold,
     onTertiary = Color.White,
@@ -57,7 +60,12 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun TruCallerTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    themeMode: ThemeMode = ThemeMode.SYSTEM,
+    darkTheme: Boolean = when (themeMode) {
+        ThemeMode.SYSTEM -> isSystemInDarkTheme()
+        ThemeMode.LIGHT -> false
+        ThemeMode.DARK -> true
+    },
     content: @Composable () -> Unit
 ) {
     val colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme
@@ -67,8 +75,8 @@ fun TruCallerTheme(
     if (!view.isInEditMode) {
         SideEffect {
             val window = (view.context as Activity).window
-            window.statusBarColor = BrandDark.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = false
+            window.statusBarColor = if (darkTheme) BrandDark.toArgb() else Brand.toArgb()
+            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !darkTheme
         }
     }
 
