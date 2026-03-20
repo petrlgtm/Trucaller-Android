@@ -537,6 +537,148 @@ fun Route.adminRoutes() {
                     )
                 )
             }
+
+            // ── PUT /api/admin/profile ────────────────────────────────────
+            put("/profile") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@put
+                }
+
+                val adminId = call.userId()
+
+                val request = try {
+                    call.receive<AdminProfileUpdateRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Invalid request body")
+                    )
+                    return@put
+                }
+
+                if (request.name.isBlank() || request.email.isBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Name and email are required")
+                    )
+                    return@put
+                }
+
+                val result = Collections.adminUsers.updateOne(
+                    Filters.eq("_id", adminId),
+                    Updates.combine(
+                        Updates.set("name", request.name),
+                        Updates.set("email", request.email)
+                    )
+                )
+
+                if (result.matchedCount == 0L) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        ApiResponse<Nothing>(success = false, error = "Admin user not found")
+                    )
+                    return@put
+                }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse<Nothing>(
+                        success = true,
+                        message = "Admin profile updated"
+                    )
+                )
+            }
+
+            // ── PUT /api/admin/password ───────────────────────────────────
+            put("/password") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@put
+                }
+
+                val adminId = call.userId()
+
+                val request = try {
+                    call.receive<AdminPasswordUpdateRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Invalid request body")
+                    )
+                    return@put
+                }
+
+                if (request.currentPassword.isBlank() || request.newPassword.isBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Current and new passwords are required")
+                    )
+                    return@put
+                }
+
+                if (request.newPassword.length < 8) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "New password must be at least 8 characters")
+                    )
+                    return@put
+                }
+
+                // Fetch admin user document
+                val adminDoc = Collections.adminUsers
+                    .find(Filters.eq("_id", adminId))
+                    .firstOrNull()
+
+                if (adminDoc == null) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        ApiResponse<Nothing>(success = false, error = "Admin user not found")
+                    )
+                    return@put
+                }
+
+                // Verify current password with BCrypt
+                val storedHash = adminDoc.getString("passwordHash")
+                val verified = BCrypt.verifyer()
+                    .verify(request.currentPassword.toCharArray(), storedHash)
+                    .verified
+
+                if (!verified) {
+                    call.respond(
+                        HttpStatusCode.Unauthorized,
+                        ApiResponse<Nothing>(success = false, error = "Current password is incorrect")
+                    )
+                    return@put
+                }
+
+                // Hash and store new password
+                val newHash = BCrypt.withDefaults()
+                    .hashToString(12, request.newPassword.toCharArray())
+
+                Collections.adminUsers.updateOne(
+                    Filters.eq("_id", adminId),
+                    Updates.set("passwordHash", newHash)
+                )
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse<Nothing>(
+                        success = true,
+                        message = "Password updated successfully"
+                    )
+                )
+            }
         }
     }
 }

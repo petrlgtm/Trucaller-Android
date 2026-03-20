@@ -36,6 +36,18 @@ data class AdminLoginRequest(
 )
 
 @Serializable
+data class AdminProfileUpdateRequest(
+    val name: String,
+    val email: String
+)
+
+@Serializable
+data class AdminPasswordUpdateRequest(
+    val currentPassword: String,
+    val newPassword: String
+)
+
+@Serializable
 data class ResetPasswordRequest(
     val phoneNumber: String,        // E.164 format: "+256XXXXXXXXX"
     val code: String,

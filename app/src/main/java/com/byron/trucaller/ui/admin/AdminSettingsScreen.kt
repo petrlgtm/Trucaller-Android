@@ -1,6 +1,10 @@
 package com.byron.trucaller.ui.admin
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -16,7 +20,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -54,6 +61,7 @@ import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AdminSettingsViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
+import com.byron.trucaller.viewmodel.SyncStatus
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -70,6 +78,7 @@ fun AdminSettingsScreen(
     val dailyDigestState by adminSettingsViewModel.dailyDigest.collectAsState(initial = false)
     val weeklyReportState by adminSettingsViewModel.weeklyReport.collectAsState(initial = true)
     val saveMessage by adminSettingsViewModel.saveMessage.collectAsState()
+    val syncStatus by adminSettingsViewModel.syncStatus.collectAsState()
 
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
@@ -87,6 +96,14 @@ fun AdminSettingsScreen(
         if (saveMessage != null) {
             kotlinx.coroutines.delay(3000)
             adminSettingsViewModel.clearSaveMessage()
+        }
+    }
+
+    // Auto-clear sync status after displaying
+    LaunchedEffect(syncStatus) {
+        if (syncStatus is SyncStatus.Success || syncStatus is SyncStatus.Error) {
+            kotlinx.coroutines.delay(4000)
+            adminSettingsViewModel.clearSyncStatus()
         }
     }
 
@@ -163,6 +180,9 @@ fun AdminSettingsScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
                 }
+
+                // Sync status indicator
+                SyncStatusIndicator(syncStatus)
 
                 Spacer(modifier = Modifier.height(Spacing.md))
 
@@ -267,6 +287,70 @@ fun AdminSettingsScreen(
                 }
             ) {
                 Text(msg)
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncStatusIndicator(syncStatus: SyncStatus) {
+    val colorScheme = MaterialTheme.colorScheme
+
+    AnimatedVisibility(
+        visible = syncStatus !is SyncStatus.Idle,
+        enter = fadeIn(),
+        exit = fadeOut()
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = Spacing.md, vertical = Spacing.sm),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.Center
+        ) {
+            when (syncStatus) {
+                is SyncStatus.Syncing -> {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(16.dp),
+                        strokeWidth = 2.dp,
+                        color = colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Syncing to server...",
+                        fontSize = 13.sp,
+                        color = colorScheme.onSurfaceVariant
+                    )
+                }
+                is SyncStatus.Success -> {
+                    Icon(
+                        Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFF4CAF50)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        syncStatus.message,
+                        fontSize = 13.sp,
+                        color = Color(0xFF4CAF50)
+                    )
+                }
+                is SyncStatus.Error -> {
+                    Icon(
+                        Icons.Default.Warning,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color(0xFFFF9800)
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        syncStatus.message,
+                        fontSize = 13.sp,
+                        color = Color(0xFFFF9800)
+                    )
+                }
+                else -> {}
             }
         }
     }

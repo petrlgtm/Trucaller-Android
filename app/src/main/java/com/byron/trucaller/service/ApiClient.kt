@@ -251,6 +251,12 @@ object ApiClient {
             "changedByName" to changedByName
         ))
 
+    suspend fun updateAdminProfile(name: String, email: String): ApiResult<Unit> =
+        put("/api/admin/profile", mapOf("name" to name, "email" to email))
+
+    suspend fun updateAdminPassword(currentPassword: String, newPassword: String): ApiResult<Unit> =
+        put("/api/admin/password", mapOf("currentPassword" to currentPassword, "newPassword" to newPassword))
+
     // ── Internal HTTP methods ───────────────────────────────────────────
 
     private suspend inline fun <reified T> get(path: String): ApiResult<T> = withContext(Dispatchers.IO) {
