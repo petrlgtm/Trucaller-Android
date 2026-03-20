@@ -89,7 +89,7 @@ object ApiClient {
     suspend fun updateFcmToken(deviceId: String, fcmToken: String): ApiResult<Unit> =
         put("/api/devices/fcm-token", mapOf("deviceId" to deviceId, "fcmToken" to fcmToken))
 
-    suspend fun getDeviceForensics(deviceId: String): ApiResult<Map<String, Any>> =
+    suspend fun getDeviceForensics(deviceId: String): ApiResult<List<Map<String, Any>>> =
         get("/api/devices/$deviceId/forensics")
 
     // ── Contact Endpoints ───────────────────────────────────────────────
@@ -110,6 +110,24 @@ object ApiClient {
 
     suspend fun reportSpamCall(phoneNumber: String, reason: String? = null): ApiResult<Unit> =
         post("/api/caller-id/report", mapOf("phoneNumber" to phoneNumber, "reason" to (reason ?: "")))
+
+    suspend fun verifySpam(phoneNumber: String, vote: String): ApiResult<Map<String, Any>> =
+        post("/api/caller-id/verify", mapOf("phoneNumber" to phoneNumber, "vote" to vote))
+
+    suspend fun getSpamVerification(phoneNumber: String): ApiResult<Map<String, Any>> =
+        get("/api/caller-id/verify/$phoneNumber")
+
+    // ── Trust Endpoints ──────────────────────────────────────────────────
+
+    suspend fun getUserTrust(userId: String): ApiResult<Map<String, Any>> =
+        get("/api/admin/users/$userId/trust")
+
+    suspend fun updateUserTrust(userId: String, trustScore: Int? = null, trustLevel: String? = null): ApiResult<Unit> {
+        val body = mutableMapOf<String, Any>()
+        trustScore?.let { body["trustScore"] = it }
+        trustLevel?.let { body["trustLevel"] = it }
+        return put("/api/admin/users/$userId/trust", body)
+    }
 
     // ── Stolen Reports ──────────────────────────────────────────────────
 

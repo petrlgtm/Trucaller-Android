@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
@@ -510,6 +511,17 @@ fun AdminDeviceDetailScreen(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // View Network Forensics button
+            TruCallerButton(
+                text = "View Network Forensics",
+                onClick = { navController.navigate("network_forensics/$deviceId") },
+                modifier = Modifier.fillMaxWidth(),
+                style = TruCallerButtonStyle.Primary,
+                leadingIcon = Icons.Default.Timeline
+            )
 
             Spacer(modifier = Modifier.height(20.dp))
 

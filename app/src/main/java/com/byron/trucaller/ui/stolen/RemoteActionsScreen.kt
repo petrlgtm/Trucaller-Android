@@ -950,6 +950,22 @@ fun RemoteActionsScreen(
 
                 Spacer(modifier = Modifier.height(Spacing.md))
 
+                // Network Forensics button
+                TruCallerButton(
+                    text = "Network Forensics",
+                    onClick = {
+                        val currentDevice = device ?: return@TruCallerButton
+                        navController.navigate("network_forensics/${currentDevice.id}")
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TruCallerButtonStyle.Primary,
+                    enabled = device != null,
+                    leadingIcon = Icons.Default.Timeline,
+                    iconSize = 22.dp
+                )
+
+                Spacer(modifier = Modifier.height(Spacing.md))
+
                 // Mark as Recovered button
                 TruCallerButton(
                     text = "Mark as Recovered",
