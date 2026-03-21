@@ -45,6 +45,13 @@ android {
                 storePassword = signingProp("RELEASE_STORE_PASSWORD").ifBlank { signingProp("storePassword") }
                 keyAlias = signingProp("RELEASE_KEY_ALIAS").ifBlank { signingProp("keyAlias") }
                 keyPassword = signingProp("RELEASE_KEY_PASSWORD").ifBlank { signingProp("keyPassword") }
+            } else {
+                // No release keystore configured — use the debug key so the APK can
+                // replace a debug-signed install without conflict.
+                storeFile = file(System.getProperty("user.home") + "/.android/debug.keystore")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
             }
         }
     }
