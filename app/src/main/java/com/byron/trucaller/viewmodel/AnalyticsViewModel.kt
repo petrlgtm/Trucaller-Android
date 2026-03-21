@@ -137,8 +137,10 @@ class AnalyticsViewModel(
         // Caller ID entries (spam numbers identified in the database)
         val callerIdCount = callerIdRepository.getEntryCount().firstOrNull() ?: 0
 
-        // SMS spam reports filed by the user
-        val smsSpamCount = smsRepository.getTotalSpamReportCount().firstOrNull() ?: 0
+        // SMS spam reports filed by this user
+        val smsSpamCount = if (userId != null) {
+            smsRepository.getSpamReportCount(userId).firstOrNull() ?: 0
+        } else 0
 
         // Contacts synced for this user
         val contactCount = if (userId != null) {
@@ -147,8 +149,10 @@ class AnalyticsViewModel(
             contactRepository.getTotalContactCount().firstOrNull() ?: 0
         }
 
-        // Stolen reports
-        val stolenCount = stolenReportRepository.getReportCount().firstOrNull() ?: 0
+        // Stolen reports filed by this user
+        val stolenCount = if (userId != null) {
+            stolenReportRepository.getReportCountByUser(userId).firstOrNull() ?: 0
+        } else 0
 
         // Alarm/remote action logs
         val alarmCount = alarmRepository.getLogCount().firstOrNull() ?: 0

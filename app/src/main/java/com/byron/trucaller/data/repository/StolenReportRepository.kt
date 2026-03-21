@@ -10,6 +10,7 @@ class StolenReportRepository(private val stolenReportDao: StolenReportDao) {
     fun getReportsByDevice(deviceId: String): Flow<List<StolenReport>> = stolenReportDao.getByDeviceId(deviceId)
     fun getReportsByUser(userId: String): Flow<List<StolenReport>> = stolenReportDao.getByUserId(userId)
     fun getReportCount(): Flow<Int> = stolenReportDao.countFlow()
+    fun getReportCountByUser(userId: String): Flow<Int> = stolenReportDao.countByUser(userId)
 
     suspend fun getReportById(id: String): StolenReport? = stolenReportDao.getById(id)
     suspend fun insertReport(report: StolenReport) = stolenReportDao.insert(report)

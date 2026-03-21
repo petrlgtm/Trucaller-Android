@@ -34,4 +34,7 @@ interface StolenReportDao {
 
     @Query("SELECT COUNT(*) FROM stolen_reports")
     fun countFlow(): Flow<Int>
+
+    @Query("SELECT COUNT(*) FROM stolen_reports WHERE reportedBy = :userId")
+    fun countByUser(userId: String): Flow<Int>
 }
