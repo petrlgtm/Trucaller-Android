@@ -10,12 +10,13 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.IpLog
+import com.byron.trucaller.data.model.NearbyDevice
 import com.byron.trucaller.data.repository.DeviceRepository
 import com.byron.trucaller.service.ApiClient
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 
 /**
@@ -84,8 +85,11 @@ class NetworkForensicsViewModel(
                 }
 
                 val ipLogs: List<IpLog> = if (apiResult?.success == true && apiResult.data != null) {
-                    // Parse API response into IpLog list
-                    apiResult.data.mapNotNull { map ->
+                    // Backend returns { deviceId, ipLogs: [...], uniqueIsps: [...] }
+                    @Suppress("UNCHECKED_CAST")
+                    val rawList = (apiResult.data["ipLogs"] as? List<*>) ?: emptyList<Any>()
+                    rawList.mapNotNull { item ->
+                        val map = item as? Map<*, *> ?: return@mapNotNull null
                         try {
                             IpLog(
                                 id = map["id"]?.toString() ?: return@mapNotNull null,
@@ -97,7 +101,18 @@ class NetworkForensicsViewModel(
                                 latitude = (map["latitude"] as? Number)?.toDouble() ?: 0.0,
                                 longitude = (map["longitude"] as? Number)?.toDouble() ?: 0.0,
                                 networkType = map["networkType"]?.toString() ?: "unknown",
-                                timestamp = map["timestamp"]?.toString() ?: ""
+                                timestamp = map["timestamp"]?.toString() ?: "",
+                                startTime = map["startTime"]?.toString() ?: map["timestamp"]?.toString() ?: "",
+                                lastSeen = map["lastSeen"]?.toString() ?: map["timestamp"]?.toString() ?: "",
+                                nearbyDevices = (map["nearbyDevices"] as? List<*>)?.mapNotNull { bItem ->
+                                    val bMap = bItem as? Map<*, *> ?: return@mapNotNull null
+                                    NearbyDevice(
+                                        name = bMap["name"]?.toString() ?: "Unknown",
+                                        macAddress = bMap["macAddress"]?.toString() ?: "??",
+                                        rssi = (bMap["rssi"] as? Number)?.toInt() ?: 0,
+                                        type = bMap["type"]?.toString() ?: "UNKNOWN"
+                                    )
+                                } ?: emptyList()
                             )
                         } catch (e: Exception) {
                             Log.w(TAG, "Failed to parse forensics entry", e)
@@ -106,7 +121,7 @@ class NetworkForensicsViewModel(
                     }
                 } else {
                     // Fallback to local Room data
-                    deviceRepository.getIpLogsByDevice(deviceId).first()
+                    deviceRepository.getIpLogsByDevice(deviceId).firstOrNull() ?: emptyList()
                 }
 
                 val sorted = ipLogs.sortedByDescending { it.timestamp }

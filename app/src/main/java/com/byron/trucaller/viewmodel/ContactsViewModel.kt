@@ -22,11 +22,13 @@ import android.net.Uri
 import com.byron.trucaller.util.copyImageToInternal
 import com.byron.trucaller.util.readPhoneContacts
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
@@ -49,6 +51,8 @@ class ContactsViewModel(
 
     private val _syncMessage = MutableStateFlow<String?>(null)
     val syncMessage: StateFlow<String?> = _syncMessage.asStateFlow()
+
+    private var syncJob: Job? = null
 
     fun getContactsByUser(userId: String): Flow<List<Contact>> = contactRepository.getContactsByUser(userId)
     fun getAllContacts(): Flow<List<Contact>> = contactRepository.getAllContacts()
@@ -146,14 +150,14 @@ class ContactsViewModel(
                 blockedAt = now
             )
             blockedNumberRepository.blockNumber(blocked)
-            _syncMessage.value = "${contact.name} has been blocked"
+            _syncMessage.value = "${contact.name} has been rejected"
         }
     }
 
     fun unblockContact(phoneNumber: String, userId: String, name: String) {
         viewModelScope.launch {
             blockedNumberRepository.unblockNumber(userId, phoneNumber)
-            _syncMessage.value = "$name has been unblocked"
+            _syncMessage.value = "$name has been unrejected"
         }
     }
 
@@ -162,7 +166,8 @@ class ContactsViewModel(
     }
 
     fun syncContacts(userId: String) {
-        viewModelScope.launch {
+        syncJob?.cancel()
+        syncJob = viewModelScope.launch {
             _isSyncing.value = true
             val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
 
@@ -220,7 +225,8 @@ class ContactsViewModel(
 
             // Step 3: Upload contacts to backend MongoDB
             // Re-fetch after updates to include newly imported contacts
-            val list = contactRepository.getContactsByUser(userId).first()
+            val list = contactRepository.getContactsByUser(userId).firstOrNull() ?: emptyList()
+            var uploadFailed = false
             try {
                 val contactMaps = list.map { c ->
                     mapOf(
@@ -232,7 +238,10 @@ class ContactsViewModel(
                 withContext(Dispatchers.IO) {
                     ApiClient.uploadContacts(contactMaps)
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("ContactSync", "Upload contacts failed", e)
+                uploadFailed = true
+            }
 
             // Step 3b: Upload caller IDs to backend MongoDB
             var callerIdCount = 0
@@ -255,7 +264,10 @@ class ContactsViewModel(
                         ApiClient.uploadCallerIds(callerIdMaps)
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("ContactSync", "Upload caller IDs failed", e)
+                uploadFailed = true
+            }
 
             // Step 3c: Download contacts from backend and merge (incremental via last sync timestamp)
             var downloadedContacts = 0
@@ -275,7 +287,6 @@ class ContactsViewModel(
                                 contactRepository.insertContact(remote)
                                 downloadedContacts++
                             } else if (existing.userId == userId) {
-                                // Update if server version has newer data
                                 val remoteTime = remote.syncedAt
                                 val localTime = existing.syncedAt
                                 if (remoteTime > localTime || existing.name != remote.name || existing.email != remote.email) {
@@ -292,16 +303,21 @@ class ContactsViewModel(
                             }
                         }
                     }
+                    // Only update timestamp on successful download
+                    preferences.setLastContactSyncTimestamp(System.currentTimeMillis())
                 }
-                // Store current timestamp for next incremental sync
-                preferences.setLastContactSyncTimestamp(System.currentTimeMillis())
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("ContactSync", "Download contacts failed", e)
+                // Don't update timestamp — retry will re-fetch on next sync
+            }
 
             // Step 3d: Bi-directional sync of blocked numbers with backend
             var downloadedBlocked = 0
             try {
                 downloadedBlocked = blockedNumberRepository.syncBlockedNumbers(userId)
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("ContactSync", "Blocked numbers sync failed", e)
+            }
 
             // Step 3e: Download spam/caller-ID data from backend and merge
             var downloadedSpam = 0
@@ -329,7 +345,9 @@ class ContactsViewModel(
                         }
                     }
                 }
-            } catch (_: Exception) { }
+            } catch (e: Exception) {
+                android.util.Log.w("ContactSync", "Spam numbers sync failed", e)
+            }
 
             val downloadSummary = listOfNotNull(
                 if (downloadedContacts > 0) "$downloadedContacts new contacts" else null,
@@ -340,15 +358,18 @@ class ContactsViewModel(
             val downloadPart = if (downloadSummary.isNotEmpty()) " Downloaded $downloadSummary." else ""
 
             // Step 4: Sync to Google Drive if signed in
+            val failNote = if (uploadFailed) " (some uploads failed — will retry)" else ""
             if (driveSyncService.isSignedIn()) {
-                val result = driveSyncService.fullSync()
-                _isSyncing.value = false
+                try { driveSyncService.fullSync() } catch (_: Exception) { }
+            }
+            _isSyncing.value = false
+
+            // Only show popup when there's something new to report
+            val hasNewContent = importedCount > 0 || downloadSummary.isNotEmpty() || uploadFailed
+            if (hasNewContent) {
+                val syncType = if (driveSyncService.isSignedIn()) "synced" else "backed up"
                 _syncMessage.value = "Imported $importedCount new contacts. " +
-                        "${list.size} contacts & $callerIdCount caller IDs synced to Cloud & Drive.$downloadPart"
-            } else {
-                _isSyncing.value = false
-                _syncMessage.value = "Imported $importedCount new contacts. " +
-                        "${list.size} contacts & $callerIdCount caller IDs backed up to cloud.$downloadPart"
+                        "${list.size} contacts & $callerIdCount caller IDs $syncType.$downloadPart$failNote"
             }
         }
     }

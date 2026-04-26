@@ -2,6 +2,9 @@ package com.byron.trucaller.viewmodel
 
 import android.app.Application
 import android.content.ContentResolver
+import android.database.ContentObserver
+import android.os.Handler
+import android.os.Looper
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -19,9 +22,18 @@ import com.byron.trucaller.data.model.SpamCategory
 import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.data.repository.SmsRepository
+import android.telephony.SmsManager
+import android.content.ContentValues
+import android.provider.Telephony
+import com.byron.trucaller.data.model.SmsType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -52,6 +64,48 @@ class SmsViewModel(
     private val _selectedFilter = MutableStateFlow(SmsFilter.ALL)
     val selectedFilter: StateFlow<SmsFilter> = _selectedFilter.asStateFlow()
 
+    val filteredConversations: StateFlow<List<SmsConversation>> = combine(
+        _conversations, _selectedFilter
+    ) { all, filter ->
+        when (filter) {
+            SmsFilter.ALL -> all.filter { it.category != SmsCategory.SPAM }
+            SmsFilter.PERSONAL -> all.filter { it.category == SmsCategory.PERSONAL }
+            SmsFilter.TRANSACTIONAL -> all.filter { it.category == SmsCategory.TRANSACTIONAL }
+            SmsFilter.PROMOTIONAL -> all.filter { it.category == SmsCategory.PROMOTIONAL }
+            SmsFilter.SPAM -> all.filter { it.category == SmsCategory.SPAM }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private var _lastActiveAddress: String? = null
+
+    private val smsObserver = object : ContentObserver(Handler(Looper.getMainLooper())) {
+        override fun onChange(selfChange: Boolean) {
+            super.onChange(selfChange)
+            val authApp = getApplication<TruCallerApplication>()
+            viewModelScope.launch {
+                val userId = authApp.container.userPreferences.loggedInUserId.firstOrNull() ?: "unknown"
+                loadConversations(authApp.contentResolver, userId)
+                
+                _lastActiveAddress?.let { address ->
+                    loadConversation(authApp.contentResolver, address, userId)
+                }
+            }
+        }
+    }
+
+    init {
+        application.contentResolver.registerContentObserver(
+            Telephony.Sms.CONTENT_URI,
+            true,
+            smsObserver
+        )
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        getApplication<Application>().contentResolver.unregisterContentObserver(smsObserver)
+    }
+
     fun loadConversations(contentResolver: ContentResolver, userId: String) {
         viewModelScope.launch {
             _isLoading.value = true
@@ -80,6 +134,7 @@ class SmsViewModel(
     }
 
     fun loadConversation(contentResolver: ContentResolver, address: String, userId: String) {
+        _lastActiveAddress = address
         viewModelScope.launch {
             _isLoading.value = true
             try {
@@ -96,16 +151,7 @@ class SmsViewModel(
         _selectedFilter.value = filter
     }
 
-    fun getFilteredConversations(): List<SmsConversation> {
-        val all = _conversations.value
-        return when (_selectedFilter.value) {
-            SmsFilter.ALL -> all.filter { it.category != SmsCategory.SPAM }
-            SmsFilter.PERSONAL -> all.filter { it.category == SmsCategory.PERSONAL }
-            SmsFilter.TRANSACTIONAL -> all.filter { it.category == SmsCategory.TRANSACTIONAL }
-            SmsFilter.PROMOTIONAL -> all.filter { it.category == SmsCategory.PROMOTIONAL }
-            SmsFilter.SPAM -> all.filter { it.category == SmsCategory.SPAM }
-        }
-    }
+    fun getFilteredConversations(): List<SmsConversation> = filteredConversations.value
 
     fun reportAsSpam(
         address: String,
@@ -184,7 +230,7 @@ class SmsViewModel(
                     blockedAt = now
                 )
             )
-            _actionMessage.value = "Number blocked"
+            _actionMessage.value = "Number rejected"
             loadConversations(contentResolver, userId)
         }
     }
@@ -192,7 +238,7 @@ class SmsViewModel(
     fun unblockSmsNumber(address: String, userId: String, contentResolver: ContentResolver) {
         viewModelScope.launch {
             blockedNumberRepository.unblockNumber(userId, address)
-            _actionMessage.value = "Number unblocked"
+            _actionMessage.value = "Number unrejected"
             loadConversations(contentResolver, userId)
         }
     }
@@ -216,6 +262,71 @@ class SmsViewModel(
 
     fun clearActionMessage() {
         _actionMessage.value = null
+    }
+
+    fun sendSms(address: String, body: String, contentResolver: ContentResolver) {
+        if (body.isBlank()) return
+        
+        viewModelScope.launch {
+            try {
+                val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
+                    getApplication<Application>().getSystemService(SmsManager::class.java)
+                } else {
+                    @Suppress("DEPRECATION")
+                    SmsManager.getDefault()
+                }
+                
+                if (smsManager == null) {
+                    _actionMessage.value = "SMS service unavailable"
+                    return@launch
+                }
+
+                // Optimistic UI update: add a local version of the message immediately
+                val optimisticMsg = SmsMessage(
+                    id = -System.currentTimeMillis(), // Negative ID to distinguish from system messages
+                    address = address,
+                    body = body,
+                    date = System.currentTimeMillis(),
+                    type = SmsType.SENT,
+                    read = true,
+                    category = SmsCategory.PERSONAL
+                )
+                _currentMessages.value = _currentMessages.value + optimisticMsg
+
+                val parts = smsManager.divideMessage(body)
+                smsManager.sendMultipartTextMessage(address, null, parts, null, null)
+                
+                // Try to save to sent folder (requires default app status on Android 10+)
+                try {
+                    val values = ContentValues().apply {
+                        put(Telephony.Sms.ADDRESS, address)
+                        put(Telephony.Sms.BODY, body)
+                        put(Telephony.Sms.DATE, System.currentTimeMillis())
+                        put(Telephony.Sms.READ, 1)
+                        put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
+                    }
+                    contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to save message to system provider (not default app?)", e)
+                }
+                
+                _actionMessage.value = "Message sent"
+                
+                // Small delay to allow system provider to index the new message
+                delay(400)
+
+                // Reload conversation from system provider to get the real ID and final state
+                val authApp = getApplication<TruCallerApplication>()
+                val userId = authApp.container.userPreferences.loggedInUserId.firstOrNull() ?: "unknown"
+                loadConversation(contentResolver, address, userId)
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to send SMS", e)
+                _actionMessage.value = "Failed to send: ${e.message}"
+                // Remove the optimistic message on failure
+                _currentMessages.value = _currentMessages.value.filter { it.body != body || it.id > 0 }
+            }
+        }
     }
 
     /**

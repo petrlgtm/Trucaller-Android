@@ -39,6 +39,9 @@ class CallerIdViewModel(
     private val _lookupResult = MutableStateFlow<LookupResult?>(null)
     val lookupResult: StateFlow<LookupResult?> = _lookupResult.asStateFlow()
 
+    private val _isLookingUp = MutableStateFlow(false)
+    val isLookingUp: StateFlow<Boolean> = _isLookingUp.asStateFlow()
+
     private val _recentLookups = MutableStateFlow<List<CallerIdEntry>>(emptyList())
     val recentLookups: StateFlow<List<CallerIdEntry>> = _recentLookups.asStateFlow()
 
@@ -71,17 +74,27 @@ class CallerIdViewModel(
     fun lookup(query: String) {
         if (query.isBlank()) return
         viewModelScope.launch {
-            val result = callerIdRepository.lookupNumber(query)
-            if (result.callerIdEntry != null) {
-                _lookupResult.value = result
-                _notFound.value = false
-                preferences.addRecentLookup(result.callerIdEntry.id)
-                // Reload recent lookups
-                val ids = preferences.recentLookups.first()
-                _recentLookups.value = ids.mapNotNull { id -> callerIdRepository.getById(id) }
-            } else {
+            _isLookingUp.value = true
+            _notFound.value = false
+            _lookupResult.value = null
+            try {
+                val result = callerIdRepository.lookupNumber(query)
+                if (result.callerIdEntry != null) {
+                    _lookupResult.value = result
+                    _notFound.value = false
+                    preferences.addRecentLookup(result.callerIdEntry.id)
+                    val ids = preferences.recentLookups.first()
+                    _recentLookups.value = ids.mapNotNull { id -> callerIdRepository.getById(id) }
+                } else {
+                    _lookupResult.value = null
+                    _notFound.value = true
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Lookup failed for $query", e)
                 _lookupResult.value = null
                 _notFound.value = true
+            } finally {
+                _isLookingUp.value = false
             }
         }
     }
@@ -116,7 +129,7 @@ class CallerIdViewModel(
             callerIdRepository.updateEntry(updated)
             _lookupResult.value = _lookupResult.value?.copy(callerIdEntry = updated)
             _isNumberBlocked.value = true
-            _actionMessage.value = "${entry.name} has been blocked"
+            _actionMessage.value = "${entry.name} has been rejected"
         }
     }
 
@@ -124,7 +137,7 @@ class CallerIdViewModel(
         viewModelScope.launch {
             blockedNumberRepository.unblockNumber(userId, phoneNumber)
             _isNumberBlocked.value = false
-            _actionMessage.value = "$name has been unblocked"
+            _actionMessage.value = "$name has been unrejected"
         }
     }
 

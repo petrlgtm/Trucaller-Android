@@ -12,8 +12,23 @@ import com.byron.trucaller.data.model.SpamCategory
 import com.byron.trucaller.data.model.SmsCategory
 import com.byron.trucaller.data.model.SmsRuleType
 import com.byron.trucaller.data.model.TrustLevel
+import com.byron.trucaller.data.model.NearbyDevice
+import com.google.gson.Gson
+import com.google.gson.reflect.TypeToken
 
 class Converters {
+    private val gson = Gson()
+
+    @TypeConverter
+    fun fromNearbyDeviceList(list: List<NearbyDevice>): String {
+        return gson.toJson(list)
+    }
+
+    @TypeConverter
+    fun toNearbyDeviceList(value: String): List<NearbyDevice> {
+        val type = object : TypeToken<List<NearbyDevice>>() {}.type
+        return gson.fromJson(value, type) ?: emptyList()
+    }
     @TypeConverter
     fun fromDeviceStatus(status: DeviceStatus): String = status.name
     @TypeConverter
@@ -26,7 +41,9 @@ class Converters {
     @TypeConverter
     fun toSpamCategory(value: String): SpamCategory = try {
         SpamCategory.valueOf(value)
-    } catch (_: IllegalArgumentException) { SpamCategory.SAFE }
+    } catch (_: IllegalArgumentException) {
+        SpamCategory.SAFE
+    }
 
     @TypeConverter
     fun fromReportStatus(status: ReportStatus): String = status.name
@@ -47,7 +64,9 @@ class Converters {
     @TypeConverter
     fun toAlarmResult(value: String): AlarmResult = try {
         AlarmResult.valueOf(value)
-    } catch (_: IllegalArgumentException) { AlarmResult.PENDING }
+    } catch (_: IllegalArgumentException) {
+        AlarmResult.PENDING
+    }
 
     @TypeConverter
     fun fromGeofenceTransitionType(type: GeofenceTransitionType): String = type.name
@@ -91,5 +110,7 @@ class Converters {
     @TypeConverter
     fun toScheduleBlockType(value: String): ScheduleBlockType = try {
         ScheduleBlockType.valueOf(value)
-    } catch (_: IllegalArgumentException) { ScheduleBlockType.ALL_UNKNOWN }
+    } catch (_: IllegalArgumentException) {
+        ScheduleBlockType.ALL_SPAM
+    }
 }

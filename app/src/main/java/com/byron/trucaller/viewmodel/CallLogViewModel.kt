@@ -21,9 +21,12 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class CallLogViewModel(
@@ -47,6 +50,25 @@ class CallLogViewModel(
 
     private val _actionMessage = MutableStateFlow<String?>(null)
     val actionMessage: StateFlow<String?> = _actionMessage.asStateFlow()
+
+    val filteredEntries: StateFlow<List<CallLogEntry>> = combine(
+        _callLogEntries, _selectedFilter, _searchQuery
+    ) { all, filter, query ->
+        val filtered = when (filter) {
+            CallLogFilter.ALL -> all
+            CallLogFilter.INCOMING -> all.filter { it.callType == CallType.INCOMING }
+            CallLogFilter.OUTGOING -> all.filter { it.callType == CallType.OUTGOING }
+            CallLogFilter.MISSED -> all.filter { it.callType == CallType.MISSED }
+            CallLogFilter.REJECTED -> all.filter {
+                it.callType == CallType.BLOCKED || it.callType == CallType.REJECTED || it.isBlocked
+            }
+        }
+        if (query.isBlank()) filtered
+        else filtered.filter { entry ->
+            (entry.name?.lowercase()?.contains(query.lowercase()) == true) ||
+                entry.phoneNumber.contains(query)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     fun loadCallLog(context: Context) {
         viewModelScope.launch {
@@ -116,29 +138,7 @@ class CallLogViewModel(
         _searchQuery.value = query
     }
 
-    fun getFilteredEntries(): List<CallLogEntry> {
-        val all = _callLogEntries.value
-        val query = _searchQuery.value.lowercase()
-
-        val filtered = when (_selectedFilter.value) {
-            CallLogFilter.ALL -> all
-            CallLogFilter.INCOMING -> all.filter { it.callType == CallType.INCOMING }
-            CallLogFilter.OUTGOING -> all.filter { it.callType == CallType.OUTGOING }
-            CallLogFilter.MISSED -> all.filter { it.callType == CallType.MISSED }
-            CallLogFilter.BLOCKED -> all.filter {
-                it.callType == CallType.BLOCKED || it.callType == CallType.REJECTED || it.isBlocked
-            }
-        }
-
-        return if (query.isBlank()) {
-            filtered
-        } else {
-            filtered.filter { entry ->
-                (entry.name?.lowercase()?.contains(query) == true) ||
-                    entry.phoneNumber.contains(query)
-            }
-        }
-    }
+    fun getFilteredEntries(): List<CallLogEntry> = filteredEntries.value
 
     fun blockNumber(phoneNumber: String, name: String?, context: Context) {
         viewModelScope.launch {
@@ -154,7 +154,7 @@ class CallLogViewModel(
                     blockedAt = now
                 )
             )
-            _actionMessage.value = "${name ?: phoneNumber} blocked"
+            _actionMessage.value = "${name ?: phoneNumber} rejected"
             loadCallLog(context)
         }
     }
@@ -163,7 +163,7 @@ class CallLogViewModel(
         viewModelScope.launch {
             val userId = userPreferences.loggedInUserId.first() ?: return@launch
             blockedNumberRepository.unblockNumber(userId, phoneNumber)
-            _actionMessage.value = "${name ?: phoneNumber} unblocked"
+            _actionMessage.value = "${name ?: phoneNumber} unrejected"
             loadCallLog(context)
         }
     }
@@ -247,5 +247,5 @@ class CallLogViewModel(
 }
 
 enum class CallLogFilter {
-    ALL, INCOMING, OUTGOING, MISSED, BLOCKED
+    ALL, INCOMING, OUTGOING, MISSED, REJECTED
 }

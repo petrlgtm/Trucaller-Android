@@ -21,6 +21,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import android.util.Log
 import com.byron.trucaller.service.ApiClient
@@ -75,11 +76,15 @@ class StolenReportViewModel(
                 return@launch
             }
 
-            val device = deviceRepository.getDeviceById(deviceId) ?: return@launch
+            val device = deviceRepository.getDeviceById(deviceId)
+            if (device == null) {
+                _reportError.value = "Device not found. Please re-register your device."
+                return@launch
+            }
             val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
 
             // Get real location from latest IP log
-            val ipLogs = deviceRepository.getIpLogsByDevice(deviceId).first()
+            val ipLogs = deviceRepository.getIpLogsByDevice(deviceId).firstOrNull() ?: emptyList()
             val latestIp = ipLogs.maxByOrNull { it.timestamp }
             val location = if (latestIp != null) {
                 LastKnownLocation(latestIp.latitude, latestIp.longitude, latestIp.city)
@@ -238,7 +243,7 @@ class StolenReportViewModel(
         viewModelScope.launch {
             deviceRepository.updateDeviceStatus(deviceId, DeviceStatus.ACTIVE)
             // Resolve all reports for this device
-            val reports = stolenReportRepository.getReportsByDevice(deviceId).first()
+            val reports = stolenReportRepository.getReportsByDevice(deviceId).firstOrNull() ?: emptyList()
             reports.filter { it.status != ReportStatus.RESOLVED }.forEach { report ->
                 stolenReportRepository.updateReportStatus(report.id, ReportStatus.RESOLVED)
             }

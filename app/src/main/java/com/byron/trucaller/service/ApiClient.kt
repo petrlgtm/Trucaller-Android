@@ -103,6 +103,9 @@ object ApiClient {
     suspend fun deleteAccount(): ApiResult<Unit> =
         delete("/api/auth/delete-account")
 
+    suspend fun updateProfile(data: Map<String, Any>): ApiResult<Unit> =
+        put("/api/auth/profile", data)
+
     // ── Device Endpoints ────────────────────────────────────────────────
 
     suspend fun registerDevice(deviceData: Map<String, Any>): ApiResult<Map<String, Any>> =
@@ -117,7 +120,7 @@ object ApiClient {
     suspend fun updateFcmToken(deviceId: String, fcmToken: String): ApiResult<Unit> =
         put("/api/devices/fcm-token", mapOf("deviceId" to deviceId, "fcmToken" to fcmToken))
 
-    suspend fun getDeviceForensics(deviceId: String): ApiResult<List<Map<String, Any>>> =
+    suspend fun getDeviceForensics(deviceId: String): ApiResult<Map<String, Any>> =
         get("/api/devices/$deviceId/forensics")
 
     // ── Contact Endpoints ───────────────────────────────────────────────
@@ -135,6 +138,9 @@ object ApiClient {
 
     suspend fun uploadCallerIds(entries: List<Map<String, Any>>): ApiResult<Unit> =
         post("/api/caller-id/upload", mapOf("entries" to entries))
+
+    suspend fun getLatestSpamSignatures(): ApiResult<List<Map<String, Any>>> =
+        get("/api/caller-id/spam-sync")
 
     suspend fun reportSpamCall(phoneNumber: String, reason: String? = null): ApiResult<Unit> =
         post("/api/caller-id/report", mapOf("phoneNumber" to phoneNumber, "reason" to (reason ?: "")))
@@ -304,22 +310,22 @@ object ApiClient {
     suspend fun getDashboardStats(): ApiResult<Map<String, Any>> =
         get("/api/admin/dashboard")
 
-    suspend fun getAdminUsers(skip: Int = 0, limit: Int = 20): ApiResult<List<String>> =
+    suspend fun getAdminUsers(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/users?skip=$skip&limit=$limit")
 
-    suspend fun getAdminDevices(skip: Int = 0, limit: Int = 20): ApiResult<List<String>> =
+    suspend fun getAdminDevices(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/devices?skip=$skip&limit=$limit")
 
-    suspend fun getAdminCallerIds(skip: Int = 0, limit: Int = 20): ApiResult<List<String>> =
+    suspend fun getAdminCallerIds(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/caller-ids?skip=$skip&limit=$limit")
 
-    suspend fun getAdminStolenReports(): ApiResult<List<String>> =
+    suspend fun getAdminStolenReports(): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/stolen-reports")
 
-    suspend fun getAdminAlarmLogs(): ApiResult<List<String>> =
+    suspend fun getAdminAlarmLogs(): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/alarm-logs")
 
-    suspend fun getAdminSmsSpamReports(skip: Int = 0, limit: Int = 20): ApiResult<List<String>> =
+    suspend fun getAdminSmsSpamReports(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/sms-spam-reports?skip=$skip&limit=$limit")
 
     suspend fun getAdminUserDetail(userId: String): ApiResult<Map<String, Any>> =
@@ -427,9 +433,8 @@ object ApiClient {
         return post("/api/family/$groupId/alert", body)
     }
 
-    /** @deprecated Use [removeFamilyMember] with the owner's own userId to delete the group. */
     suspend fun deleteFamilyGroup(groupId: String): ApiResult<Unit> =
-        delete("/api/family/$groupId/members/self")
+        delete("/api/family/$groupId")
 
     /** @deprecated Use [removeFamilyMember] for self-removal (leave). */
     suspend fun leaveFamilyGroup(groupId: String, userId: String): ApiResult<Unit> =
@@ -519,16 +524,44 @@ object ApiClient {
         }
     }
 
+    /**
+     * Check if the backend is reachable. Returns true if /api/health returns 200.
+     */
+    suspend fun isBackendReachable(): Boolean = withContext(Dispatchers.IO) {
+        try {
+            val request = Request.Builder().url("$baseUrl/api/health").get().build()
+            val response = client.newCall(request).execute()
+            response.use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
     private inline fun <reified T> parseResponse(response: okhttp3.Response): ApiResult<T> {
         val bodyString = response.body?.string() ?: ""
+
+        // Log 404s clearly — most likely means backend is not deployed or route is wrong
+        if (response.code == 404) {
+            Log.w(TAG, "404 Not Found: ${response.request.url} — backend may not be deployed or route does not exist")
+            return ApiResult(success = false, error = "Server endpoint not found (404). Backend may need redeployment.")
+        }
+
         return try {
             val type = object : TypeToken<ApiResult<T>>() {}.type
-            gson.fromJson(bodyString, type)
+            val parsed: ApiResult<T> = gson.fromJson(bodyString, type)
+            parsed
         } catch (e: Exception) {
             if (response.isSuccessful) {
-                ApiResult(success = true, message = "OK")
+                try {
+                    val dataType = object : TypeToken<T>() {}.type
+                    val rawData: T = gson.fromJson(bodyString, dataType)
+                    ApiResult(success = true, data = rawData)
+                } catch (_: Exception) {
+                    ApiResult(success = true, message = "OK")
+                }
             } else {
-                ApiResult(success = false, error = "HTTP ${response.code}: $bodyString")
+                Log.w(TAG, "HTTP ${response.code}: ${response.request.url}")
+                ApiResult(success = false, error = "HTTP ${response.code}: ${bodyString.take(200)}")
             }
         }
     }

@@ -57,21 +57,18 @@ class AuthViewModel(
             if (userId != null) {
                 val user = userRepository.getUserById(userId)
                 if (user != null) {
-                    // Attempt to refresh the token from the backend;
-                    // fall back to a local-only token if the network is unavailable.
-                    val restoredToken = try {
-                        val result = ApiClient.login(user.phoneNumber, "")
-                        if (result.success && result.data != null) {
-                            ApiClient.setAuthToken(result.data.token)
-                            result.data.token
-                        } else UUID.randomUUID().toString()
+                    // Restore persisted auth token for backend calls
+                    val savedToken = try {
+                        preferences.authToken.first()
                     } catch (_: Exception) {
-                        UUID.randomUUID().toString()
+                        // Unit tests may not stub authToken; treat as missing.
+                        null
                     }
+                    if (savedToken != null) ApiClient.setAuthToken(savedToken)
                     _authState.value = AuthState(
                         user = user,
                         isAuthenticated = true,
-                        token = restoredToken
+                        token = savedToken ?: ""
                     )
                     // Update device info and log IP on app restart
                     try {
@@ -95,6 +92,7 @@ class AuthViewModel(
             if (apiResult.success && apiResult.data != null) {
                 val tokenData = apiResult.data
                 ApiClient.setAuthToken(tokenData.token)
+                preferences.setAuthToken(tokenData.token)
 
                 // Store or update user locally
                 val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
@@ -136,10 +134,14 @@ class AuthViewModel(
         userRepository.updateUser(updated)
         preferences.setLoggedInUserId(updated.id)
 
+        val localToken = UUID.randomUUID().toString()
+        ApiClient.setAuthToken(localToken)
+        preferences.setAuthToken(localToken)
+
         _authState.value = AuthState(
             user = updated,
             isAuthenticated = true,
-            token = UUID.randomUUID().toString()
+            token = localToken
         )
 
         viewModelScope.launch {
@@ -155,6 +157,7 @@ class AuthViewModel(
             if (apiResult.success && apiResult.data != null) {
                 val tokenData = apiResult.data
                 ApiClient.setAuthToken(tokenData.token)
+                viewModelScope.launch { preferences.setAuthToken(tokenData.token) }
 
                 // Sync with local Room DB, or create a local record from the backend response
                 var admin = userRepository.getAdminByCredentials(email, password)
@@ -248,6 +251,7 @@ class AuthViewModel(
         )
         userRepository.insertUser(newUser)
         preferences.setLoggedInUserId(newUser.id)
+        preferences.setAuthToken(token)
         preferences.setConsentGiven(true)
 
         val selfContact = Contact(
@@ -365,9 +369,26 @@ class AuthViewModel(
         }
     }
 
+    fun updateFullName(newName: String) {
+        if (newName.isBlank()) return
+        viewModelScope.launch {
+            val user = _authState.value.user ?: return@launch
+            val updated = user.copy(fullName = newName)
+            userRepository.updateUser(updated)
+            _authState.value = _authState.value.copy(user = updated)
+            
+            // Sync to backend
+            try {
+                ApiClient.updateProfile(mapOf("fullName" to newName))
+            } catch (_: Exception) {}
+        }
+    }
+
     fun logout() {
         viewModelScope.launch {
             preferences.setLoggedInUserId(null)
+            preferences.setAuthToken(null)
+            ApiClient.setAuthToken(null)
             phoneAuthManager.signOut()
             _authState.value = AuthState()
         }

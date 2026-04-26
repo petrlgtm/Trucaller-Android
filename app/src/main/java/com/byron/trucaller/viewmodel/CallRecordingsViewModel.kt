@@ -1,6 +1,7 @@
 package com.byron.trucaller.viewmodel
 
 import android.app.Application
+import android.media.MediaMetadataRetriever
 import android.media.MediaPlayer
 import android.os.Environment
 import android.os.StatFs
@@ -101,20 +102,38 @@ class CallRecordingsViewModel(
         loadRecordings()
     }
 
+    private val starIndexFile: File
+        get() = File(recordingsDir, ".starred")
+
+    private fun loadStarredSet(): Set<String> {
+        return try {
+            if (starIndexFile.exists()) starIndexFile.readLines().toHashSet() else emptySet()
+        } catch (_: Exception) {
+            emptySet()
+        }
+    }
+
+    private fun saveStarredSet(starred: Set<String>) {
+        try {
+            starIndexFile.writeText(starred.joinToString("\n"))
+        } catch (_: Exception) { }
+    }
+
     fun loadRecordings() {
         viewModelScope.launch {
             _isLoading.value = true
             try {
-                val files = withContext(Dispatchers.IO) {
+                val (files, starred) = withContext(Dispatchers.IO) {
                     val dir = recordingsDir
-                    dir.listFiles()?.filter {
+                    val f = dir.listFiles()?.filter {
                         it.isFile && (it.extension in listOf("mp3", "m4a", "aac", "wav", "ogg", "3gp", "amr"))
                     }?.sortedByDescending { it.lastModified() } ?: emptyList()
+                    Pair(f, loadStarredSet())
                 }
 
                 val recordings = withContext(Dispatchers.IO) {
                     files.mapIndexed { index, file ->
-                        parseRecordingFile(file, index)
+                        parseRecordingFile(file, index, starred)
                     }
                 }
 
@@ -128,7 +147,7 @@ class CallRecordingsViewModel(
         }
     }
 
-    private fun parseRecordingFile(file: File, index: Int): CallRecording {
+    private fun parseRecordingFile(file: File, index: Int, starred: Set<String>): CallRecording {
         // Parse file name pattern: direction_number_timestamp.ext
         // e.g. "incoming_+254712345678_1711234567890.m4a"
         val nameParts = file.nameWithoutExtension.split("_", limit = 3)
@@ -140,13 +159,12 @@ class CallRecordingsViewModel(
         val phoneNumber = nameParts.getOrNull(1) ?: "Unknown"
         val timestamp = nameParts.getOrNull(2)?.toLongOrNull() ?: file.lastModified()
 
-        // Get duration from MediaPlayer metadata
+        // Use MediaMetadataRetriever — lightweight, no full prepare/decode needed
         val durationMs = try {
-            val mp = MediaPlayer()
-            mp.setDataSource(file.absolutePath)
-            mp.prepare()
-            val dur = mp.duration.toLong()
-            mp.release()
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(file.absolutePath)
+            val dur = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            retriever.release()
             dur
         } catch (_: Exception) {
             0L
@@ -162,14 +180,16 @@ class CallRecordingsViewModel(
             durationMs = durationMs,
             fileSize = file.length(),
             timestamp = timestamp,
-            isStarred = false
+            isStarred = file.name in starred
         )
     }
 
     private fun updateStorageInfo() {
         val recs = _recordings.value
         val totalSize = recs.sumOf { it.fileSize }
-        val stat = StatFs(Environment.getExternalStorageDirectory().path)
+        val statPath = recordingsDir.takeIf { it.exists() }?.absolutePath
+            ?: getApplication<Application>().filesDir.absolutePath
+        val stat = StatFs(statPath)
         _storageInfo.value = StorageInfo(
             totalRecordingsSize = totalSize,
             recordingCount = recs.size,
@@ -223,20 +243,20 @@ class CallRecordingsViewModel(
 
     private fun startPlayback(recording: CallRecording) {
         stopPlayback()
+        val player = MediaPlayer()
         try {
-            mediaPlayer = MediaPlayer().apply {
-                setDataSource(recording.filePath)
-                prepare()
-                start()
-                setOnCompletionListener {
-                    _playbackState.value = _playbackState.value.copy(
-                        isPlaying = false,
-                        currentPositionMs = duration.toLong()
-                    )
-                    progressJob?.cancel()
-                }
+            player.setDataSource(recording.filePath)
+            player.prepare()
+            player.setOnCompletionListener {
+                _playbackState.value = _playbackState.value.copy(
+                    isPlaying = false,
+                    currentPositionMs = it.duration.toLong()
+                )
+                progressJob?.cancel()
             }
-            val duration = mediaPlayer?.duration?.toLong() ?: recording.durationMs
+            player.start()
+            mediaPlayer = player
+            val duration = player.duration.toLong()
             _playbackState.value = PlaybackState(
                 recordingId = recording.id,
                 isPlaying = true,
@@ -247,6 +267,7 @@ class CallRecordingsViewModel(
             applyPlaybackSpeed()
             startProgressTracking()
         } catch (e: Exception) {
+            player.release()
             _actionMessage.value = "Playback error: ${e.message}"
         }
     }
@@ -306,10 +327,15 @@ class CallRecordingsViewModel(
     // -- Star/Delete --
 
     fun toggleStar(recording: CallRecording) {
-        _recordings.value = _recordings.value.map {
-            if (it.id == recording.id) it.copy(isStarred = !it.isStarred) else it
-        }
         val newStarred = !recording.isStarred
+        _recordings.value = _recordings.value.map {
+            if (it.id == recording.id) it.copy(isStarred = newStarred) else it
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            val current = loadStarredSet().toMutableSet()
+            if (newStarred) current.add(recording.fileName) else current.remove(recording.fileName)
+            saveStarredSet(current)
+        }
         _actionMessage.value = if (newStarred) "Recording starred" else "Star removed"
     }
 
