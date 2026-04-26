@@ -66,6 +66,9 @@ import com.byron.trucaller.ui.components.TruCallerButtonStyle
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.BorderRadius
 import com.byron.trucaller.ui.theme.Spacing
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.StolenReportViewModel
@@ -170,6 +173,49 @@ fun ReportStolenScreen(
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.error)
         )
+
+        // Stolen device alert hero image
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+        ) {
+            AsyncImage(
+                model = "https://images.unsplash.com/photo-1614064641938-3bbee52942c7?auto=format&fit=crop&w=800&h=320&q=80",
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(
+                                colorScheme.error.copy(alpha = 0.4f),
+                                colorScheme.error.copy(alpha = 0.75f)
+                            )
+                        )
+                    )
+            )
+            androidx.compose.foundation.layout.Column(
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+            ) {
+                Text(
+                    "Device Lost or Stolen?",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color.White
+                )
+                Text(
+                    "Report it now to enable remote protection",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.85f)
+                )
+            }
+        }
 
         Column(
             modifier = Modifier

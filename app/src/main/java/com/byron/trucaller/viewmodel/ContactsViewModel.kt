@@ -150,14 +150,14 @@ class ContactsViewModel(
                 blockedAt = now
             )
             blockedNumberRepository.blockNumber(blocked)
-            _syncMessage.value = "${contact.name} has been rejected"
+            _syncMessage.value = "${contact.name} has been blocked"
         }
     }
 
     fun unblockContact(phoneNumber: String, userId: String, name: String) {
         viewModelScope.launch {
             blockedNumberRepository.unblockNumber(userId, phoneNumber)
-            _syncMessage.value = "$name has been unrejected"
+            _syncMessage.value = "$name has been unblocked"
         }
     }
 

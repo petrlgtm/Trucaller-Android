@@ -30,6 +30,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -56,21 +57,18 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.ui.theme.Background
 import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
-import com.byron.trucaller.ui.theme.SurfaceCard
 import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Divider
+import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
 import com.byron.trucaller.viewmodel.AuthViewModel
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
+    val colorScheme = MaterialTheme.colorScheme
     var currentPassword by remember { mutableStateOf("") }
     var newPassword by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
@@ -105,17 +103,52 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(colorScheme.background)
     ) {
         TopAppBar(
-            title = { Text("Security", fontWeight = FontWeight.Bold, color = Color.White) },
+            title = { Text("Security", fontWeight = FontWeight.Bold, color = colorScheme.onBackground) },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = BrandDark)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
         )
+
+        // Security hero image
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(160.dp)
+        ) {
+            AsyncImage(
+                model = "https://images.unsplash.com/photo-1563986768494-4dee2763ff3f?auto=format&fit=crop&w=800&h=320&q=80",
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        androidx.compose.ui.graphics.Brush.verticalGradient(
+                            colors = listOf(
+                                colorScheme.background.copy(alpha = 0.2f),
+                                colorScheme.background.copy(alpha = 0.7f)
+                            )
+                        )
+                    )
+            )
+            androidx.compose.material3.Text(
+                "Security Center",
+                fontSize = 22.sp,
+                fontWeight = FontWeight.ExtraBold,
+                color = androidx.compose.ui.graphics.Color.White,
+                modifier = androidx.compose.ui.Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(16.dp)
+            )
+        }
 
         Column(
             modifier = Modifier
@@ -127,8 +160,8 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
@@ -138,12 +171,12 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
                         if (hasPin) "Change Security PIN" else "Set Security PIN",
                         fontSize = 20.sp,
                         fontWeight = FontWeight.Bold,
-                        color = TextPrimary
+                        color = colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
                         "Your 4-digit PIN is required to report a stolen device",
-                        color = TextSecondary,
+                        color = colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center
                     )
@@ -156,19 +189,19 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
 
                     // Current PIN field (only when changing existing PIN)
                     if (hasPin) {
-                        Text("Current PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+                        Text("Current PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(8.dp))
                         PinInput(value = currentPin, onValueChange = { currentPin = it; pinError = null; pinSuccess = null })
                         Spacer(modifier = Modifier.height(16.dp))
                     }
 
-                    Text(if (hasPin) "New PIN" else "Enter PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+                    Text(if (hasPin) "New PIN" else "Enter PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     PinInput(value = pin, onValueChange = { pin = it; pinError = null; pinSuccess = null })
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    Text("Confirm PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = TextSecondary)
+                    Text("Confirm PIN", fontSize = 13.sp, fontWeight = FontWeight.Medium, color = colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(8.dp))
                     PinInput(value = confirmPin, onValueChange = { confirmPin = it; pinError = null; pinSuccess = null })
 
@@ -262,16 +295,16 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+                elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
             ) {
                 Column(
                     modifier = Modifier.padding(20.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text("Change Password", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+                    Text("Change Password", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = colorScheme.onSurface)
                     Spacer(modifier = Modifier.height(6.dp))
-                    Text("Update your account password", color = TextSecondary, fontSize = 13.sp)
+                    Text("Update your account password", color = colorScheme.onSurfaceVariant, fontSize = 13.sp)
                     Spacer(modifier = Modifier.height(24.dp))
 
                     OutlinedTextField(
@@ -283,7 +316,7 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = GlassBorder, focusedContainerColor = colorScheme.surface, unfocusedContainerColor = colorScheme.surface)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -305,7 +338,7 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = GlassBorder, focusedContainerColor = colorScheme.surface, unfocusedContainerColor = colorScheme.surface)
                     )
 
                     Spacer(modifier = Modifier.height(12.dp))
@@ -319,7 +352,7 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+                        colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = GlassBorder, focusedContainerColor = colorScheme.surface, unfocusedContainerColor = colorScheme.surface)
                     )
 
                     if (error != null) {
@@ -385,6 +418,7 @@ fun SecurityScreen(navController: NavController, authViewModel: AuthViewModel) {
 
 @Composable
 private fun PinInput(value: String, onValueChange: (String) -> Unit) {
+    val colorScheme = MaterialTheme.colorScheme
     BasicTextField(
         value = value,
         onValueChange = { if (it.length <= 4 && it.all { c -> c.isDigit() }) onValueChange(it) },
@@ -392,7 +426,7 @@ private fun PinInput(value: String, onValueChange: (String) -> Unit) {
         textStyle = TextStyle(color = Color.Transparent),
         decorationBox = {
             Row(
-                horizontalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalArrangement = Arrangement.spacedBy(18.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 repeat(4) { index ->
@@ -400,23 +434,27 @@ private fun PinInput(value: String, onValueChange: (String) -> Unit) {
                     val isFocused = value.length == index
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(56.dp)
                             .border(
                                 if (isFocused) 2.dp else 1.5.dp,
-                                if (isFocused || char.isNotEmpty()) Brand else Divider,
-                                RoundedCornerShape(12.dp)
+                                when {
+                                    isFocused -> colorScheme.primary
+                                    char.isNotEmpty() -> colorScheme.primary.copy(alpha = 0.6f)
+                                    else -> colorScheme.outline
+                                },
+                                RoundedCornerShape(14.dp)
                             )
                             .background(
-                                if (char.isNotEmpty()) Color(0xFF252525) else Background,
-                                RoundedCornerShape(12.dp)
+                                if (char.isNotEmpty()) colorScheme.surfaceVariant else colorScheme.surface,
+                                RoundedCornerShape(14.dp)
                             ),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             if (char.isNotEmpty()) "\u2022" else "",
-                            fontSize = 22.sp,
+                            fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
-                            color = TextPrimary
+                            color = colorScheme.onSurface
                         )
                     }
                 }

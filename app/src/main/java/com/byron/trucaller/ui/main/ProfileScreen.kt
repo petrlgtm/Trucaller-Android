@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.sizeIn
@@ -27,6 +28,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Logout
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.DoNotDisturb
@@ -54,6 +56,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -76,9 +79,11 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -95,8 +100,6 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.byron.trucaller.ui.components.TruCallerAvatar
 import com.byron.trucaller.ui.components.TruCallerCard
-import com.byron.trucaller.ui.theme.CardGradientEnd
-import com.byron.trucaller.ui.theme.CardGradientStart
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.ui.theme.ThemeMode
 import com.byron.trucaller.service.LocationService
@@ -406,20 +409,40 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
             .background(colorScheme.background)
             .verticalScroll(rememberScrollState())
     ) {
-        // Profile header with gradient
+        // Profile cover banner
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            CardGradientStart,
-                            CardGradientEnd,
-                            colorScheme.background
+                .height(180.dp)
+        ) {
+            AsyncImage(
+                model = "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?auto=format&fit=crop&w=800&h=360&q=80",
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                Color.Transparent,
+                                colorScheme.background.copy(alpha = 0.85f),
+                                colorScheme.background
+                            )
                         )
                     )
-                )
-                .padding(vertical = Spacing.lg, horizontal = Spacing.md),
+            )
+        }
+
+        // Profile header
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .offset(y = (-48).dp)
+                .background(Color.Transparent)
+                .padding(horizontal = Spacing.md),
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -456,26 +479,54 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                         )
                     }
                 }
-                if (user.avatarUrl != null) {
-                    TextButton(onClick = { authViewModel.removeAvatar() }) {
-                        Text(
-                            "Remove Photo",
-                            color = colorScheme.onSurface.copy(alpha = 0.7f),
-                            fontSize = 12.sp
+                
+                var isEditingName by remember { mutableStateOf(false) }
+                var editedName by remember { mutableStateOf(user.fullName) }
+
+                if (isEditingName) {
+                    Row(
+                        modifier = Modifier.padding(top = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = editedName,
+                            onValueChange = { editedName = it },
+                            modifier = Modifier.weight(1f).height(52.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            textStyle = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Bold),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                unfocusedContainerColor = colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            )
                         )
+                        IconButton(onClick = { 
+                            authViewModel.updateFullName(editedName)
+                            isEditingName = false 
+                        }) {
+                            Icon(Icons.Default.CheckCircle, null, tint = colorScheme.primary)
+                        }
                     }
                 } else {
-                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(
+                        modifier = Modifier.padding(top = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            user.fullName,
+                            color = colorScheme.onSurface,
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        IconButton(onClick = { isEditingName = true }, modifier = Modifier.size(24.dp)) {
+                            Icon(Icons.Default.Edit, null, modifier = Modifier.size(14.dp), tint = colorScheme.onSurfaceVariant)
+                        }
+                    }
                 }
-                Text(
-                    user.fullName,
-                    color = colorScheme.onSurface,
-                    fontSize = 22.sp,
-                    fontWeight = FontWeight.Bold
-                )
+
                 Text(
                     formatPhoneNumber(user.phoneNumber),
-                    color = colorScheme.onSurface.copy(alpha = 0.7f),
+                    color = colorScheme.onSurfaceVariant,
                     fontSize = 14.sp
                 )
             }
@@ -497,8 +548,8 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("appearance_card"),
-                elevation = 1.dp,
-                containerColor = colorScheme.surfaceVariant
+                elevation = 0.dp,
+                containerColor = colorScheme.surface
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -564,84 +615,92 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                     .padding(bottom = Spacing.sm, start = 4.dp)
                     .semantics { heading() }
             )
+            val trustColor = when (user.trustLevel) {
+                com.byron.trucaller.data.model.TrustLevel.NEW -> colorScheme.onSurfaceVariant
+                com.byron.trucaller.data.model.TrustLevel.BASIC -> Color(0xFF2196F3)
+                com.byron.trucaller.data.model.TrustLevel.TRUSTED -> Color(0xFF4CAF50)
+                com.byron.trucaller.data.model.TrustLevel.VERIFIED -> Color(0xFFFF9800)
+                com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> Color(0xFF9C27B0)
+            }
+            val animatedTrustProgress by animateFloatAsState(
+                targetValue = user.trustScore / 100f,
+                animationSpec = tween(1000, easing = androidx.compose.animation.core.FastOutSlowInEasing),
+                label = "trustProgress"
+            )
+
             TruCallerCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("trust_level_card"),
-                elevation = 1.dp,
-                containerColor = colorScheme.surfaceVariant
+                elevation = 0.dp,
+                containerColor = colorScheme.surface
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Trust shield icon
-                    val trustColor = when (user.trustLevel) {
-                        com.byron.trucaller.data.model.TrustLevel.NEW -> colorScheme.onSurfaceVariant
-                        com.byron.trucaller.data.model.TrustLevel.BASIC -> Color(0xFF2196F3)
-                        com.byron.trucaller.data.model.TrustLevel.TRUSTED -> Color(0xFF4CAF50)
-                        com.byron.trucaller.data.model.TrustLevel.VERIFIED -> Color(0xFFFF9800)
-                        com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> Color(0xFF9C27B0)
-                    }
+                    // Circular trust score gauge
                     Box(
-                        modifier = Modifier
-                            .size(44.dp)
-                            .background(trustColor.copy(alpha = 0.12f), CircleShape),
+                        modifier = Modifier.size(72.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        Icon(
-                            Icons.Default.Shield,
-                            contentDescription = "Trust level",
-                            tint = trustColor,
-                            modifier = Modifier.size(24.dp)
+                        CircularProgressIndicator(
+                            progress = { animatedTrustProgress },
+                            modifier = Modifier.size(72.dp),
+                            color = trustColor,
+                            trackColor = colorScheme.outlineVariant,
+                            strokeWidth = 6.dp,
+                            strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                         )
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(
+                                "${user.trustScore.toInt()}",
+                                fontWeight = FontWeight.Black,
+                                fontSize = 20.sp,
+                                color = trustColor,
+                                letterSpacing = (-0.5).sp
+                            )
+                            Text(
+                                "/100",
+                                fontSize = 9.sp,
+                                color = colorScheme.onSurfaceVariant,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
-                    Spacer(modifier = Modifier.width(14.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
                     Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                Icons.Default.Shield,
+                                contentDescription = null,
+                                tint = trustColor,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                user.trustLevel.name.lowercase()
+                                    .replaceFirstChar { it.uppercase() },
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 17.sp,
+                                color = trustColor
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            user.trustLevel.name.lowercase()
-                                .replaceFirstChar { it.uppercase() },
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 16.sp,
-                            color = colorScheme.onSurface
-                        )
-                        Text(
-                            "Trust Score: ${user.trustScore}/100",
-                            fontSize = 13.sp,
-                            color = colorScheme.onSurfaceVariant
+                            when (user.trustLevel) {
+                                com.byron.trucaller.data.model.TrustLevel.NEW -> "Report spam and verify numbers to build trust."
+                                com.byron.trucaller.data.model.TrustLevel.BASIC -> "Keep contributing to level up."
+                                com.byron.trucaller.data.model.TrustLevel.TRUSTED -> "Your reports carry extra weight."
+                                com.byron.trucaller.data.model.TrustLevel.VERIFIED -> "High impact on spam scoring."
+                                com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> "Top-tier community member."
+                            },
+                            fontSize = 12.sp,
+                            color = colorScheme.onSurfaceVariant,
+                            lineHeight = 16.sp
                         )
                     }
                 }
-                Spacer(modifier = Modifier.height(10.dp))
-                // Trust progress bar
-                androidx.compose.material3.LinearProgressIndicator(
-                    progress = { user.trustScore / 100f },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(6.dp)
-                        .clip(RoundedCornerShape(3.dp)),
-                    color = when (user.trustLevel) {
-                        com.byron.trucaller.data.model.TrustLevel.NEW -> colorScheme.onSurfaceVariant
-                        com.byron.trucaller.data.model.TrustLevel.BASIC -> Color(0xFF2196F3)
-                        com.byron.trucaller.data.model.TrustLevel.TRUSTED -> Color(0xFF4CAF50)
-                        com.byron.trucaller.data.model.TrustLevel.VERIFIED -> Color(0xFFFF9800)
-                        com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> Color(0xFF9C27B0)
-                    },
-                    trackColor = colorScheme.outlineVariant
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Text(
-                    when (user.trustLevel) {
-                        com.byron.trucaller.data.model.TrustLevel.NEW -> "New member. Report spam and verify numbers to build trust."
-                        com.byron.trucaller.data.model.TrustLevel.BASIC -> "Basic trust. Keep contributing to level up."
-                        com.byron.trucaller.data.model.TrustLevel.TRUSTED -> "Trusted member. Your reports carry extra weight."
-                        com.byron.trucaller.data.model.TrustLevel.VERIFIED -> "Verified contributor. High impact on spam scoring."
-                        com.byron.trucaller.data.model.TrustLevel.AUTHORITY -> "Authority. Top-tier community member."
-                    },
-                    fontSize = 12.sp,
-                    color = colorScheme.onSurfaceVariant,
-                    lineHeight = 16.sp
-                )
             }
 
             Spacer(modifier = Modifier.height(Spacing.md))
@@ -661,8 +720,8 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
             // Menu card using TruCallerCard
             TruCallerCard(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = 1.dp,
-                containerColor = colorScheme.surfaceVariant
+                elevation = 0.dp,
+                containerColor = colorScheme.surface
             ) {
                 // Device Info (expandable)
                 ProfileMenuItem(
@@ -933,7 +992,7 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
             // Version badge and check for updates
             TruCallerCard(
                 modifier = Modifier.fillMaxWidth(),
-                elevation = 1.dp
+                elevation = 0.dp
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -1029,7 +1088,7 @@ private fun ProfileMenuItem(
         Box(
             modifier = Modifier
                 .size(36.dp)
-                .background(iconColor.copy(alpha = 0.1f), CircleShape),
+                .background(iconColor.copy(alpha = 0.12f), CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(icon, contentDescription = title, tint = iconColor, modifier = Modifier.size(20.dp))

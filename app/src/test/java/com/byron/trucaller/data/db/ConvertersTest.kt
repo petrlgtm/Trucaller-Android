@@ -163,18 +163,18 @@ class ConvertersTest {
         assertEquals(DeviceStatus.STOLEN, converters.toDeviceStatus(serialized))
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun `toSpamCategory throws for invalid value`() {
-        converters.toSpamCategory("INVALID")
+    @Test
+    fun `toSpamCategory falls back to SAFE for invalid value`() {
+        assertEquals(SpamCategory.SAFE, converters.toSpamCategory("INVALID"))
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun `toAlarmResult throws for invalid value`() {
-        converters.toAlarmResult("INVALID")
+    @Test
+    fun `toAlarmResult falls back to PENDING for invalid value`() {
+        assertEquals(AlarmResult.PENDING, converters.toAlarmResult("INVALID"))
     }
 
-    @Test(expected = IllegalArgumentException::class)
-    fun `toScheduleBlockType throws for invalid value`() {
-        converters.toScheduleBlockType("INVALID")
+    @Test
+    fun `toScheduleBlockType falls back to ALL_SPAM for invalid value`() {
+        assertEquals(ScheduleBlockType.ALL_SPAM, converters.toScheduleBlockType("INVALID"))
     }
 }

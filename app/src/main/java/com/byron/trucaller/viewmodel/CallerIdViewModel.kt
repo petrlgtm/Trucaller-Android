@@ -129,7 +129,7 @@ class CallerIdViewModel(
             callerIdRepository.updateEntry(updated)
             _lookupResult.value = _lookupResult.value?.copy(callerIdEntry = updated)
             _isNumberBlocked.value = true
-            _actionMessage.value = "${entry.name} has been rejected"
+            _actionMessage.value = "${entry.name} has been blocked"
         }
     }
 
@@ -137,7 +137,7 @@ class CallerIdViewModel(
         viewModelScope.launch {
             blockedNumberRepository.unblockNumber(userId, phoneNumber)
             _isNumberBlocked.value = false
-            _actionMessage.value = "$name has been unrejected"
+            _actionMessage.value = "$name has been unblocked"
         }
     }
 

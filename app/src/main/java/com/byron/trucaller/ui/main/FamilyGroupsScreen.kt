@@ -62,6 +62,9 @@ import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.FamilyGroupViewModel
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -219,29 +222,41 @@ fun FamilyGroupsScreen(
             }
             uiState.groups.isEmpty() -> {
                 // Empty state
-                Box(
+                Column(
                     modifier = Modifier
                         .fillMaxSize()
                         .padding(innerPadding),
-                    contentAlignment = Alignment.Center
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                    ) {
+                        AsyncImage(
+                            model = "https://images.unsplash.com/photo-1511895426328-dc8714191011?auto=format&fit=crop&w=800&h=400&q=80",
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(
+                                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                                        colors = listOf(
+                                            colorScheme.background.copy(alpha = 0f),
+                                            colorScheme.background.copy(alpha = 0.6f),
+                                            colorScheme.background
+                                        )
+                                    )
+                                )
+                        )
+                    }
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier.padding(Spacing.xl)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(72.dp)
-                                .background(colorScheme.primary.copy(alpha = 0.12f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                Icons.Default.People,
-                                contentDescription = null,
-                                tint = colorScheme.primary,
-                                modifier = Modifier.size(36.dp)
-                            )
-                        }
                         Spacer(modifier = Modifier.height(Spacing.md))
                         Text(
                             "No Family Groups",

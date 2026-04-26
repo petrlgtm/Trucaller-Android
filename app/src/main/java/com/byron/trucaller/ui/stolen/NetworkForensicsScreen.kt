@@ -69,7 +69,11 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
+import com.byron.trucaller.R
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
+import coil3.compose.AsyncImage
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -80,6 +84,7 @@ import com.byron.trucaller.ui.components.BadgeType
 import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.BorderRadius
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.NetworkForensicsViewModel
@@ -90,7 +95,7 @@ private val TIMELINE_DOT_COLORS = listOf(
 )
 
 private val SuccessGreen = Color(0xFF4CAF50)
-private val WarningOrange = Color(0xFFFF9800)
+private val WarningOrange = BrandGold
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -113,7 +118,7 @@ fun NetworkForensicsScreen(
                     Text(
                         "Network Forensics",
                         fontWeight = FontWeight.Bold,
-                        color = colorScheme.onPrimary
+                        color = colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
@@ -121,12 +126,12 @@ fun NetworkForensicsScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             "Back",
-                            tint = colorScheme.onPrimary
+                            tint = colorScheme.onBackground
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.primary
+                    containerColor = colorScheme.background
                 )
             )
         },
@@ -186,7 +191,31 @@ fun NetworkForensicsScreen(
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
         ) {
-            // ── Custom gradient header with stats ──────────────────────────
+            // ── Custom header with network image + stats ──────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(180.dp)
+            ) {
+                AsyncImage(
+                    model = "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=800&h=360&q=80",
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize()
+                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(
+                            Brush.verticalGradient(
+                                colors = listOf(
+                                    colorScheme.primary.copy(alpha = 0.55f),
+                                    colorScheme.primary.copy(alpha = 0.85f)
+                                )
+                            )
+                        )
+                )
+            }
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -378,6 +407,54 @@ fun NetworkForensicsScreen(
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.Medium,
                                         color = colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+
+                            // Nearby Fingerprints (Bluetooth)
+                            if (lastLog.nearbyDevices.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(Spacing.sm))
+                                Text(
+                                    "Nearby Fingerprints",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = colorScheme.primary,
+                                    modifier = Modifier.padding(bottom = 4.dp)
+                                )
+                                lastLog.nearbyDevices.take(5).forEach { device ->
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(vertical = 2.dp)
+                                    ) {
+                                        Icon(
+                                            painter = painterResource(id = R.drawable.ic_caller_id), // Generic icon for BT
+                                            contentDescription = null,
+                                            tint = colorScheme.onSurface.copy(alpha = 0.5f),
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "${device.name} (${device.type})",
+                                            fontSize = 11.sp,
+                                            color = colorScheme.onSurface,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        Text(
+                                            text = "${device.rssi} dBm",
+                                            fontSize = 10.sp,
+                                            color = colorScheme.onSurface.copy(alpha = 0.6f),
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                                if (lastLog.nearbyDevices.size > 5) {
+                                    Text(
+                                        "+ ${lastLog.nearbyDevices.size - 5} more devices",
+                                        fontSize = 9.sp,
+                                        color = colorScheme.onSurface.copy(alpha = 0.4f),
+                                        modifier = Modifier.padding(top = 2.dp)
                                     )
                                 }
                             }

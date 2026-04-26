@@ -28,7 +28,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Icon
@@ -44,8 +43,14 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.res.painterResource
+import com.byron.trucaller.R
+import com.byron.trucaller.ui.theme.GlassBorder
+import com.byron.trucaller.ui.theme.GreatVibesFontFamily
+import com.byron.trucaller.ui.theme.MontserratFontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -60,6 +65,8 @@ import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.components.TruCallerTextField
 import com.byron.trucaller.util.isValidPhoneInput
 import com.byron.trucaller.viewmodel.AuthViewModel
+import androidx.compose.ui.layout.ContentScale
+import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -125,8 +132,8 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
             .background(
                 Brush.verticalGradient(
                     colors = listOf(
-                        colorScheme.onPrimary,
-                        colorScheme.surfaceVariant,
+                        colorScheme.background,
+                        colorScheme.background,
                         colorScheme.surface
                     ),
                     startY = 0f,
@@ -136,53 +143,64 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
             .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
-        // ── Dark header with gradient
-        Column(
+        // ── Header with contextual background image
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(top = 60.dp, bottom = 32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
+                .height(280.dp)
         ) {
-            // Logo with scale animation
+            AsyncImage(
+                model = "https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?auto=format&fit=crop&w=800&h=560&q=80",
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
             Box(
-                modifier = Modifier.scale(logoScale),
-                contentAlignment = Alignment.Center
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(88.dp)
-                        .background(
-                            Brush.linearGradient(
-                                listOf(colorScheme.primary, colorScheme.tertiary)
-                            ),
-                            CircleShape
-                        ),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = "Logo",
-                        tint = colorScheme.onPrimary,
-                        modifier = Modifier.size(48.dp)
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            colors = listOf(
+                                colorScheme.background.copy(alpha = 0.3f),
+                                colorScheme.background.copy(alpha = 0.7f),
+                                colorScheme.background
+                            )
+                        )
                     )
-                }
+            )
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .align(Alignment.Center)
+                    .padding(top = 40.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Logo with scale animation — no clip, let the transparent edges show
+                androidx.compose.foundation.Image(
+                    painter = painterResource(R.drawable.trucaller_logo),
+                    contentDescription = "TruCaller Logo",
+                    modifier = Modifier
+                        .scale(logoScale)
+                        .size(110.dp)
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                Text(
+                    text = "Welcome Back",
+                    fontFamily = GreatVibesFontFamily,
+                    fontSize = 36.sp,
+                    color = colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Sign in to your account",
+                    fontFamily = MontserratFontFamily,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Medium,
+                    color = colorScheme.onSurfaceVariant
+                )
             }
-
-            Spacer(modifier = Modifier.height(20.dp))
-
-            Text(
-                text = "Welcome Back",
-                fontSize = 30.sp,
-                fontWeight = FontWeight.Black,
-                color = colorScheme.onBackground,
-                letterSpacing = (-0.5).sp
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "Sign in to your account",
-                fontSize = 14.sp,
-                color = colorScheme.onBackground.copy(alpha = 0.6f)
-            )
         }
 
         // ── Form card
@@ -276,7 +294,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                 ) {
                     Text(
                         text = "Forgot Password?",
-                        color = colorScheme.secondary,
+                        color = colorScheme.primary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.clickable { navController.navigate("forgot_password") }
@@ -295,8 +313,8 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                             .testTag("login_error_text")
                             .padding(top = 12.dp)
                             .background(
-                                colorScheme.error.copy(alpha = 0.08f),
-                                RoundedCornerShape(8.dp)
+                                colorScheme.error.copy(alpha = 0.1f),
+                                RoundedCornerShape(12.dp)
                             )
                             .padding(10.dp)
                     )
@@ -352,7 +370,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                         modifier = Modifier
                             .weight(1f)
                             .height(1.dp)
-                            .background(colorScheme.outlineVariant)
+                            .background(GlassBorder)
                     )
                     Text(
                         "or",
@@ -364,7 +382,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                         modifier = Modifier
                             .weight(1f)
                             .height(1.dp)
-                            .background(colorScheme.outlineVariant)
+                            .background(GlassBorder)
                     )
                 }
 
@@ -387,7 +405,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                             )
                             Text(
                                 text = "Register",
-                                color = colorScheme.secondary,
+                                color = colorScheme.primary,
                                 fontSize = 14.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.clickable { navController.navigate("register") }
@@ -408,7 +426,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                             )
                             Text(
                                 text = "Login as Admin",
-                                color = colorScheme.secondary,
+                                color = colorScheme.primary,
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 modifier = Modifier.clickable { navController.navigate("admin_login") }
@@ -417,7 +435,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
 
                         Spacer(modifier = Modifier.height(24.dp))
 
-                        // Uganda flag accent bar
+                        // Logo color accent bar
                         Row(
                             modifier = Modifier.width(48.dp),
                             horizontalArrangement = Arrangement.spacedBy(2.dp)
@@ -427,7 +445,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                                     .weight(1f)
                                     .height(3.dp)
                                     .background(
-                                        colorScheme.onPrimary,
+                                        colorScheme.primary.copy(alpha = 0.3f),
                                         RoundedCornerShape(2.dp)
                                     )
                             )
@@ -445,7 +463,7 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                                     .weight(1f)
                                     .height(3.dp)
                                     .background(
-                                        colorScheme.secondary,
+                                        colorScheme.primary.copy(alpha = 0.3f),
                                         RoundedCornerShape(2.dp)
                                     )
                             )
