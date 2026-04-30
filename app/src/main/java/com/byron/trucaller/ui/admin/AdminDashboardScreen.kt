@@ -70,6 +70,8 @@ import com.byron.trucaller.ui.components.EmptyStateIcon
 import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.components.TruCallerHeader
+import com.byron.trucaller.ui.theme.Brand
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AdminDashboardViewModel
 import com.byron.trucaller.viewmodel.AlarmViewModel
@@ -166,8 +168,7 @@ fun AdminDashboardScreen(
     Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
         TruCallerHeader(
             title = "Admin Dashboard",
-            subtitle = "System overview & management",
-            gradientColors = listOf(colorScheme.surface, colorScheme.background)
+            subtitle = "System overview & management"
         )
 
         PullToRefreshBox(
@@ -313,13 +314,13 @@ fun AdminDashboardScreen(
                                 modifier = Modifier.weight(1f),
                                 title = "Caller IDs",
                                 targetValue = stats.callerIdCount,
-                                accentColor = Color(0xFF2196F3)
+                                accentColor = Brand
                             )
                             AnimatedStatCard(
                                 modifier = Modifier.weight(1f),
                                 title = "SMS Reports",
                                 targetValue = stats.smsSpamReportCount,
-                                accentColor = Color(0xFFFF9800)
+                                accentColor = BrandGold
                             )
                         }
                     }
@@ -427,7 +428,7 @@ fun AdminDashboardScreen(
                                 Icons.Default.Phone,
                                 "Caller ID Database",
                                 "${stats.callerIdCount} entries",
-                                Color(0xFF2196F3)
+                                Brand
                             ) {
                                 navController.navigate("admin_caller_id")
                             }
@@ -443,7 +444,7 @@ fun AdminDashboardScreen(
                                 Icons.Default.MarkEmailUnread,
                                 "SMS Spam Reports",
                                 "${stats.smsSpamReportCount} reports",
-                                Color(0xFFFF9800)
+                                BrandGold
                             ) {
                                 navController.navigate("admin_caller_id")
                             }
@@ -596,8 +597,8 @@ private fun RecentActivityRow(
 
     val (icon, iconColor) = when (item.type) {
         AdminActivityType.STOLEN_REPORT -> Icons.Default.Warning to colorScheme.error
-        AdminActivityType.ALARM_TRIGGERED -> Icons.Default.NotificationsActive to Color(0xFFFF9800)
-        AdminActivityType.LOCATION_REQUEST -> Icons.Default.LocationOn to Color(0xFF2196F3)
+        AdminActivityType.ALARM_TRIGGERED -> Icons.Default.NotificationsActive to BrandGold
+        AdminActivityType.LOCATION_REQUEST -> Icons.Default.LocationOn to Brand
         AdminActivityType.DEVICE_LOCKED -> Icons.Default.Lock to Color(0xFF9C27B0)
     }
 

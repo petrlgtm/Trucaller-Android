@@ -2,72 +2,89 @@ package com.byron.trucaller.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// ── Uganda Flag Primary Palette ─────────────────────────────────────────
-val Brand = Color(0xFFFFCD00)          // Uganda Yellow (primary)
-val BrandDark = Color(0xFF1A1A1A)      // Uganda Black
-val BrandLight = Color(0xFFFFE04D)     // Lighter yellow
-val BrandGold = Color(0xFFFFB300)      // Deep gold accent
+// ── Official Truecaller Palette ──────────────────────────────────────────
 
-// Red accent (Uganda Red)
-val Accent = Color(0xFFD90000)
-val AccentLight = Color(0xFFEF2020)
-val AccentDark = Color(0xFFB71C1C)
+// Primary — True Blue (interactive, buttons, accents)
+val Brand = Color(0xFF0087FF)            // Official True Blue
+val BrandDark = Color(0xFF0047AB)        // Official Dark Blue
+val BrandLight = Color(0xFFE1F0FF)       // Soft light blue background
+val BrandGold = Color(0xFFFFB347)        // Warm amber accent (Verified/Suspicious)
 
-// ── Dark Surface & background ─────────────────────────────────────────
-val Surface = Color(0xFF1E1E1E)
-val SurfaceElevated = Color(0xFF252525)
-val Background = Color(0xFF121212)
-val BackgroundDark = Color(0xFF0D0D0D)
-val SurfaceCard = Color(0xFF1E1E1E)
-val SurfaceLight = Color(0xFF2A2A2A)
+// Secondary — Spam Crimson
+val Accent = Color(0xFFEB002B)           // Official Spam Red
+val AccentLight = Color(0xFFFF4D6D)
+val AccentDark = Color(0xFFA5001D)
 
-// ── Light Surface & background ────────────────────────────────────────
-val LightBackground = Color(0xFFFAFAFA)
+// ── Dark Surfaces (Midnight/Deep Navy) ──────────────────────────────────
+val Surface = Color(0xFF121212)          // Standard Material Dark Surface
+val SurfaceElevated = Color(0xFF1E1E1E) // Elevated cards
+val Background = Color(0xFF000000)      // Pure black background for Midnight theme
+val BackgroundDark = Color(0xFF000000)
+val SurfaceCard = Color(0xFF121212)
+val SurfaceLight = Color(0xFF242424)
+
+// ── Light Surfaces ──────────────────────────────────────────────────────
+val LightBackground = Color(0xFFFFFFFF)  // Pure white
 val LightSurface = Color(0xFFFFFFFF)
-val LightSurfaceElevated = Color(0xFFF5F5F5)
+val LightSurfaceElevated = Color(0xFFF5F7FA)
 val LightSurfaceCard = Color(0xFFFFFFFF)
 
-// ── Status colors ───────────────────────────────────────────────────────
-val Danger = Color(0xFFD90000)         // Uganda Red
-val DangerLight = Color(0xFFEF2020)
-val DangerBg = Color(0x1AD90000)
-val Success = Color(0xFF2E7D32)
-val SuccessLight = Color(0xFF4CAF50)
-val SuccessBg = Color(0x1A2E7D32)
-val Warning = Color(0xFFFFCD00)        // Uganda Yellow
-val WarningLight = Color(0xFFFFE04D)
-val WarningBg = Color(0x1AFFCD00)
+// ── Status Colors ───────────────────────────────────────────────────────
+val Danger = Color(0xFFEB002B)          // Spam/Error
+val DangerLight = Color(0xFFFF4D6D)
+val DangerBg = Color(0x1AEB002B)
+val Success = Color(0xFF24B024)         // Verified Green
+val SuccessLight = Color(0xFF4ADE80)
+val SuccessBg = Color(0x1A24B024)
+val Warning = Color(0xFFFFB347)         // Yellow/Warning
+val WarningLight = Color(0xFFFFCA6E)
+val WarningBg = Color(0x1AFFB347)
+val Priority = Color(0xFF8B3DFF)        // Priority/Verified Purple
 
-// ── Dark Text colors ──────────────────────────────────────────────────
-val TextPrimary = Color(0xFFF5F5F5)    // Light text on dark bg
-val TextSecondary = Color(0xFFB0B0B0)
-val TextDisabled = Color(0xFF666666)
-val TextOnDark = Color(0xFFF5F5F5)
-val TextOnYellow = Color(0xFF1A1A1A)
+// ── Text (Dark Mode) ────────────────────────────────────────────────────
+val TextPrimary = Color(0xFFFFFFFF)     // Pure white
+val TextSecondary = Color(0xFF9E9E9E)   // Grey sublabel
+val TextDisabled = Color(0xFF616161)
+val TextOnDark = Color(0xFFFFFFFF)
+val TextOnYellow = Color(0xFF000000)
 
-// ── Light Text colors ─────────────────────────────────────────────────
-val LightTextPrimary = Color(0xFF1A1A1A)   // Dark text on light bg
-val LightTextSecondary = Color(0xFF616161)
+// ── Text (Light Mode) ───────────────────────────────────────────────────
+val LightTextPrimary = Color(0xFF111111) // Near black
+val LightTextSecondary = Color(0xFF5F6368) // Google/Standard grey
 
-// ── Other (Dark) ────────────────────────────────────────────────────────
-val Inactive = Color(0xFF757575)
-val Divider = Color(0xFF333333)
+// ── Utility ─────────────────────────────────────────────────────────────
+val Inactive = Color(0xFFBDBDBD)
+val Divider = Color(0xFF2A2A2A)
 val Overlay = Color(0x80000000)
-val Shimmer = Color(0x33FFCD00)
+val Shimmer = Color(0x330087FF)
 
-// ── Other (Light) ───────────────────────────────────────────────────────
-val LightDivider = Color(0xFFE0E0E0)
-val LightOutlineVariant = Color(0xFFBDBDBD)
+val LightDivider = Color(0xFFEEEEEE)
+val LightOutlineVariant = Color(0xFFE0E0E0)
 
-// ── Material3 scheme support ────────────────────────────────────────────
-val BrandOnPrimary = Color(0xFF1A1A1A) // Black text on yellow
-val BrandOnBackground = Color(0xFF1A1A1A)
-val BrandOnSurface = Color(0xFF1A1A1A)
+// ── Borders ─────────────────────────────────────────────────────────────
+val GlassBorder = Color(0x1FFFFFFF)
+val GlassBorderLight = Color(0x0DFFFFFF)
 
-// ── Card gradient stops ─────────────────────────────────────────────────
-val CardGradientStart = Color(0xFF1A1A1A)
-val CardGradientEnd = Color(0xFF2C2C2C)
-val YellowGradientStart = Color(0xFFFFCD00)
-val YellowGradientEnd = Color(0xFFFFB300)
-val RedGradientStart = Color(0xFFD90000)
-val RedGradientEnd = Color(0xFFB71C1C)
+// ── Material3 ───────────────────────────────────────────────────────────
+val BrandOnPrimary = Color(0xFFFFFFFF)  // White on Blue
+val BrandOnBackground = Color(0xFF111111)
+val BrandOnSurface = Color(0xFF111111)
+
+// ── Gradients ───────────────────────────────────────────────────────────
+val CardGradientStart = Color(0xFF121212)
+val CardGradientEnd = Color(0xFF1E1E1E)
+val BlueGradientStart = Color(0xFF0087FF)
+val BlueGradientEnd = Color(0xFF0047AB)
+val RedGradientStart = Color(0xFFEB002B)
+val RedGradientEnd = Color(0xFFA5001D)
+
+// ── Legacy/Logo-Specific (Aligned to new palette) ───────────────────────
+val LogoBlue = Brand
+val LogoBlueDark = BrandDark
+val LogoBlueLight = Color(0xFF4B9EFF)
+val LogoCrimson = Accent
+val LogoCrimsonLight = AccentLight
+val LogoGold = BrandGold
+val LogoGoldLight = WarningLight
+val LogoSilver = Color(0xFF8899AA)
+val LogoSilverLight = Color(0xFFAABBCC)

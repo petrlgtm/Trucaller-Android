@@ -5,42 +5,8 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
-import com.byron.trucaller.data.dao.AdminUserDao
-import com.byron.trucaller.data.dao.AlarmLogDao
-import com.byron.trucaller.data.dao.BlockedNumberDao
-import com.byron.trucaller.data.dao.BlockingScheduleDao
-import com.byron.trucaller.data.dao.CallerIdDao
-import com.byron.trucaller.data.dao.ContactDao
-import com.byron.trucaller.data.dao.DeviceDao
-import com.byron.trucaller.data.dao.IpLogDao
-import com.byron.trucaller.data.dao.StolenReportDao
-import com.byron.trucaller.data.dao.SmsSpamDao
-import com.byron.trucaller.data.dao.ContactAliasDao
-import com.byron.trucaller.data.dao.GeofenceDao
-import com.byron.trucaller.data.dao.GeofenceEventDao
-import com.byron.trucaller.data.dao.CallRecordingDao
-import com.byron.trucaller.data.dao.FamilyGroupDao
-import com.byron.trucaller.data.dao.FamilyMemberDao
-import com.byron.trucaller.data.dao.SmsRuleDao
-import com.byron.trucaller.data.dao.UserDao
-import com.byron.trucaller.data.model.AdminUser
-import com.byron.trucaller.data.model.AlarmLog
-import com.byron.trucaller.data.model.BlockedNumber
-import com.byron.trucaller.data.model.BlockingSchedule
-import com.byron.trucaller.data.model.CallerIdEntry
-import com.byron.trucaller.data.model.Contact
-import com.byron.trucaller.data.model.Device
-import com.byron.trucaller.data.model.Geofence
-import com.byron.trucaller.data.model.GeofenceEvent
-import com.byron.trucaller.data.model.IpLog
-import com.byron.trucaller.data.model.CallRecording
-import com.byron.trucaller.data.model.ContactAlias
-import com.byron.trucaller.data.model.FamilyGroup
-import com.byron.trucaller.data.model.FamilyMember
-import com.byron.trucaller.data.model.SmsRule
-import com.byron.trucaller.data.model.SmsSpamReport
-import com.byron.trucaller.data.model.StolenReport
-import com.byron.trucaller.data.model.User
+import com.byron.trucaller.data.dao.*
+import com.byron.trucaller.data.model.*
 
 @Database(
     entities = [
@@ -63,8 +29,8 @@ import com.byron.trucaller.data.model.User
         FamilyGroup::class,
         FamilyMember::class
     ],
-    version = 14,
-    exportSchema = false
+    version = 16,
+    exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class TruCallerDatabase : RoomDatabase() {
@@ -180,6 +146,23 @@ abstract class TruCallerDatabase : RoomDatabase() {
                         joinedAt TEXT NOT NULL
                     )"""
                 )
+            }
+        }
+
+        /** Migration 14 -> 15: add startTime and lastSeen columns to ip_logs for location-session tracking. */
+        val MIGRATION_14_15 = object : Migration(14, 15) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE ip_logs ADD COLUMN startTime TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE ip_logs ADD COLUMN lastSeen TEXT NOT NULL DEFAULT ''")
+                // Backfill: set startTime and lastSeen to existing timestamp
+                db.execSQL("UPDATE ip_logs SET startTime = timestamp, lastSeen = timestamp WHERE startTime = ''")
+            }
+        }
+
+        /** Migration 15 -> 16: add nearbyDevices column to ip_logs. */
+        val MIGRATION_15_16 = object : Migration(15, 16) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE ip_logs ADD COLUMN nearbyDevices TEXT NOT NULL DEFAULT '[]'")
             }
         }
     }

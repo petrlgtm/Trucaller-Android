@@ -1,6 +1,7 @@
 package com.byron.trucaller.service
 
 import android.content.BroadcastReceiver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.provider.Telephony
@@ -26,20 +27,31 @@ class SmsReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION) return
+        val action = intent.action
+        if (action != Telephony.Sms.Intents.SMS_RECEIVED_ACTION && 
+            action != Telephony.Sms.Intents.SMS_DELIVER_ACTION) return
 
         val messages = Telephony.Sms.Intents.getMessagesFromIntent(intent)
         if (messages.isNullOrEmpty()) return
 
         val senderNumber = messages[0].displayOriginatingAddress ?: return
         val fullBody = messages.joinToString("") { it.displayMessageBody ?: "" }
+        val timestamp = messages[0].timestampMillis
 
-        Log.d(TAG, "SMS received from: $senderNumber")
+        Log.d(TAG, "SMS received from: $senderNumber (Action: $action)")
+
+        // If we are the default SMS app (SMS_DELIVER_ACTION), we MUST write the message to the system provider
+        if (action == Telephony.Sms.Intents.SMS_DELIVER_ACTION) {
+            writeSmsToInbox(context, senderNumber, fullBody, timestamp)
+        }
 
         val app = context.applicationContext as? TruCallerApplication ?: return
         val callerIdRepo = app.container.callerIdRepository
         val blockedRepo = app.container.blockedNumberRepository
         val userPrefs = app.container.userPreferences
+
+        // Make sure the receiver can finish async work safely.
+        val pendingResult = goAsync()
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
@@ -76,7 +88,25 @@ class SmsReceiver : BroadcastReceiver() {
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking SMS sender", e)
+            } finally {
+                pendingResult.finish()
             }
+        }
+    }
+
+    private fun writeSmsToInbox(context: Context, address: String, body: String, timestamp: Long) {
+        try {
+            val values = ContentValues().apply {
+                put(Telephony.Sms.ADDRESS, address)
+                put(Telephony.Sms.BODY, body)
+                put(Telephony.Sms.DATE, timestamp)
+                put(Telephony.Sms.READ, 0)
+                put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_INBOX)
+            }
+            context.contentResolver.insert(Telephony.Sms.Inbox.CONTENT_URI, values)
+            Log.d(TAG, "Successfully saved incoming SMS to inbox")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to save incoming SMS to inbox", e)
         }
     }
 }

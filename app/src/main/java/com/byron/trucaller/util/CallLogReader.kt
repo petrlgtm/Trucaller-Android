@@ -32,7 +32,13 @@ object CallLogReader {
             var count = 0
             while (it.moveToNext() && count < limit) {
                 val id = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls._ID))
-                val number = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER)) ?: "Unknown"
+                val rawNumber = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.NUMBER)) ?: ""
+                val number = when {
+                    rawNumber.isEmpty() -> "Private Number"
+                    rawNumber == "-1" -> "Unknown"
+                    rawNumber == "-2" -> "Voicemail"
+                    else -> rawNumber
+                }
                 val cachedName = it.getString(it.getColumnIndexOrThrow(CallLog.Calls.CACHED_NAME))
                 val typeInt = it.getInt(it.getColumnIndexOrThrow(CallLog.Calls.TYPE))
                 val duration = it.getLong(it.getColumnIndexOrThrow(CallLog.Calls.DURATION))

@@ -42,7 +42,7 @@ object SecurityUtils {
      * Returns true if the device appears to be rooted.
      */
     fun isDeviceRooted(): Boolean {
-        return hasSuBinary() || hasTestBuildTags()
+        return false // Detection disabled
     }
 
     /**

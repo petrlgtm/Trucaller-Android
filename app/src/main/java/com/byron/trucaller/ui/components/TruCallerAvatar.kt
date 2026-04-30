@@ -74,14 +74,14 @@ fun TruCallerAvatar(
     // Deterministic gradient colors derived from name hash
     val gradientPair = remember(name) {
         val backgroundColors = listOf(
-            Color(0xFF1A3A5C), Color(0xFF5C1A1A), Color(0xFF1A4D1A),
-            Color(0xFF5C3A00), Color(0xFF2E1A5C), Color(0xFF004D4D),
-            Color(0xFF5C4D00), Color(0xFF4D1A5C)
+            Color(0xFF0A2A4A), Color(0xFF3D0A0A), Color(0xFF0A330A),
+            Color(0xFF3D2800), Color(0xFF1A0A3D), Color(0xFF003333),
+            Color(0xFF3D3300), Color(0xFF330A3D)
         )
         val foregroundColors = listOf(
-            Color(0xFF64B5F6), Color(0xFFEF5350), Color(0xFF66BB6A),
-            Color(0xFFFFB74D), Color(0xFFAB47BC), Color(0xFF4DD0E1),
-            Color(0xFFFFCD00), Color(0xFFCE93D8)
+            Color(0xFF5DADE2), Color(0xFFE74C3C), Color(0xFF58D68D),
+            Color(0xFFF5B041), Color(0xFFBB8FCE), Color(0xFF48C9B0),
+            Color(0xFFF4D03F), Color(0xFFD2B4DE)
         )
         val index = name.hashCode().absoluteValue % backgroundColors.size
         Pair(backgroundColors[index], foregroundColors[index])
@@ -125,10 +125,10 @@ fun TruCallerAvatar(
                 modifier = Modifier
                     .size(size)
                     .background(
-                        Brush.linearGradient(
+                        Brush.radialGradient(
                             colors = listOf(
-                                gradientPair.first,
-                                gradientPair.first.copy(alpha = 0.7f)
+                                gradientPair.first.copy(alpha = 0.9f),
+                                gradientPair.first
                             )
                         ),
                         CircleShape

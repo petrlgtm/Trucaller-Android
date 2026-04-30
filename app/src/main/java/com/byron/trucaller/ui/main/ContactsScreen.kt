@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.compose.ui.res.painterResource
+import com.byron.trucaller.R
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedVisibility
@@ -101,6 +103,8 @@ import com.byron.trucaller.ui.components.TruCallerAvatar
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.components.TruCallerHeader
 import com.byron.trucaller.ui.components.TruCallerTextField
+import com.byron.trucaller.ui.theme.GlassBorder
+import com.byron.trucaller.ui.theme.LogoBlueLight
 import com.byron.trucaller.util.formatPhoneNumber
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -316,7 +320,15 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                     label = { Text("All", fontSize = 13.sp) },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = colorScheme.primary,
-                        selectedLabelColor = colorScheme.onPrimary
+                        selectedLabelColor = colorScheme.onPrimary,
+                        containerColor = colorScheme.surface,
+                        labelColor = colorScheme.onSurface.copy(alpha = 0.7f)
+                    ),
+                    border = FilterChipDefaults.filterChipBorder(
+                        borderColor = GlassBorder,
+                        selectedBorderColor = Color.Transparent,
+                        enabled = true,
+                        selected = selectedSegment == null
                     )
                 )
                 allSegments.forEach { segment ->
@@ -326,22 +338,29 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                         label = { Text(segment, fontSize = 13.sp) },
                         colors = FilterChipDefaults.filterChipColors(
                             selectedContainerColor = colorScheme.primary,
-                            selectedLabelColor = colorScheme.onPrimary
+                            selectedLabelColor = colorScheme.onPrimary,
+                            containerColor = colorScheme.surface,
+                            labelColor = colorScheme.onSurface.copy(alpha = 0.7f)
+                        ),
+                        border = FilterChipDefaults.filterChipBorder(
+                            borderColor = GlassBorder,
+                            selectedBorderColor = Color.Transparent,
+                            enabled = true,
+                            selected = selectedSegment == segment
                         )
                     )
                 }
             }
         }
 
-        // Sync message snackbar
+        // Sync message snackbar — auto-dismisses after 4 seconds
         if (syncMessage != null) {
+            LaunchedEffect(syncMessage) {
+                kotlinx.coroutines.delay(4000)
+                contactsViewModel.clearSyncMessage()
+            }
             Snackbar(
-                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                action = {
-                    TextButton(onClick = { contactsViewModel.clearSyncMessage() }) {
-                        Text("OK", color = colorScheme.inversePrimary)
-                    }
-                }
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
             ) {
                 Text(syncMessage!!)
             }
@@ -359,10 +378,20 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                 contentDesc = "Search contacts"
             )
 
+            // Search result count
+            if (searchQuery.isNotBlank()) {
+                Text(
+                    text = "${filteredContacts.size} result${if (filteredContacts.size != 1) "s" else ""} found",
+                    fontSize = 12.sp,
+                    color = colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 4.dp, start = 4.dp)
+                )
+            }
+
             Spacer(modifier = Modifier.height(8.dp))
 
             TruCallerCard(
-                elevation = 0.5.dp
+                elevation = 0.dp
             ) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -390,86 +419,37 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                 }
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Google Drive card — only show when NOT connected (hides after sign-in)
+            if (!isDriveConnected) {
+                Spacer(modifier = Modifier.height(8.dp))
 
-            // Google Drive Sync Card with enhanced visual hierarchy
-            TruCallerCard(
-                elevation = 1.dp,
-                gradientColors = if (isDriveConnected) listOf(
-                    colorScheme.primary.copy(alpha = 0.08f),
-                    colorScheme.surfaceVariant
-                ) else null,
-                gradientHeaderContent = if (isDriveConnected) {
-                    {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                imageVector = Icons.Default.CloudDone,
-                                contentDescription = null,
-                                tint = colorScheme.primary,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                "Cloud sync enabled",
-                                fontSize = 11.sp,
-                                color = colorScheme.primary,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                } else null
-            ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                TruCallerCard(
+                    elevation = 0.dp
                 ) {
-                    Icon(
-                        imageVector = if (isDriveConnected) Icons.Default.CloudDone else Icons.Default.CloudUpload,
-                        contentDescription = "Google Drive",
-                        tint = if (isDriveConnected) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.5f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            if (isDriveConnected) "Connected to Google Drive" else "Google Drive Backup",
-                            fontWeight = FontWeight.SemiBold,
-                            fontSize = 14.sp,
-                            color = colorScheme.onSurface
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CloudUpload,
+                            contentDescription = "Google Drive",
+                            tint = colorScheme.onSurface.copy(alpha = 0.5f),
+                            modifier = Modifier.size(24.dp)
                         )
-                        Text(
-                            if (isDriveConnected) "$backedUpCount contacts backed up" else "Sign in to enable cloud backup",
-                            fontSize = 12.sp,
-                            color = colorScheme.onSurface.copy(alpha = 0.6f)
-                        )
-                    }
-                    if (isSyncing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            color = colorScheme.primary,
-                            strokeWidth = 2.dp
-                        )
-                    } else if (isDriveConnected) {
-                        OutlinedButton(
-                            onClick = {
-                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS)
-                                    == PackageManager.PERMISSION_GRANTED) {
-                                    contactsViewModel.syncContacts(user.id)
-                                } else {
-                                    contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                                }
-                            },
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.primary)
-                        ) {
-                            Icon(
-                                Icons.Default.Sync,
-                                contentDescription = "Sync",
-                                modifier = Modifier.size(16.dp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                "Google Drive Backup",
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 14.sp,
+                                color = colorScheme.onSurface
                             )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Sync Now", fontSize = 12.sp)
+                            Text(
+                                "Sign in to enable cloud backup",
+                                fontSize = 12.sp,
+                                color = colorScheme.onSurface.copy(alpha = 0.6f)
+                            )
                         }
-                    } else {
                         Button(
                             onClick = {
                                 driveSignInLauncher.launch(contactsViewModel.getDriveSignInIntent())
@@ -528,23 +508,8 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                             key = { it.id },
                             contentType = { "contact_item" }
                         ) { contact ->
-                            val itemIndex = globalIndex++
+                            globalIndex++
                             Column {
-                                AnimatedVisibility(
-                                    visible = true,
-                                    enter = fadeIn(
-                                        animationSpec = tween(
-                                            durationMillis = 300,
-                                            delayMillis = if (!hasAnimated) 0 else (itemIndex * 30).coerceAtMost(600)
-                                        )
-                                    ) + slideInVertically(
-                                        animationSpec = tween(
-                                            durationMillis = 300,
-                                            delayMillis = if (!hasAnimated) 0 else (itemIndex * 30).coerceAtMost(600)
-                                        ),
-                                        initialOffsetY = { it / 4 }
-                                    )
-                                ) {
                                     ContactCard(
                                         contact = contact,
                                         onCardClick = {
@@ -569,7 +534,6 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                                             context.startActivity(intent)
                                         }
                                     )
-                                }
                             }
                         }
                     }
@@ -640,7 +604,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                                 text = letter.toString(),
                                 fontSize = 9.sp,
                                 fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
-                                color = if (isActive) colorScheme.primary else colorScheme.onSurface.copy(alpha = 0.3f),
+                                color = if (isActive) colorScheme.primary else colorScheme.onSurfaceVariant,
                                 textAlign = TextAlign.Center
                             )
                         }
@@ -698,10 +662,9 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                     )
 
                     // WhatsApp
-                    ActionRow(
-                        icon = Icons.Default.Call,
+                    ActionRowPainter(
+                        painter = painterResource(R.drawable.ic_whatsapp),
                         label = "WhatsApp",
-                        tint = Color(0xFF25D366),
                         onClick = {
                             val phone = contact.phoneNumber.replace("+", "").replace(" ", "").replace("-", "")
                             val intent = Intent(Intent.ACTION_VIEW).apply {
@@ -731,7 +694,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                     ActionRow(
                         icon = Icons.Default.NoteAlt,
                         label = if (contact.note.isNullOrBlank()) "Add Note" else "Edit Note",
-                        tint = Color(0xFF42A5F5),
+                        tint = LogoBlueLight,
                         onClick = {
                             editNote = contact.note ?: ""
                             showActionsDialog = false
@@ -783,7 +746,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                     // Block/Unblock
                     ActionRow(
                         icon = if (isSelectedBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
-                        label = if (isSelectedBlocked) "Unblock Number" else "Block Number",
+                        label = if (isSelectedBlocked) "Unreject Number" else "Reject Number",
                         tint = if (isSelectedBlocked) colorScheme.tertiary else colorScheme.error,
                         labelColor = if (isSelectedBlocked) colorScheme.tertiary else colorScheme.error,
                         onClick = {
@@ -819,7 +782,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
 
     // Favourite Segment Picker Dialog
     if (showFavouriteDialog && selectedContact != null) {
-        var chosenSegment by remember { mutableStateOf(selectedContact!!.favouriteSegment) }
+        var chosenSegment by remember { mutableStateOf(selectedContact?.favouriteSegment) }
         var customSegment by remember { mutableStateOf("") }
         var useCustom by remember { mutableStateOf(false) }
 
@@ -1047,7 +1010,7 @@ private fun ContactCard(
 
     TruCallerCard(
         modifier = Modifier.padding(vertical = 2.dp),
-        elevation = 0.5.dp
+        elevation = 0.dp
     ) {
         Row(
             modifier = Modifier
@@ -1115,7 +1078,7 @@ private fun ContactCard(
                 Icon(
                     Icons.Default.NoteAlt,
                     contentDescription = "Has note",
-                    tint = Color(0xFF42A5F5),
+                    tint = LogoBlueLight,
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
@@ -1152,6 +1115,26 @@ private fun ActionRow(
         verticalAlignment = Alignment.CenterVertically
     ) {
         Icon(icon, label, tint = tint, modifier = Modifier.size(24.dp))
+        Spacer(modifier = Modifier.width(16.dp))
+        Text(label, fontSize = 16.sp, color = labelColor)
+    }
+}
+
+@Composable
+private fun ActionRowPainter(
+    painter: androidx.compose.ui.graphics.painter.Painter,
+    label: String,
+    labelColor: Color = MaterialTheme.colorScheme.onSurface,
+    onClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+            .padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(painter, label, tint = Color.Unspecified, modifier = Modifier.size(24.dp))
         Spacer(modifier = Modifier.width(16.dp))
         Text(label, fontSize = 16.sp, color = labelColor)
     }

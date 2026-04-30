@@ -1,8 +1,9 @@
 package com.byron.trucaller.ui.main
 
-import android.app.Activity
 import android.Manifest
+import android.app.role.RoleManager
 import android.content.pm.PackageManager
+import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -13,49 +14,20 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Alarm
-import androidx.compose.material.icons.filled.BarChart
-import androidx.compose.material.icons.filled.LocationOn
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.Report
-import androidx.compose.material.icons.filled.Sync
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Snackbar
-import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
@@ -70,22 +42,12 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.byron.trucaller.data.model.DeviceStatus
-import com.byron.trucaller.ui.components.EmptyStateIcon
-import com.byron.trucaller.ui.components.EmptyStateView
-import com.byron.trucaller.ui.components.TruCallerAvatar
-import com.byron.trucaller.ui.components.TruCallerCard
-import com.byron.trucaller.ui.components.TruCallerHeader
-import com.byron.trucaller.ui.theme.Accent
-import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
+import com.byron.trucaller.ui.components.*
 import com.byron.trucaller.ui.theme.BrandGold
+import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
-import com.byron.trucaller.viewmodel.AlarmViewModel
-import com.byron.trucaller.viewmodel.AuthViewModel
-import com.byron.trucaller.viewmodel.ContactsViewModel
-import com.byron.trucaller.viewmodel.DeviceViewModel
-import com.byron.trucaller.viewmodel.StolenReportViewModel
+import com.byron.trucaller.viewmodel.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -111,6 +73,31 @@ fun HomeScreen(
     val authState by authViewModel.authState.collectAsState()
     val user = authState.user ?: return
     val colorScheme = MaterialTheme.colorScheme
+    val context = LocalContext.current
+
+    // -- System Status Checks --
+    val roleManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+        context.getSystemService(RoleManager::class.java)
+    } else null
+    
+    var isDefaultDialer by remember { mutableStateOf(true) }
+    var isDefaultSms by remember { mutableStateOf(true) }
+    
+    LaunchedEffect(Unit) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roleManager != null) {
+            isDefaultDialer = roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
+            isDefaultSms = roleManager.isRoleHeld(RoleManager.ROLE_SMS)
+        }
+    }
+
+    val roleLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { _ ->
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roleManager != null) {
+            isDefaultDialer = roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
+            isDefaultSms = roleManager.isRoleHeld(RoleManager.ROLE_SMS)
+        }
+    }
 
     LaunchedEffect(user.id) {
         deviceViewModel.loadUserDevice(user.id)
@@ -131,8 +118,6 @@ fun HomeScreen(
     }.collectAsState(initial = emptyList())
 
     val syncMessage by contactsViewModel.syncMessage.collectAsState()
-
-    val context = LocalContext.current
 
     // Pull-to-refresh state
     val scope = rememberCoroutineScope()
@@ -155,13 +140,12 @@ fun HomeScreen(
         showActivity = true
     }
 
-    // Location permission -- re-register device with GPS after granted
+    // Location permission
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
         val granted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true
         if (granted) {
-            // Re-register device to update location from "Unknown" to actual GPS
             deviceViewModel.refreshDeviceLocation(user.id)
         }
     }
@@ -186,12 +170,12 @@ fun HomeScreen(
         if (granted) contactsViewModel.syncContacts(user.id)
     }
 
-    // Google Drive sign-in launcher for backup
-    val driveSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            contactsViewModel.syncToGoogleDrive()
+    LaunchedEffect(user.id) {
+        val hasContacts = ContextCompat.checkSelfPermission(
+            context, Manifest.permission.READ_CONTACTS
+        ) == PackageManager.PERMISSION_GRANTED
+        if (hasContacts) {
+            contactsViewModel.syncContacts(user.id)
         }
     }
 
@@ -229,71 +213,31 @@ fun HomeScreen(
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
         ) {
-            // -- Gradient header using TruCallerHeader --
             AnimatedVisibility(
                 visible = showHeader,
                 enter = fadeIn(tween(400))
             ) {
                 TruCallerHeader(
                     title = user.fullName,
-                    subtitle = "Welcome back,",
-                    gradientColors = listOf(colorScheme.surface, colorScheme.background),
-                    titleColor = colorScheme.onSurface,
-                    subtitleColor = colorScheme.onSurface.copy(alpha = 0.7f),
+                    subtitle = "Welcome back",
+                    titleColor = colorScheme.onSurface.copy(alpha = 0.7f),
+                    subtitleColor = colorScheme.primary,
                     horizontalPadding = Spacing.lg,
-                    verticalPadding = Spacing.lg,
-                    trailingContent = {
-                        // Uganda flag accent
-                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
-                            Box(
-                                modifier = Modifier
-                                    .width(4.dp)
-                                    .height(28.dp)
-                                    .background(BrandDark, RoundedCornerShape(2.dp))
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .width(4.dp)
-                                    .height(28.dp)
-                                    .background(Brand, RoundedCornerShape(2.dp))
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .width(4.dp)
-                                    .height(28.dp)
-                                    .background(Accent, RoundedCornerShape(2.dp))
-                            )
-                        }
-                    }
+                    verticalPadding = Spacing.lg
                 )
             }
 
             Column(modifier = Modifier.padding(Spacing.md)) {
-                // Sync message snackbar
                 if (syncMessage != null) {
-                    val needsDriveSignIn = !contactsViewModel.isDriveSignedIn()
-                    Snackbar(
-                        modifier = Modifier.padding(bottom = Spacing.sm),
-                        action = {
-                            if (needsDriveSignIn) {
-                                TextButton(onClick = {
-                                    driveSignInLauncher.launch(contactsViewModel.getDriveSignInIntent())
-                                    contactsViewModel.clearSyncMessage()
-                                }) {
-                                    Text("SIGN IN", color = colorScheme.primary)
-                                }
-                            } else {
-                                TextButton(onClick = { contactsViewModel.clearSyncMessage() }) {
-                                    Text("OK", color = colorScheme.onSurface)
-                                }
-                            }
-                        }
-                    ) {
+                    LaunchedEffect(syncMessage) {
+                        delay(4000)
+                        contactsViewModel.clearSyncMessage()
+                    }
+                    Snackbar(modifier = Modifier.padding(bottom = Spacing.sm)) {
                         Text(syncMessage!!)
                     }
                 }
 
-                // -- Device status card using TruCallerCard --
                 AnimatedVisibility(
                     visible = showDevice,
                     enter = slideInVertically(
@@ -301,75 +245,64 @@ fun HomeScreen(
                         animationSpec = tween(350, easing = FastOutSlowInEasing)
                     ) + fadeIn(tween(350))
                 ) {
-                    if (userDevice != null) {
-                        val device = userDevice!!
-                        val statusColor = when (device.status) {
-                            DeviceStatus.ACTIVE -> colorScheme.primary
-                            DeviceStatus.STOLEN -> colorScheme.error
-                            DeviceStatus.INACTIVE -> colorScheme.onSurfaceVariant
-                            DeviceStatus.FLAGGED -> colorScheme.tertiary
-                        }
-                        val isStolenOrFlagged = device.status == DeviceStatus.STOLEN || device.status == DeviceStatus.FLAGGED
-
-                        if (isStolenOrFlagged) {
-                            // Compact oval stolen/flagged badge
-                            TruCallerCard(
-                                cornerRadius = 50.dp,
-                                containerColor = colorScheme.errorContainer,
-                                elevation = 2.dp
-                            ) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Box(
-                                        modifier = Modifier
-                                            .size(36.dp)
-                                            .background(statusColor.copy(alpha = 0.25f), CircleShape),
-                                        contentAlignment = Alignment.Center
-                                    ) {
-                                        Icon(
-                                            Icons.Default.Warning,
-                                            contentDescription = "Device status warning",
-                                            tint = statusColor,
-                                            modifier = Modifier.size(18.dp)
-                                        )
-                                    }
-                                    Spacer(modifier = Modifier.width(12.dp))
-                                    Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            "${device.manufacturer} ${device.model}",
-                                            fontWeight = FontWeight.Bold,
-                                            fontSize = 14.sp,
-                                            color = colorScheme.onSurface
-                                        )
-                                        Text(
-                                            device.status.name,
-                                            color = statusColor,
-                                            fontWeight = FontWeight.SemiBold,
-                                            fontSize = 11.sp
-                                        )
-                                    }
-                                    Box(
-                                        modifier = Modifier
-                                            .background(statusColor.copy(alpha = 0.25f), RoundedCornerShape(50))
-                                            .padding(horizontal = 10.dp, vertical = 3.dp)
-                                    ) {
-                                        Text(
-                                            device.status.name,
-                                            color = statusColor,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.ExtraBold
-                                        )
-                                    }
-                                }
-                            }
-                        } else {
-                            // Normal active device card
+                    Column {
+                        if (!isDefaultDialer || !isDefaultSms) {
                             TruCallerCard(
                                 cornerRadius = 20.dp,
-                                containerColor = colorScheme.surface,
-                                elevation = 4.dp
+                                containerColor = colorScheme.primary.copy(alpha = 0.05f),
+                                elevation = 0.dp
+                            ) {
+                                Column(modifier = Modifier.padding(Spacing.sm)) {
+                                    Text(
+                                        "Security Configuration",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = colorScheme.onSurface,
+                                        modifier = Modifier.padding(bottom = 12.dp)
+                                    )
+
+                                    StatusItem(
+                                        label = "Call Protection",
+                                        isActive = isDefaultDialer,
+                                        onFix = {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                                val intent = roleManager?.createRequestRoleIntent(RoleManager.ROLE_DIALER)
+                                                if (intent != null) roleLauncher.launch(intent)
+                                            }
+                                        }
+                                    )
+
+                                    Spacer(modifier = Modifier.height(8.dp))
+
+                                    StatusItem(
+                                        label = "SMS Filtering",
+                                        isActive = isDefaultSms,
+                                        onFix = {
+                                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                                                val intent = roleManager?.createRequestRoleIntent(RoleManager.ROLE_SMS)
+                                                if (intent != null) roleLauncher.launch(intent)
+                                            }
+                                        }
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(16.dp))
+                        }
+
+                        if (userDevice != null) {
+                            val device = userDevice!!
+                            val statusColor = when (device.status) {
+                                DeviceStatus.ACTIVE -> colorScheme.primary
+                                DeviceStatus.STOLEN -> colorScheme.error
+                                DeviceStatus.INACTIVE -> colorScheme.onSurfaceVariant
+                                DeviceStatus.FLAGGED -> colorScheme.tertiary
+                            }
+                            val isStolenOrFlagged = device.status == DeviceStatus.STOLEN || device.status == DeviceStatus.FLAGGED
+
+                            TruCallerCard(
+                                cornerRadius = 20.dp,
+                                containerColor = if (isStolenOrFlagged) colorScheme.errorContainer else colorScheme.surface,
+                                elevation = 0.dp
                             ) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -377,15 +310,15 @@ fun HomeScreen(
                                 ) {
                                     Box(
                                         modifier = Modifier
-                                            .size(52.dp)
+                                            .size(if (isStolenOrFlagged) 36.dp else 52.dp)
                                             .background(statusColor.copy(alpha = 0.15f), CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Icon(
-                                            Icons.Default.PhoneAndroid,
+                                            if (isStolenOrFlagged) Icons.Default.Warning else Icons.Default.PhoneAndroid,
                                             contentDescription = "Device",
                                             tint = statusColor,
-                                            modifier = Modifier.size(26.dp)
+                                            modifier = Modifier.size(if (isStolenOrFlagged) 18.dp else 26.dp)
                                         )
                                     }
                                     Spacer(modifier = Modifier.width(Spacing.md))
@@ -396,7 +329,6 @@ fun HomeScreen(
                                             fontSize = 16.sp,
                                             color = colorScheme.onSurface
                                         )
-                                        Spacer(modifier = Modifier.height(2.dp))
                                         Text(
                                             device.status.name,
                                             color = statusColor,
@@ -413,8 +345,7 @@ fun HomeScreen(
                                             device.status.name,
                                             color = statusColor,
                                             fontSize = 10.sp,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            letterSpacing = 0.5.sp
+                                            fontWeight = FontWeight.ExtraBold
                                         )
                                     }
                                 }
@@ -423,191 +354,92 @@ fun HomeScreen(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // -- Quick Actions --
                 AnimatedVisibility(
                     visible = showActions,
-                    enter = slideInVertically(
-                        initialOffsetY = { it / 3 },
-                        animationSpec = tween(400, easing = FastOutSlowInEasing)
-                    ) + fadeIn(tween(400))
+                    enter = slideInVertically(initialOffsetY = { it / 3 }, animationSpec = tween(350)) + fadeIn(tween(350))
+                ) {
+                    TruCallerCard(cornerRadius = 20.dp, containerColor = colorScheme.surface, elevation = 0.dp) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceEvenly) {
+                            ProtectionStat(stolenReports.size.toString(), "Reports", colorScheme.error)
+                            ProtectionStat(alarmLogs.size.toString(), "Alarms", colorScheme.tertiary)
+                            ProtectionStat(ipLogs.size.toString(), "IP Logs", colorScheme.primary)
+                            val isProt = userDevice?.status == DeviceStatus.ACTIVE
+                            ProtectionStat(if (isProt) "ON" else "OFF", "Protected", if (isProt) Color(0xFF4CAF50) else colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                AnimatedVisibility(
+                    visible = showActions,
+                    enter = slideInVertically(initialOffsetY = { it / 3 }, animationSpec = tween(400)) + fadeIn(tween(400))
                 ) {
                     Column {
-                        Text(
-                            "Quick Actions",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
-                            color = colorScheme.onBackground,
-                            letterSpacing = (-0.3).sp,
-                            modifier = Modifier.semantics { heading() }
-                        )
+                        Text("Quick Actions", fontWeight = FontWeight.Black, fontSize = 18.sp, color = colorScheme.onBackground, modifier = Modifier.semantics { heading() })
                         Spacer(modifier = Modifier.height(14.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            QuickActionCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("quick_action_report_stolen"),
-                                icon = Icons.Default.Report,
-                                label = "Report\nStolen",
-                                color = colorScheme.error,
-                                onClick = { rootNavController.navigate("report_stolen") }
-                            )
-                            QuickActionCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("quick_action_sync_contacts"),
-                                icon = Icons.Default.Sync,
-                                label = "Sync\nContacts",
-                                color = BrandGold,
-                                onClick = {
-                                    if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS)
-                                        == PackageManager.PERMISSION_GRANTED) {
-                                        contactsViewModel.syncContacts(user.id)
-                                    } else {
-                                        contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
-                                    }
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.Report, "Report\nStolen", colorScheme.error) { rootNavController.navigate("report_stolen") }
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.Sync, "Sync\nContacts", BrandGold) {
+                                if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED) {
+                                    contactsViewModel.syncContacts(user.id)
+                                } else {
+                                    contactsPermissionLauncher.launch(Manifest.permission.READ_CONTACTS)
                                 }
-                            )
-                            QuickActionCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("quick_action_view_ip_log"),
-                                icon = Icons.Default.LocationOn,
-                                label = "View\nIP Log",
-                                color = colorScheme.primary,
-                                onClick = { rootNavController.navigate("ip_logs") }
-                            )
-                            QuickActionCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("quick_action_trigger_alarm"),
-                                icon = Icons.Default.Alarm,
-                                label = "Trigger\nAlarm",
-                                color = colorScheme.secondary,
-                                onClick = { rootNavController.navigate("remote_actions") }
-                            )
+                            }
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.Alarm, "Remote\nAlarm", colorScheme.secondary) { rootNavController.navigate("remote_actions") }
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.LocationOn, "IP\nTracker", colorScheme.primary) { rootNavController.navigate("ip_logs") }
                         }
-
                         Spacer(modifier = Modifier.height(10.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            QuickActionCard(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("quick_action_analytics"),
-                                icon = Icons.Default.BarChart,
-                                label = "My\nAnalytics",
-                                color = colorScheme.tertiary,
-                                onClick = { rootNavController.navigate("analytics") }
-                            )
-                            // Spacer cards to keep layout consistent
-                            Spacer(modifier = Modifier.weight(1f))
-                            Spacer(modifier = Modifier.weight(1f))
-                            Spacer(modifier = Modifier.weight(1f))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.BarChart, "My\nAnalytics", colorScheme.tertiary) { rootNavController.navigate("analytics") }
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.Shield, "Security\nCenter", Color(0xFF4CAF50)) { rootNavController.navigate("security") }
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.Schedule, "Block\nSchedules", Color(0xFF7E57C2)) { rootNavController.navigate("blocking_schedules") }
+                            QuickActionCard(Modifier.weight(1f), Icons.Default.Groups, "Family\nGroups", Color(0xFF29B6F6)) { rootNavController.navigate("family_groups") }
                         }
                     }
                 }
 
                 Spacer(modifier = Modifier.height(Spacing.lg))
 
-                // -- Recent Activity --
                 AnimatedVisibility(
                     visible = showActivity,
-                    enter = slideInVertically(
-                        initialOffsetY = { it / 4 },
-                        animationSpec = tween(450, easing = FastOutSlowInEasing)
-                    ) + fadeIn(tween(450))
+                    enter = slideInVertically(initialOffsetY = { it / 4 }, animationSpec = tween(450)) + fadeIn(tween(450))
                 ) {
                     Column {
-                        Text(
-                            "Recent Activity",
-                            fontWeight = FontWeight.Black,
-                            fontSize = 18.sp,
-                            color = colorScheme.onBackground,
-                            letterSpacing = (-0.3).sp,
-                            modifier = Modifier.semantics { heading() }
-                        )
+                        Text("Recent Activity", fontWeight = FontWeight.Black, fontSize = 18.sp, color = colorScheme.onBackground, modifier = Modifier.semantics { heading() })
                         Spacer(modifier = Modifier.height(12.dp))
-
                         if (activities.isEmpty()) {
                             EmptyStateView(
                                 title = "No recent activity",
-                                subtitle = "Device events and reports will appear here as they occur.",
+                                subtitle = "Device events and reports will appear here.",
                                 icon = EmptyStateIcon.GENERIC,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(240.dp)
+                                modifier = Modifier.fillMaxWidth().height(240.dp)
                             )
                         } else {
-                            TruCallerCard(
-                                cornerRadius = 20.dp,
-                                elevation = 2.dp
-                            ) {
+                            TruCallerCard(cornerRadius = 20.dp, elevation = 0.dp) {
                                 activities.forEachIndexed { index, activity ->
-                                    // Staggered item animation
                                     var itemVisible by remember { mutableStateOf(false) }
-                                    LaunchedEffect(activity.id) {
-                                        delay(index * 60L)
-                                        itemVisible = true
-                                    }
-
-                                    AnimatedVisibility(
-                                        visible = itemVisible,
-                                        enter = fadeIn(tween(300)) + slideInVertically(
-                                            initialOffsetY = { it / 4 },
-                                            animationSpec = tween(300, easing = FastOutSlowInEasing)
-                                        )
-                                    ) {
+                                    LaunchedEffect(activity.id) { delay(index * 60L); itemVisible = true }
+                                    AnimatedVisibility(visible = itemVisible, enter = fadeIn() + slideInVertically()) {
                                         Column {
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = Spacing.sm),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                // Use TruCallerAvatar for activity items
+                                            Row(Modifier.fillMaxWidth().padding(vertical = Spacing.sm), verticalAlignment = Alignment.CenterVertically) {
                                                 TruCallerAvatar(
                                                     name = activity.title,
                                                     size = 42.dp,
-                                                    contentDesc = "${activity.title} icon"
+                                                    imageUri = null
                                                 )
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        activity.title,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        fontSize = 14.sp,
-                                                        color = colorScheme.onSurface
-                                                    )
-                                                    Text(
-                                                        activity.subtitle,
-                                                        fontSize = 12.sp,
-                                                        color = colorScheme.onSurfaceVariant,
-                                                        maxLines = 1
-                                                    )
+                                                Spacer(Modifier.width(12.dp))
+                                                Column(Modifier.weight(1f)) {
+                                                    Text(activity.title, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colorScheme.onSurface)
+                                                    Text(activity.subtitle, fontSize = 12.sp, color = colorScheme.onSurfaceVariant, maxLines = 1)
                                                 }
-                                                Text(
-                                                    formatRelativeTime(activity.timestamp),
-                                                    fontSize = 11.sp,
-                                                    color = colorScheme.outline
-                                                )
+                                                Text(formatRelativeTime(activity.timestamp), fontSize = 11.sp, color = colorScheme.outline)
                                             }
                                             if (index < activities.lastIndex) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .padding(start = 54.dp)
-                                                        .height(0.5.dp)
-                                                        .background(colorScheme.outlineVariant)
-                                                )
+                                                Box(Modifier.fillMaxWidth().padding(start = 54.dp).height(0.5.dp).background(GlassBorder))
                                             }
                                         }
                                     }
@@ -616,7 +448,6 @@ fun HomeScreen(
                         }
                     }
                 }
-
                 Spacer(modifier = Modifier.height(Spacing.lg))
             }
         }
@@ -624,75 +455,45 @@ fun HomeScreen(
 }
 
 @Composable
-private fun QuickActionCard(
-    modifier: Modifier = Modifier,
-    icon: ImageVector,
-    label: String,
-    color: Color,
-    onClick: () -> Unit
-) {
+private fun StatusItem(label: String, isActive: Boolean, onFix: () -> Unit) {
     val colorScheme = MaterialTheme.colorScheme
-
-    // Press scale animation
-    var isPressed by remember { mutableStateOf(false) }
-    val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.93f else 1f,
-        animationSpec = tween(durationMillis = 120, easing = FastOutSlowInEasing),
-        label = "quickActionScale"
-    )
-    val shadowElevation by animateFloatAsState(
-        targetValue = if (isPressed) 0f else 4f,
-        animationSpec = tween(durationMillis = 120),
-        label = "quickActionShadow"
-    )
-
-    TruCallerCard(
-        modifier = modifier
-            .scale(scale)
-            .shadow(
-                elevation = shadowElevation.dp,
-                shape = RoundedCornerShape(Spacing.md),
-                clip = false
-            )
-            .pointerInput(Unit) {
-                detectTapGestures(
-                    onPress = {
-                        isPressed = true
-                        try {
-                            awaitRelease()
-                        } finally {
-                            isPressed = false
-                        }
-                        onClick()
-                    }
-                )
-            },
-        cornerRadius = Spacing.md,
-        containerColor = colorScheme.surfaceVariant,
-        elevation = 0.dp
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .background(color.copy(alpha = 0.12f), CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = label.replace("\n", " "), tint = color, modifier = Modifier.size(22.dp))
-            }
-            Spacer(modifier = Modifier.height(10.dp))
-            Text(
-                text = label,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                color = colorScheme.onSurface,
-                lineHeight = 15.sp,
-                textAlign = TextAlign.Center,
-                letterSpacing = 0.1.sp
-            )
+    Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+        Box(modifier = Modifier.size(24.dp).background(if (isActive) Color(0xFF4CAF50).copy(alpha = 0.15f) else colorScheme.error.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(if (isActive) Icons.Default.GppGood else Icons.Default.Shield, null, tint = if (isActive) Color(0xFF4CAF50) else colorScheme.error, modifier = Modifier.size(14.dp))
         }
+        Spacer(modifier = Modifier.width(12.dp))
+        Text(label, fontSize = 13.sp, color = colorScheme.onSurface.copy(alpha = 0.8f), modifier = Modifier.weight(1f))
+        if (!isActive) {
+            TextButton(onClick = onFix, modifier = Modifier.height(28.dp), contentPadding = PaddingValues(horizontal = 12.dp, vertical = 0.dp)) {
+                Text("FIX", fontSize = 11.sp, fontWeight = FontWeight.ExtraBold)
+            }
+        } else {
+            Text("ACTIVE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = Color(0xFF4CAF50), modifier = Modifier.padding(horizontal = 8.dp))
+        }
+    }
+}
+
+@Composable
+private fun QuickActionCard(modifier: Modifier = Modifier, icon: ImageVector, label: String, color: Color, onClick: () -> Unit) {
+    val colorScheme = MaterialTheme.colorScheme
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(if (isPressed) 0.93f else 1f, label = "scale")
+    TruCallerCard(modifier = modifier.scale(scale).pointerInput(Unit) { detectTapGestures(onPress = { isPressed = true; try { awaitRelease() } finally { isPressed = false }; onClick() }) }, cornerRadius = Spacing.md, containerColor = colorScheme.surface, elevation = 0.dp) {
+        Column(modifier = Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Box(Modifier.size(40.dp).background(color.copy(alpha = 0.15f), CircleShape), contentAlignment = Alignment.Center) {
+                Icon(icon, null, tint = color, modifier = Modifier.size(20.dp))
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(label, fontSize = 10.sp, fontWeight = FontWeight.SemiBold, color = colorScheme.onSurface, lineHeight = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
+        }
+    }
+}
+
+@Composable
+private fun ProtectionStat(value: String, label: String, color: Color) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(vertical = 4.dp)) {
+        Text(value, fontSize = 28.sp, fontWeight = FontWeight.Black, color = color, letterSpacing = (-0.5).sp)
+        Spacer(Modifier.height(2.dp))
+        Text(label, fontSize = 12.sp, fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f))
     }
 }

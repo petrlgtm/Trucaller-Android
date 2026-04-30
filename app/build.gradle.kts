@@ -3,6 +3,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.ksp)
     alias(libs.plugins.google.services)
+    id("androidx.room") version "2.8.4"
 }
 
 // Load signing credentials from local.properties, keystore.properties, or environment variables.
@@ -31,8 +32,8 @@ android {
         applicationId = "com.byron.trucaller"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -64,6 +65,7 @@ android {
             buildConfigField("Boolean", "ENABLE_ANALYTICS", "true")
             buildConfigField("Boolean", "ENABLE_GEOFENCING", "true")
             buildConfigField("Boolean", "LOG_HTTP_REQUESTS", "true")
+            signingConfig = signingConfigs.getByName("release")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"https://trucaller-backend.onrender.com\"")
@@ -95,6 +97,8 @@ android {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
             excludes += "META-INF/DEPENDENCIES"
             excludes += "META-INF/LICENSE"
+            excludes += "META-INF/LICENSE.md"
+            excludes += "META-INF/LICENSE-notice.md"
             excludes += "META-INF/LICENSE.txt"
             excludes += "META-INF/license.txt"
             excludes += "META-INF/NOTICE"
@@ -103,6 +107,13 @@ android {
             excludes += "META-INF/INDEX.LIST"
         }
     }
+}
+
+room {
+    // Migration tests depend on these JSON schemas being present under androidTest assets.
+    // MigrationTestHelper loads:
+    //   app/src/androidTest/assets/<dbCanonicalName>/<version>.json
+    schemaDirectory("$projectDir/src/androidTest/assets")
 }
 
 dependencies {
@@ -132,6 +143,7 @@ dependencies {
     androidTestImplementation(libs.mockk.android)
     androidTestImplementation(libs.kotlinx.coroutines.test)
     androidTestImplementation(libs.truth)
+    androidTestImplementation(libs.room.testing)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
     implementation(libs.room.runtime)
@@ -151,6 +163,7 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.okhttp.logging)
     implementation(libs.coil.compose)
+    implementation(libs.coil.network.okhttp)
     implementation(libs.profileinstaller)
-    debugImplementation(libs.leakcanary)
+    implementation(libs.work.runtime.ktx)
 }

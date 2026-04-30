@@ -45,6 +45,10 @@ class LocationService(private val context: Context) {
     /** Tracks any active location callback so it can be cleaned up. */
     private var activeCallback: LocationCallback? = null
 
+    /** Simple cache to prevent redundant GPS hits within a short window (2 mins) */
+    private var cachedLocation: Pair<LocationInfo, Long>? = null
+    private val CACHE_EXPIRY_MS = 120_000L // 2 minutes
+
     companion object {
         const val REQUEST_CHECK_SETTINGS = 9001
 
@@ -117,6 +121,13 @@ class LocationService(private val context: Context) {
     suspend fun getCurrentLocation(): LocationInfo {
         if (!hasLocationPermission()) return LocationInfo.unknown()
 
+        // Check cache first to save battery
+        cachedLocation?.let { (info, timestamp) ->
+            if (System.currentTimeMillis() - timestamp < CACHE_EXPIRY_MS) {
+                return info
+            }
+        }
+
         return try {
             // Method 1: Force a fresh GPS fix (most accurate)
             val fresh = withTimeoutOrNull(10_000L) { requestCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY) }
@@ -188,15 +199,15 @@ class LocationService(private val context: Context) {
                 .addOnSuccessListener { location ->
                     if (location != null) {
                         val geo = reverseGeocode(location.latitude, location.longitude)
-                        cont.resume(
-                            LocationInfo(
-                                latitude = location.latitude,
-                                longitude = location.longitude,
-                                city = geo.first,
-                                country = geo.second,
-                                accuracy = location.accuracy
-                            )
+                        val info = LocationInfo(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            city = geo.first,
+                            country = geo.second,
+                            accuracy = location.accuracy
                         )
+                        cachedLocation = info to System.currentTimeMillis()
+                        cont.resume(info)
                     } else {
                         cont.resume(null)
                     }
@@ -256,6 +267,7 @@ class LocationService(private val context: Context) {
                         resumed = true
                         fusedClient.removeLocationUpdates(this)
                         activeCallback = null
+                        cachedLocation = info to System.currentTimeMillis()
                         cont.resume(info)
                     } else if (updateCount >= maxUpdates && !resumed) {
                         // All updates received without hitting accuracy threshold;
@@ -289,15 +301,15 @@ class LocationService(private val context: Context) {
                 .addOnSuccessListener { location ->
                     if (location != null) {
                         val geo = reverseGeocode(location.latitude, location.longitude)
-                        cont.resume(
-                            LocationInfo(
-                                latitude = location.latitude,
-                                longitude = location.longitude,
-                                city = geo.first,
-                                country = geo.second,
-                                accuracy = location.accuracy
-                            )
+                        val info = LocationInfo(
+                            latitude = location.latitude,
+                            longitude = location.longitude,
+                            city = geo.first,
+                            country = geo.second,
+                            accuracy = location.accuracy
                         )
+                        cachedLocation = info to System.currentTimeMillis()
+                        cont.resume(info)
                     } else {
                         cont.resume(null)
                     }
@@ -314,8 +326,13 @@ class LocationService(private val context: Context) {
     private fun reverseGeocode(latitude: Double, longitude: Double): Pair<String, String> {
         return try {
             val geocoder = Geocoder(context, Locale.getDefault())
+            
+            // On API 33+, we should ideally use the callback-based API.
+            // However, since this is called from suspend functions, we keep 
+            // the blocking call for structural simplicity while acknowledging the deprecation.
             @Suppress("DEPRECATION")
             val addresses = geocoder.getFromLocation(latitude, longitude, 1)
+            
             if (!addresses.isNullOrEmpty()) {
                 val address = addresses[0]
                 // Build a detailed location string

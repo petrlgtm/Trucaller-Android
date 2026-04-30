@@ -64,6 +64,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.byron.trucaller.service.PhoneAuthState
 import com.byron.trucaller.ui.components.TruCallerButton
+import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.util.DeviceAdminHelper
 import com.byron.trucaller.util.maskPhoneNumber
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -220,7 +221,7 @@ fun OtpVerificationScreen(
                 Text(
                     "Verify Phone",
                     fontWeight = FontWeight.Bold,
-                    color = colorScheme.onPrimary
+                    color = colorScheme.onBackground
                 )
             },
             navigationIcon = {
@@ -228,12 +229,12 @@ fun OtpVerificationScreen(
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         "Back",
-                        tint = colorScheme.onPrimary
+                        tint = colorScheme.onBackground
                     )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = colorScheme.onPrimary
+                containerColor = colorScheme.background
             )
         )
 
@@ -329,26 +330,25 @@ fun OtpVerificationScreen(
                                 Box(
                                     modifier = Modifier
                                         .weight(1f)
-                                        .height(52.dp)
+                                        .height(56.dp)
                                         .border(
-                                            width = if (isFocused) 2.dp else 1.5.dp,
+                                            width = if (isFocused) 2.dp else 1.dp,
                                             color = when {
                                                 error != null -> colorScheme.error
                                                 isFocused -> colorScheme.primary
-                                                char.isNotEmpty() -> colorScheme.primary
-                                                else -> colorScheme.outline
+                                                else -> GlassBorder
                                             },
-                                            shape = RoundedCornerShape(12.dp)
+                                            shape = RoundedCornerShape(14.dp)
                                         )
                                         .background(
-                                            if (char.isNotEmpty()) colorScheme.surfaceVariant else colorScheme.background,
-                                            RoundedCornerShape(12.dp)
+                                            colorScheme.surface,
+                                            RoundedCornerShape(14.dp)
                                         ),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
                                         text = char,
-                                        fontSize = 22.sp,
+                                        fontSize = 24.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = colorScheme.onBackground,
                                         textAlign = TextAlign.Center
@@ -402,7 +402,7 @@ fun OtpVerificationScreen(
                     }) {
                         Text(
                             "Resend Code",
-                            color = colorScheme.secondary,
+                            color = colorScheme.primary,
                             fontWeight = FontWeight.SemiBold
                         )
                     }

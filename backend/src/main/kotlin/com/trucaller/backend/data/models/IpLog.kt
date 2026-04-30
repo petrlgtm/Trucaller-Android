@@ -16,5 +16,16 @@ data class IpLog(
     val latitude: Double,
     val longitude: Double,
     val networkType: String,       // "wifi", "mobile"
-    val timestamp: String          // ISO 8601
+    val timestamp: String,         // ISO 8601 (kept for backward compat)
+    val startTime: String = timestamp,  // When device first appeared at this location
+    val lastSeen: String = timestamp,   // Last time device was seen at this location
+    val nearbyDevices: List<NearbyDevice> = emptyList()
+)
+
+@Serializable
+data class NearbyDevice(
+    val name: String,
+    val macAddress: String,
+    val rssi: Int,
+    val type: String
 )

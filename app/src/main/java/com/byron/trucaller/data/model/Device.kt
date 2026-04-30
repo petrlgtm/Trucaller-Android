@@ -3,9 +3,7 @@ package com.byron.trucaller.data.model
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-enum class DeviceStatus {
-    ACTIVE, STOLEN, INACTIVE, FLAGGED
-}
+enum class DeviceStatus { ACTIVE, STOLEN, INACTIVE, FLAGGED }
 
 @Entity(tableName = "devices")
 data class Device(
@@ -33,5 +31,15 @@ data class IpLog(
     val latitude: Double,
     val longitude: Double,
     val networkType: String,
-    val timestamp: String
+    val timestamp: String,
+    val startTime: String = timestamp,
+    val lastSeen: String = timestamp,
+    val nearbyDevices: List<NearbyDevice> = emptyList()
+)
+
+data class NearbyDevice(
+    val name: String,
+    val macAddress: String,
+    val rssi: Int,
+    val type: String // "BLE", "CLASSIC", "UNKNOWN"
 )

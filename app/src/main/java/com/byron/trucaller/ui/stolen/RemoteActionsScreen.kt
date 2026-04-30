@@ -34,7 +34,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.PathEffect
@@ -95,6 +94,7 @@ import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.components.TruCallerButtonStyle
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.BorderRadius
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
@@ -110,7 +110,7 @@ import java.util.TimeZone
 private enum class PendingRemoteAction { ALARM, LOCK, LOCATION }
 
 private val SuccessColor = Color(0xFF4CAF50)
-private val WarningColor = Color(0xFFFF9800)
+private val WarningColor = BrandGold
 
 private val TIMELINE_DOT_COLORS = listOf(
     Color(0xFFE53935), Color(0xFF1565C0), Color(0xFFFB8C00), Color(0xFF43A047),
@@ -362,12 +362,6 @@ fun RemoteActionsScreen(
                                     Box(
                                         modifier = Modifier
                                             .size(52.dp)
-                                            .shadow(
-                                                elevation = if (isFocused) 4.dp else 2.dp,
-                                                shape = RoundedCornerShape(12.dp),
-                                                ambientColor = if (isFocused) colorScheme.primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f),
-                                                spotColor = if (isFocused) colorScheme.primary.copy(alpha = 0.3f) else Color.Black.copy(alpha = 0.1f)
-                                            )
                                             .border(
                                                 if (isFocused) 2.dp else 1.5.dp,
                                                 if (isFocused || char.isNotEmpty()) colorScheme.primary else colorScheme.outlineVariant,
@@ -550,18 +544,10 @@ fun RemoteActionsScreen(
                 title = {},
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onError)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent),
-                modifier = Modifier.background(
-                    Brush.verticalGradient(
-                        colors = listOf(
-                            colorScheme.error,
-                            colorScheme.error.copy(alpha = 0.85f)
-                        )
-                    )
-                )
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
             )
             Box(
                 modifier = Modifier
@@ -844,7 +830,7 @@ fun RemoteActionsScreen(
                                             Brush.verticalGradient(
                                                 colors = listOf(
                                                     Color.Transparent,
-                                                    colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                                                    colorScheme.surface.copy(alpha = 0.6f)
                                                 )
                                             )
                                         )

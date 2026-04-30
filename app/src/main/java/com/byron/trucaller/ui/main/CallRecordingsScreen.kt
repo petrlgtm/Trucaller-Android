@@ -87,6 +87,8 @@ import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.ShimmerLoadingList
 import com.byron.trucaller.ui.components.TruCallerHeader
 import com.byron.trucaller.ui.components.TruCallerTextField
+import com.byron.trucaller.ui.theme.BrandGold
+import com.byron.trucaller.ui.theme.LogoBlueLight
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.CallRecording
 import com.byron.trucaller.viewmodel.CallRecordingsViewModel
@@ -155,7 +157,6 @@ fun CallRecordingsScreen(
         TruCallerHeader(
             title = "Recordings",
             subtitle = "${recordings.size} recordings",
-            gradientColors = listOf(colorScheme.surface, colorScheme.background),
             trailingContent = {
                 IconButton(onClick = { navController.popBackStack() }) {
                     Icon(
@@ -205,8 +206,8 @@ fun CallRecordingsScreen(
                 val chipColor = when (filter) {
                     RecordingFilter.ALL -> colorScheme.primary
                     RecordingFilter.INCOMING -> Color(0xFF4CAF50)
-                    RecordingFilter.OUTGOING -> Color(0xFF42A5F5)
-                    RecordingFilter.STARRED -> Color(0xFFFF9800)
+                    RecordingFilter.OUTGOING -> LogoBlueLight
+                    RecordingFilter.STARRED -> BrandGold
                 }
                 val count = when (filter) {
                     RecordingFilter.ALL -> recordings.size
@@ -238,7 +239,7 @@ fun CallRecordingsScreen(
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = chipColor,
                         selectedLabelColor = colorScheme.onPrimary,
-                        containerColor = colorScheme.surfaceVariant,
+                        containerColor = colorScheme.surface,
                         labelColor = colorScheme.onSurface.copy(alpha = 0.7f)
                     ),
                     border = FilterChipDefaults.filterChipBorder(
@@ -401,7 +402,7 @@ private fun StorageSummaryCard(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
-            .background(colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+            .background(colorScheme.surface, RoundedCornerShape(12.dp))
             .clickable { onManageStorage() }
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -604,7 +605,7 @@ private fun RecordingItem(
 
     val directionColor = when (recording.direction) {
         RecordingDirection.INCOMING -> Color(0xFF4CAF50)
-        RecordingDirection.OUTGOING -> Color(0xFF42A5F5)
+        RecordingDirection.OUTGOING -> LogoBlueLight
     }
 
     val directionIcon = when (recording.direction) {
@@ -671,7 +672,7 @@ private fun RecordingItem(
                     Icon(
                         Icons.Default.Star,
                         contentDescription = "Starred",
-                        tint = Color(0xFFFF9800),
+                        tint = BrandGold,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -748,7 +749,7 @@ private fun InlinePlayer(
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .background(colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            .background(colorScheme.surface.copy(alpha = 0.5f))
             .padding(horizontal = 16.dp, vertical = 10.dp)
     ) {
         // Seek bar
@@ -986,7 +987,7 @@ private fun ManageStorageDialog(
                                 .clip(RoundedCornerShape(8.dp))
                                 .background(
                                     if (isSelected) colorScheme.primary
-                                    else colorScheme.surfaceVariant
+                                    else colorScheme.surface
                                 )
                                 .clickable { selectedDays = days }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)

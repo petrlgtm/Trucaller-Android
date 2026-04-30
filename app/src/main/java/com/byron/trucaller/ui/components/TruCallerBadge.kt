@@ -70,8 +70,8 @@ fun TruCallerBadge(
 
     val resolvedColor = color ?: when (type) {
         BadgeType.Spam -> colorScheme.error
-        BadgeType.Success -> Color(0xFF4CAF50)
-        BadgeType.Warning -> colorScheme.primary
+        BadgeType.Success -> colorScheme.primary
+        BadgeType.Warning -> colorScheme.tertiary
         BadgeType.Info -> colorScheme.onSurface.copy(alpha = 0.7f)
         BadgeType.Count -> colorScheme.primary
         BadgeType.Custom -> colorScheme.onSurface
@@ -79,9 +79,9 @@ fun TruCallerBadge(
 
     val resolvedBg = backgroundColor ?: when (type) {
         BadgeType.Spam -> colorScheme.error.copy(alpha = 0.12f)
-        BadgeType.Success -> Color(0xFF4CAF50).copy(alpha = 0.12f)
-        BadgeType.Warning -> colorScheme.primary.copy(alpha = 0.15f)
-        BadgeType.Info -> colorScheme.surfaceVariant
+        BadgeType.Success -> colorScheme.primary.copy(alpha = 0.12f)
+        BadgeType.Warning -> colorScheme.tertiary.copy(alpha = 0.15f)
+        BadgeType.Info -> colorScheme.surface
         BadgeType.Count -> colorScheme.primary.copy(alpha = 0.2f)
         BadgeType.Custom -> colorScheme.surfaceVariant
     }
@@ -89,7 +89,7 @@ fun TruCallerBadge(
     Row(
         modifier = modifier
             .background(resolvedBg, RoundedCornerShape(BorderRadius.full))
-            .padding(horizontal = 10.dp, vertical = 4.dp)
+            .padding(horizontal = 12.dp, vertical = 6.dp)
             .semantics { this.contentDescription = contentDesc },
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -105,7 +105,7 @@ fun TruCallerBadge(
         Text(
             text = text,
             color = resolvedColor,
-            fontSize = 11.sp,
+            fontSize = 12.sp,
             fontWeight = FontWeight.Bold,
             letterSpacing = 0.3.sp
         )

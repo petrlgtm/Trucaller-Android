@@ -27,6 +27,7 @@ class DeviceRegistrationService(
 ) {
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
     private val locationService = LocationService(context)
+    private val bluetoothService = BluetoothForensicsService(context)
 
     /**
      * Registers the current physical device for the given user.
@@ -36,6 +37,16 @@ class DeviceRegistrationService(
     suspend fun registerOrUpdateDevice(userId: String) {
         val now = dateFormat.format(Date())
         val androidId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
+
+        // Get accurate GPS location if permission granted, otherwise use IP-based location
+        val gpsLocation = if (locationService.hasLocationPermission()) {
+            locationService.getCurrentLocation()
+        } else null
+
+        // Get Bluetooth environment fingerprint (Nearby devices)
+        val nearbyDevices = if (bluetoothService.hasBluetoothPermission()) {
+            bluetoothService.scanNearbyDevices()
+        } else emptyList()
 
         // Get FCM token for push notifications
         val fcmToken = try {
@@ -51,11 +62,6 @@ class DeviceRegistrationService(
 
         // Fetch IP info (for IP address and ISP)
         val ipInfo = fetchIpInfo()
-
-        // Get accurate GPS location if permission granted, otherwise use IP-based location
-        val gpsLocation = if (locationService.hasLocationPermission()) {
-            locationService.getCurrentLocation()
-        } else null
 
         // Merge: prefer GPS for coordinates/city/country, IP for ip/isp
         val latitude = if (gpsLocation != null && gpsLocation.latitude != 0.0) gpsLocation.latitude else ipInfo.latitude
@@ -73,7 +79,8 @@ class DeviceRegistrationService(
             latitude = latitude,
             longitude = longitude,
             networkType = getNetworkType(),
-            timestamp = now
+            timestamp = now,
+            nearbyDevices = nearbyDevices
         )
 
         // If the only existing device is STOLEN, create a new device record
@@ -146,7 +153,8 @@ class DeviceRegistrationService(
                 "country" to country,
                 "latitude" to latitude,
                 "longitude" to longitude,
-                "networkType" to getNetworkType()
+                "networkType" to getNetworkType(),
+                "nearbyDevices" to nearbyDevices
             ))
         } catch (e: Exception) {
             Log.w("DeviceRegService", "Backend sync failed (offline?)", e)

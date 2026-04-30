@@ -25,7 +25,7 @@ class AppContainer(context: Context) {
         TruCallerDatabase::class.java,
         "trucaller_database"
     )
-        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12, TruCallerDatabase.MIGRATION_12_13, TruCallerDatabase.MIGRATION_13_14)
+        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12, TruCallerDatabase.MIGRATION_12_13, TruCallerDatabase.MIGRATION_13_14, TruCallerDatabase.MIGRATION_14_15, TruCallerDatabase.MIGRATION_15_16)
         .fallbackToDestructiveMigration(true)
         .build()
 
@@ -46,7 +46,7 @@ class AppContainer(context: Context) {
     val smsRuleRepository by lazy { SmsRuleRepository(database.smsRuleDao()) }
     val callRecordingRepository by lazy { CallRecordingRepository(database.callRecordingDao()) }
     val blockingScheduleRepository by lazy { BlockingScheduleRepository(database.blockingScheduleDao()) }
-    val familyGroupRepository by lazy { FamilyGroupRepository(database.familyGroupDao(), database.familyMemberDao()) }
+    val familyGroupRepository by lazy { FamilyGroupRepository(database, database.familyGroupDao(), database.familyMemberDao()) }
     val smsRepository by lazy { SmsRepository(database.smsSpamDao(), callerIdRepository, blockedNumberRepository, smsRuleRepository) }
 
     suspend fun seedDatabaseIfEmpty() {

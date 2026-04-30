@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.byron.trucaller.ui.theme.BorderRadius
+import com.byron.trucaller.ui.theme.GlassBorder
 
 /**
  * A themed text field composable with consistent styling across light and dark modes.
@@ -90,7 +91,7 @@ fun TruCallerTextField(
     onImeAction: (() -> Unit)? = null,
     visualTransformation: VisualTransformation = VisualTransformation.None,
     contentDesc: String = label ?: placeholder,
-    fieldHeight: Dp? = if (isSearch) 48.dp else null
+    fieldHeight: Dp? = if (isSearch) 52.dp else null
 ) {
     val colorScheme = MaterialTheme.colorScheme
 
@@ -106,7 +107,7 @@ fun TruCallerTextField(
                     Icon(
                         imageVector = Icons.Default.Close,
                         contentDescription = "Clear text",
-                        tint = colorScheme.onSurface.copy(alpha = 0.5f),
+                        tint = colorScheme.onSurface.copy(alpha = 0.35f),
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -117,7 +118,7 @@ fun TruCallerTextField(
                 Icon(
                     imageVector = trailingIcon,
                     contentDescription = null,
-                    tint = colorScheme.onSurface.copy(alpha = 0.5f),
+                    tint = colorScheme.onSurface.copy(alpha = 0.35f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -133,7 +134,7 @@ fun TruCallerTextField(
             .then(heightModifier)
             .semantics { this.contentDescription = contentDesc },
         placeholder = if (placeholder.isNotEmpty()) {
-            { Text(placeholder, color = colorScheme.onSurface.copy(alpha = 0.5f), fontSize = 14.sp) }
+            { Text(placeholder, color = colorScheme.onSurface.copy(alpha = 0.35f), fontSize = 14.sp) }
         } else null,
         label = if (label != null) {
             { Text(label) }
@@ -143,7 +144,7 @@ fun TruCallerTextField(
                 Icon(
                     imageVector = effectiveLeadingIcon,
                     contentDescription = null,
-                    tint = colorScheme.onSurface.copy(alpha = 0.5f),
+                    tint = colorScheme.onSurface.copy(alpha = 0.35f),
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -174,12 +175,12 @@ fun TruCallerTextField(
             fontSize = 14.sp,
             color = colorScheme.onSurface
         ),
-        shape = RoundedCornerShape(BorderRadius.lg),
+        shape = RoundedCornerShape(14.dp),
         colors = OutlinedTextFieldDefaults.colors(
             focusedBorderColor = colorScheme.primary,
-            unfocusedBorderColor = colorScheme.outline,
+            unfocusedBorderColor = GlassBorder,
             focusedContainerColor = colorScheme.surfaceVariant,
-            unfocusedContainerColor = colorScheme.surfaceVariant,
+            unfocusedContainerColor = colorScheme.surface,
             cursorColor = colorScheme.primary,
             focusedTextColor = colorScheme.onSurface,
             unfocusedTextColor = colorScheme.onSurface,

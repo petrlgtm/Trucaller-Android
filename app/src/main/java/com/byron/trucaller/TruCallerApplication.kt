@@ -3,11 +3,14 @@ package com.byron.trucaller
 import android.app.Application
 import android.util.Log
 import com.byron.trucaller.di.AppContainer
+import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.service.NotificationChannelManager
+import com.byron.trucaller.service.SpamSyncWorker
 import com.byron.trucaller.util.SecurityUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import com.byron.trucaller.BuildConfig
 
 class TruCallerApplication : Application() {
     lateinit var container: AppContainer
@@ -20,19 +23,16 @@ class TruCallerApplication : Application() {
         super.onCreate()
         container = AppContainer(this)
 
-        // ── Root Detection ─────────────────────────────────────────────────
-        CoroutineScope(Dispatchers.Default).launch {
-            isDeviceRooted = SecurityUtils.isDeviceRooted()
-            if (isDeviceRooted) {
-                val indicators = SecurityUtils.getRootIndicators()
-                Log.w(TAG, "SECURITY WARNING: Device appears to be rooted. " +
-                        "Indicators: ${indicators.joinToString()}")
-            }
-        }
+        // Ensure the HTTP client talks to the environment we built for.
+        ApiClient.setBaseUrl(BuildConfig.API_BASE_URL)
+
+        // Root detection disabled to ensure app accessibility
+        isDeviceRooted = false
 
         // Defer non-critical initializations off the main thread
         CoroutineScope(Dispatchers.IO).launch {
             container.seedDatabaseIfEmpty()
+            SpamSyncWorker.schedule(this@TruCallerApplication)
         }
 
         // Defer notification channel creation — still synchronous but low-cost,

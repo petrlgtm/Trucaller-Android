@@ -34,6 +34,27 @@ class CallerIdRepository(
     suspend fun getEntriesByIds(ids: List<String>): List<CallerIdEntry> = callerIdDao.getByIds(ids)
 
     /**
+     * Downloads the latest spam signatures from the backend and updates local cache.
+     */
+    suspend fun syncSpamDatabase() {
+        try {
+            val apiResult = withTimeoutOrNull(30_000L) {
+                ApiClient.getLatestSpamSignatures()
+            }
+            if (apiResult != null && apiResult.success && apiResult.data != null) {
+                val entries = (apiResult.data as? List<*>)?.mapNotNull { item ->
+                    @Suppress("UNCHECKED_CAST")
+                    val map = item as? Map<String, Any> ?: return@mapNotNull null
+                    BackendMappers.mapLookupToCallerIdEntry(map)
+                }
+                if (!entries.isNullOrEmpty()) {
+                    callerIdDao.insertAll(entries)
+                }
+            }
+        } catch (_: Exception) {}
+    }
+
+    /**
      * Fast local-only lookup — checks Room DB, users, contacts, and aliases
      * but skips the backend API call. Use this for bulk operations like
      * call log and SMS enrichment where speed matters.

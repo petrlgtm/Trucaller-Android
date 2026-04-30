@@ -73,6 +73,7 @@ import com.byron.trucaller.data.model.SmsRuleType
 import com.byron.trucaller.ui.components.EmptyStateIcon
 import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.ShimmerLoadingList
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.SmsRulesViewModel
@@ -122,7 +123,7 @@ fun SmsRulesScreen(
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.surface,
+                    containerColor = colorScheme.background,
                     titleContentColor = colorScheme.onSurface
                 )
             )
@@ -263,7 +264,7 @@ private fun SmsRuleItem(
             val typeColor = when (rule.ruleType) {
                 SmsRuleType.SENDER_MATCH -> Color(0xFF4CAF50)
                 SmsRuleType.KEYWORD_MATCH -> colorScheme.primary
-                SmsRuleType.REGEX_MATCH -> Color(0xFFFF9800)
+                SmsRuleType.REGEX_MATCH -> BrandGold
             }
             Box(
                 modifier = Modifier

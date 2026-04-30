@@ -32,6 +32,8 @@ import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material.icons.outlined.Phone
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -40,6 +42,7 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -82,6 +85,7 @@ import com.byron.trucaller.ui.main.AnalyticsScreen
 import com.byron.trucaller.ui.main.IpLogsScreen
 import com.byron.trucaller.ui.main.CallerIdScreen
 import com.byron.trucaller.ui.main.CallLogScreen
+import com.byron.trucaller.ui.main.DialPadScreen
 import com.byron.trucaller.ui.main.ContactsScreen
 import com.byron.trucaller.ui.main.ConversationScreen
 import com.byron.trucaller.ui.main.HomeScreen
@@ -109,6 +113,7 @@ import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.CallerIdViewModel
 import com.byron.trucaller.viewmodel.CallLogViewModel
 import com.byron.trucaller.viewmodel.ContactsViewModel
+import com.byron.trucaller.viewmodel.DialPadViewModel
 import com.byron.trucaller.viewmodel.DeviceViewModel
 import com.byron.trucaller.viewmodel.GeofenceViewModel
 import com.byron.trucaller.viewmodel.NetworkForensicsViewModel
@@ -163,6 +168,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val blockingScheduleViewModel: BlockingScheduleViewModel = viewModel(factory = BlockingScheduleViewModel.Factory)
     val familyGroupViewModel: FamilyGroupViewModel = viewModel(factory = FamilyGroupViewModel.Factory)
     val analyticsViewModel: AnalyticsViewModel = viewModel(factory = AnalyticsViewModel.Factory)
+    val dialPadViewModel: DialPadViewModel = viewModel(factory = DialPadViewModel.Factory)
 
     NavHost(
         navController = navController,
@@ -318,6 +324,12 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 smsRulesViewModel = smsRulesViewModel
             )
         }
+        composable("dial_pad") {
+            DialPadScreen(
+                rootNavController = navController,
+                viewModel = dialPadViewModel
+            )
+        }
         composable("call_recordings") {
             CallRecordingsScreen(
                 navController = navController,
@@ -459,48 +471,36 @@ fun MainScreen(
     val tabNavController = rememberNavController()
     val hapticFeedback = LocalHapticFeedback.current
 
+    // Badge counts
+    val callLogEntries by callLogViewModel.callLogEntries.collectAsState()
+    val conversations by smsViewModel.conversations.collectAsState()
+    val missedCallCount = callLogEntries.count {
+        it.callType == com.byron.trucaller.data.model.CallType.MISSED
+    }
+    val unreadMessageCount = conversations.sumOf { it.unreadCount }
+
     Scaffold(
         bottomBar = {
             val navBackStackEntry by tabNavController.currentBackStackEntryAsState()
             val currentRoute = navBackStackEntry?.destination?.route
             val selectedIndex = tabs.indexOfFirst { it.route == currentRoute }.coerceAtLeast(0)
 
-            val navBarShape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp)
-
             BoxWithConstraints(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .shadow(elevation = 12.dp, shape = navBarShape)
-                    .clip(navBarShape)
-                    .background(MaterialTheme.colorScheme.surface)
-                    .windowInsetsPadding(WindowInsets.navigationBars)
-            ) {
-                val tabWidth = maxWidth / tabs.size
-                val pillWidth = 48.dp
-                val pillOffset = tabWidth * selectedIndex + (tabWidth - pillWidth) / 2
-
-                // Animated pill indicator
-                val animatedPillOffset by animateDpAsState(
-                    targetValue = pillOffset,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessMediumLow
-                    ),
-                    label = "pillOffset"
-                )
-
-                // Pill indicator background drawn behind the row
-                Box(
-                    modifier = Modifier
-                        .offset(x = animatedPillOffset, y = 6.dp)
-                        .width(pillWidth)
-                        .height(32.dp)
                         .background(
-                            MaterialTheme.colorScheme.primary.copy(alpha = 0.12f),
-                            RoundedCornerShape(16.dp)
+                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f),
+                            RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp)
                         )
+                        .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+                        .shadow(10.dp)
+                        .windowInsetsPadding(WindowInsets.navigationBars)
+            ) {
+                // Glass top border
+                androidx.compose.material3.HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = com.byron.trucaller.ui.theme.GlassBorder
                 )
-
                 NavigationBar(
                     containerColor = Color.Transparent,
                     tonalElevation = 0.dp
@@ -508,31 +508,44 @@ fun MainScreen(
                     tabs.forEach { tab ->
                         val selected = currentRoute == tab.route
 
-                        // Spring-based icon scale animation
-                        val iconScale by animateFloatAsState(
-                            targetValue = if (selected) 1.15f else 1.0f,
-                            animationSpec = spring(
-                                dampingRatio = Spring.DampingRatioMediumBouncy,
-                                stiffness = Spring.StiffnessMedium
-                            ),
-                            label = "iconScale"
-                        )
+                        val badgeCount = when (tab) {
+                            TabItem.CallLog -> missedCallCount
+                            TabItem.Messages -> unreadMessageCount
+                            else -> 0
+                        }
 
                         NavigationBarItem(
                             modifier = Modifier.testTag("nav_tab_${tab.title.lowercase()}"),
                             icon = {
-                                Icon(
-                                    imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                    contentDescription = "${tab.title} tab",
-                                    modifier = Modifier
-                                        .size(24.dp)
-                                        .scale(iconScale)
-                                )
+                                BadgedBox(
+                                    badge = {
+                                        if (badgeCount > 0) {
+                                            Badge(
+                                                containerColor = MaterialTheme.colorScheme.tertiary,
+                                                contentColor = MaterialTheme.colorScheme.onTertiary
+                                            ) {
+                                                Text(
+                                                    text = if (badgeCount > 99) "99+" else "$badgeCount",
+                                                    fontSize = 9.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    }
+                                ) {
+                                    Icon(
+                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                        contentDescription = "${tab.title} tab",
+                                        modifier = Modifier
+                                            .size(24.dp)
+                                    )
+                                }
                             },
                             label = {
                                 Text(
                                     tab.title,
-                                    fontSize = 10.sp,
+                                    fontFamily = com.byron.trucaller.ui.theme.MontserratFontFamily,
+                                    fontSize = 11.sp,
                                     fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal,
                                     letterSpacing = if (selected) 0.3.sp else 0.sp
                                 )

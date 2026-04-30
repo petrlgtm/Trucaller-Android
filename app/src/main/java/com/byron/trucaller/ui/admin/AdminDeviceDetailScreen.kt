@@ -65,6 +65,7 @@ import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.components.TruCallerButtonStyle
 import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
@@ -133,15 +134,15 @@ fun AdminDeviceDetailScreen(
                     Text(
                         "Device Detail",
                         fontWeight = FontWeight.Bold,
-                        color = colorScheme.onPrimary
+                        color = colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
             )
             ShimmerLoadingCard(modifier = Modifier.padding(Spacing.md))
         }
@@ -253,15 +254,15 @@ fun AdminDeviceDetailScreen(
                     Text(
                         "${dev.manufacturer} ${dev.model}",
                         fontWeight = FontWeight.Bold,
-                        color = colorScheme.onPrimary
+                        color = colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
             )
         },
         containerColor = colorScheme.background
@@ -624,7 +625,7 @@ fun AdminDeviceDetailScreen(
 
                     TruCallerCard(
                         modifier = Modifier.padding(vertical = 3.dp),
-                        elevation = 0.5.dp
+                        elevation = 0.dp
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
@@ -684,7 +685,7 @@ private fun DeviceStatusButton(
     val statusColor = when (status) {
         DeviceStatus.ACTIVE -> Color(0xFF4CAF50)
         DeviceStatus.INACTIVE -> colorScheme.onSurfaceVariant
-        DeviceStatus.FLAGGED -> Color(0xFFFF9800)
+        DeviceStatus.FLAGGED -> BrandGold
         DeviceStatus.STOLEN -> colorScheme.error
     }
 

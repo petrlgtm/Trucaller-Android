@@ -69,6 +69,9 @@ import com.byron.trucaller.ui.components.ErrorStateView
 import com.byron.trucaller.ui.components.ShimmerLoadingCard
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.components.TruCallerHeader
+import com.byron.trucaller.ui.theme.Brand
+import com.byron.trucaller.ui.theme.BrandGold
+import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AnalyticsViewModel
 import com.byron.trucaller.viewmodel.MonthlyDataPoint
@@ -299,7 +302,7 @@ private fun ProtectionSummaryCard(
             .fillMaxWidth()
             .testTag("protection_summary_card"),
         cornerRadius = 20.dp,
-        elevation = 6.dp,
+        elevation = 0.dp,
         containerColor = colorScheme.primary
     ) {
         Column(
@@ -328,7 +331,7 @@ private fun ProtectionSummaryCard(
                 letterSpacing = (-1).sp
             )
             Text(
-                text = "threats blocked",
+                text = "threats rejected",
                 fontSize = 14.sp,
                 color = colorScheme.onPrimary.copy(alpha = 0.85f),
                 fontWeight = FontWeight.Medium
@@ -373,14 +376,14 @@ private fun StatsGrid(stats: com.byron.trucaller.viewmodel.AnalyticsStats) {
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Block,
-                label = "Calls Blocked",
+                label = "Calls Rejected",
                 value = "${stats.callsBlocked}",
                 color = colorScheme.error
             )
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.MarkEmailRead,
-                label = "SMS Blocked",
+                label = "SMS Rejected",
                 value = "${stats.smsBlocked}",
                 color = colorScheme.tertiary
             )
@@ -413,14 +416,14 @@ private fun StatsGrid(stats: com.byron.trucaller.viewmodel.AnalyticsStats) {
                 icon = Icons.Default.ContactPhone,
                 label = "Contacts Synced",
                 value = "${stats.contactsSynced}",
-                color = Color(0xFF2196F3)
+                color = Brand
             )
             StatCard(
                 modifier = Modifier.weight(1f),
                 icon = Icons.Default.Warning,
                 label = "Stolen Reports",
                 value = "${stats.stolenReports}",
-                color = Color(0xFFFF9800)
+                color = BrandGold
             )
         }
     }
@@ -439,8 +442,8 @@ private fun StatCard(
     TruCallerCard(
         modifier = modifier.testTag("stat_card_${label.lowercase().replace(" ", "_")}"),
         cornerRadius = 16.dp,
-        elevation = 2.dp,
-        containerColor = colorScheme.surfaceVariant
+        elevation = 0.dp,
+        containerColor = colorScheme.surface
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -490,7 +493,7 @@ private fun MonthlyTrendsChart(
     if (data.isEmpty()) {
         TruCallerCard(
             modifier = Modifier.fillMaxWidth(),
-            elevation = 2.dp
+            elevation = 0.dp
         ) {
             Text(
                 "No trend data available yet.",
@@ -522,7 +525,7 @@ private fun MonthlyTrendsChart(
         modifier = Modifier
             .fillMaxWidth()
             .testTag("monthly_trends_chart"),
-        elevation = 2.dp
+        elevation = 0.dp
     ) {
         Column {
             // Legend
@@ -552,7 +555,7 @@ private fun MonthlyTrendsChart(
 
             // Canvas bar chart
             val labelColor = colorScheme.onSurfaceVariant
-            val gridLineColor = colorScheme.outlineVariant
+            val gridLineColor = GlassBorder
 
             Canvas(
                 modifier = Modifier
@@ -565,7 +568,13 @@ private fun MonthlyTrendsChart(
                 val barWidth = barGroupWidth * 0.3f
                 val barGap = barGroupWidth * 0.05f
 
-                // Draw horizontal grid lines
+                // Draw horizontal grid lines with Y-axis labels
+                val yAxisPaint = android.graphics.Paint().apply {
+                    color = labelColor.hashCode()
+                    textSize = 22f
+                    textAlign = android.graphics.Paint.Align.LEFT
+                    isAntiAlias = true
+                }
                 for (i in 0..3) {
                     val y = chartHeight * (1f - i / 3f)
                     drawLine(
@@ -573,6 +582,13 @@ private fun MonthlyTrendsChart(
                         start = Offset(0f, y),
                         end = Offset(chartWidth, y),
                         strokeWidth = 1f
+                    )
+                    val labelVal = (maxValue * i / 3f).toInt()
+                    drawContext.canvas.nativeCanvas.drawText(
+                        "$labelVal",
+                        4f,
+                        y - 4f,
+                        yAxisPaint
                     )
                 }
 
@@ -625,8 +641,8 @@ private fun InsightCard(
     val insightColors = listOf(
         colorScheme.primary,
         Color(0xFF4CAF50),
-        Color(0xFF2196F3),
-        Color(0xFFFF9800),
+        Brand,
+        BrandGold,
         colorScheme.tertiary,
         colorScheme.error
     )
@@ -637,8 +653,8 @@ private fun InsightCard(
             .fillMaxWidth()
             .testTag("insight_card_$index"),
         cornerRadius = 16.dp,
-        elevation = 1.dp,
-        containerColor = colorScheme.surfaceVariant
+        elevation = 0.dp,
+        containerColor = colorScheme.surface
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),

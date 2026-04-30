@@ -61,6 +61,7 @@ import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.ShimmerLoadingList
 import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.Brand
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AlarmViewModel
@@ -172,15 +173,15 @@ fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmView
                 Text(
                     "Alarm Logs (${filteredLogs.size})",
                     fontWeight = FontWeight.Bold,
-                    color = colorScheme.onPrimary
+                    color = colorScheme.onBackground
                 )
             },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
         )
 
         // Filter chips - Type
@@ -407,7 +408,7 @@ fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmView
 
                         TruCallerCard(
                             modifier = Modifier.padding(vertical = 3.dp),
-                            elevation = 0.5.dp
+                            elevation = 0.dp
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
@@ -429,8 +430,8 @@ fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmView
                                         TruCallerBadge(
                                             text = if (log.triggeredByRole == "admin") "Admin" else "User",
                                             type = if (log.triggeredByRole == "admin") BadgeType.Custom else BadgeType.Info,
-                                            color = if (log.triggeredByRole == "admin") Color(0xFF6A1B9A) else null,
-                                            backgroundColor = if (log.triggeredByRole == "admin") Color(0xFF6A1B9A).copy(alpha = 0.1f) else null
+                                            color = if (log.triggeredByRole == "admin") Brand else null,
+                                            backgroundColor = if (log.triggeredByRole == "admin") Brand.copy(alpha = 0.1f) else null
                                         )
                                     }
                                 }

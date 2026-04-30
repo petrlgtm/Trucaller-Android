@@ -28,6 +28,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
+import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -94,20 +97,23 @@ import com.byron.trucaller.ui.components.AvatarIndicator
 import com.byron.trucaller.ui.components.BadgeType
 import com.byron.trucaller.ui.components.EmptyStateIcon
 import com.byron.trucaller.ui.components.EmptyStateView
+import com.byron.trucaller.ui.components.PermissionPromptView
+import com.byron.trucaller.ui.components.SectionDateHeader
 import com.byron.trucaller.ui.components.ShimmerLoadingList
 import com.byron.trucaller.ui.components.TruCallerAvatar
 import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerHeader
 import com.byron.trucaller.ui.components.TruCallerTextField
+import com.byron.trucaller.ui.components.formatCallDuration
+import com.byron.trucaller.ui.components.formatRelativeTimestamp
+import com.byron.trucaller.ui.components.isSameTimestampDay
+import com.byron.trucaller.ui.theme.BrandGold
+import com.byron.trucaller.ui.theme.GlassBorder
+import com.byron.trucaller.ui.theme.LogoBlueLight
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.CallLogFilter
 import com.byron.trucaller.viewmodel.CallLogViewModel
 import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.Calendar
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
@@ -120,6 +126,7 @@ fun CallLogScreen(
     val scope = rememberCoroutineScope()
 
     val callLogEntries by callLogViewModel.callLogEntries.collectAsState()
+    val filteredEntries by callLogViewModel.filteredEntries.collectAsState()
     val isLoading by callLogViewModel.isLoading.collectAsState()
     val actionMessage by callLogViewModel.actionMessage.collectAsState()
     val selectedFilter by callLogViewModel.selectedFilter.collectAsState()
@@ -167,83 +174,96 @@ fun CallLogScreen(
         }
     }
 
+    // Pull-to-refresh state
+    var isRefreshing by remember { mutableStateOf(false) }
+    val pullToRefreshState = rememberPullToRefreshState()
+
     Box(
         modifier = Modifier
             .fillMaxSize()
             .testTag("call_log_screen")
+    ) {
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            scope.launch {
+                isRefreshing = true
+                callLogViewModel.loadCallLog(context)
+                kotlinx.coroutines.delay(600)
+                isRefreshing = false
+            }
+        },
+        state = pullToRefreshState,
+        modifier = Modifier.fillMaxSize()
     ) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(colorScheme.background)
     ) {
-        // -- Premium Header with gradient --
-        val missedCount by remember { derivedStateOf { callLogEntries.count { it.callType == CallType.MISSED } } }
-
-        TruCallerHeader(
-            title = "Call Log",
-            subtitle = "${callLogEntries.size} calls",
-            gradientColors = listOf(colorScheme.surface, colorScheme.background),
-            trailingContent = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    if (missedCount > 0) {
-                        TruCallerBadge(
-                            text = "$missedCount missed",
-                            type = BadgeType.Spam,
-                            icon = Icons.AutoMirrored.Filled.PhoneMissed
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                    }
-                    Box {
-                        IconButton(onClick = { showOverflowMenu = true }) {
-                            Icon(
-                                Icons.Default.MoreVert,
-                                contentDescription = "More options",
-                                tint = colorScheme.onSurface
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showOverflowMenu,
-                            onDismissRequest = { showOverflowMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            Icons.Default.GraphicEq,
-                                            contentDescription = null,
-                                            modifier = Modifier.size(20.dp),
-                                            tint = colorScheme.primary
-                                        )
-                                        Spacer(modifier = Modifier.width(10.dp))
-                                        Text(
-                                            "Recordings",
-                                            fontWeight = FontWeight.Medium
-                                        )
+        // Redesigned Header with Gradient
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(colorScheme.primary.copy(alpha = 0.15f), Color.Transparent)
+                    )
+                )
+        ) {
+            TruCallerHeader(
+                title = "Call Log",
+                subtitle = "${callLogEntries.size} Recent Calls",
+                trailingContent = {
+                        Box {
+                            IconButton(onClick = { showOverflowMenu = true }) {
+                                Icon(
+                                    Icons.Default.MoreVert,
+                                    contentDescription = "More options",
+                                    tint = colorScheme.onSurface
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = showOverflowMenu,
+                                onDismissRequest = { showOverflowMenu = false }
+                            ) {
+                                DropdownMenuItem(
+                                    text = {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Default.GraphicEq,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(20.dp),
+                                                tint = colorScheme.primary
+                                            )
+                                            Spacer(modifier = Modifier.width(10.dp))
+                                            Text(
+                                                "Recordings",
+                                                fontWeight = FontWeight.Medium
+                                            )
+                                        }
+                                    },
+                                    onClick = {
+                                        showOverflowMenu = false
+                                        rootNavController.navigate("call_recordings")
                                     }
-                                },
-                                onClick = {
-                                    showOverflowMenu = false
-                                    rootNavController.navigate("call_recordings")
-                                }
-                            )
+                                )
+                            }
                         }
-                    }
                 }
-            }
-        )
+            )
+        }
 
         // -- Search bar below header --
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colorScheme.background)
-                .padding(horizontal = Spacing.lg, vertical = Spacing.sm)
+                .padding(horizontal = Spacing.lg, vertical = Spacing.xs)
         ) {
             TruCallerTextField(
                 value = searchQuery,
                 onValueChange = { callLogViewModel.setSearchQuery(it) },
-                placeholder = "Search calls...",
+                placeholder = "Search numbers or names...",
                 isSearch = true,
                 showClearButton = true,
                 onClear = { callLogViewModel.setSearchQuery("") },
@@ -255,8 +275,7 @@ fun CallLogScreen(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(colorScheme.background)
-                .padding(horizontal = 12.dp, vertical = 10.dp)
+                .padding(horizontal = 12.dp, vertical = 8.dp)
                 .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
@@ -265,16 +284,16 @@ fun CallLogScreen(
                 val chipColor = when (filter) {
                     CallLogFilter.ALL -> colorScheme.primary
                     CallLogFilter.INCOMING -> Color(0xFF4CAF50)
-                    CallLogFilter.OUTGOING -> Color(0xFF42A5F5)
-                    CallLogFilter.MISSED -> colorScheme.error
-                    CallLogFilter.BLOCKED -> Color(0xFF757575)
+                    CallLogFilter.OUTGOING -> LogoBlueLight
+                    CallLogFilter.MISSED -> colorScheme.primary
+                    CallLogFilter.REJECTED -> Color(0xFF757575)
                 }
                 val count = when (filter) {
                     CallLogFilter.ALL -> callLogEntries.size
                     CallLogFilter.INCOMING -> callLogEntries.count { it.callType == CallType.INCOMING }
                     CallLogFilter.OUTGOING -> callLogEntries.count { it.callType == CallType.OUTGOING }
                     CallLogFilter.MISSED -> callLogEntries.count { it.callType == CallType.MISSED }
-                    CallLogFilter.BLOCKED -> callLogEntries.count {
+                    CallLogFilter.REJECTED -> callLogEntries.count {
                         it.callType == CallType.BLOCKED || it.callType == CallType.REJECTED || it.isBlocked
                     }
                 }
@@ -290,54 +309,59 @@ fun CallLogScreen(
                                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
                             )
                             if (count > 0) {
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(
-                                    "$count",
-                                    fontSize = 10.sp,
-                                    color = if (isSelected) colorScheme.onPrimary else colorScheme.onSurface.copy(alpha = 0.5f)
-                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .background(
+                                            if (isSelected) colorScheme.onPrimary.copy(alpha = 0.2f) 
+                                            else colorScheme.onSurface.copy(alpha = 0.1f),
+                                            CircleShape
+                                        )
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        "$count",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (isSelected) colorScheme.onPrimary else colorScheme.onSurface.copy(alpha = 0.6f)
+                                    )
+                                }
                             }
                         }
                     },
                     colors = FilterChipDefaults.filterChipColors(
                         selectedContainerColor = chipColor,
-                        selectedLabelColor = if (filter == CallLogFilter.MISSED || filter == CallLogFilter.BLOCKED) colorScheme.onError else colorScheme.onPrimary,
-                        containerColor = colorScheme.surfaceVariant,
+                        selectedLabelColor = if (filter == CallLogFilter.REJECTED) colorScheme.onError else colorScheme.onPrimary,
+                        containerColor = colorScheme.surfaceVariant.copy(alpha = 0.3f),
                         labelColor = colorScheme.onSurface.copy(alpha = 0.7f)
                     ),
-                    border = FilterChipDefaults.filterChipBorder(
-                        borderColor = colorScheme.outline,
-                        selectedBorderColor = Color.Transparent,
-                        enabled = true,
-                        selected = isSelected
-                    )
+                    border = null
                 )
             }
         }
 
         // -- Content --
         if (!hasCallLogPermission) {
-            CallLogPermissionPrompt(onGrant = {
-                permissionLauncher.launch(Manifest.permission.READ_CALL_LOG)
-            })
-        } else if (isLoading) {
+            PermissionPromptView(
+                icon = Icons.Default.Phone,
+                title = "Call Log Permission Required",
+                description = "Allow call log access to view your call history with caller ID and spam protection.",
+                onGrant = { permissionLauncher.launch(Manifest.permission.READ_CALL_LOG) }
+            )
+        } else if (isLoading && callLogEntries.isEmpty()) {
             ShimmerLoadingList()
         } else {
-            val filtered by remember(callLogEntries, selectedFilter, searchQuery) {
-                derivedStateOf { callLogViewModel.getFilteredEntries() }
-            }
-
             AnimatedVisibility(
                 visible = showContent,
                 enter = fadeIn(tween(300))
             ) {
-                if (filtered.isEmpty()) {
+                if (filteredEntries.isEmpty()) {
                     val (emptyTitle, emptySubtitle) = when (selectedFilter) {
                         CallLogFilter.ALL -> Pair("No calls found", "Your call history will appear here once you start making or receiving calls.")
                         CallLogFilter.INCOMING -> Pair("No incoming calls", "Incoming calls will appear here.")
                         CallLogFilter.OUTGOING -> Pair("No outgoing calls", "Outgoing calls will appear here.")
                         CallLogFilter.MISSED -> Pair("No missed calls", "You haven't missed any calls. Nice!")
-                        CallLogFilter.BLOCKED -> Pair("No blocked calls", "Calls from blocked numbers will appear here.")
+                        CallLogFilter.REJECTED -> Pair("No rejected calls", "Calls from rejected numbers will appear here.")
                     }
                     EmptyStateView(
                         title = emptyTitle,
@@ -346,74 +370,68 @@ fun CallLogScreen(
                     )
                 } else {
                     LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        modifier = Modifier.fillMaxSize()
                     ) {
                         itemsIndexed(
-                            filtered,
+                            filteredEntries,
                             key = { _, it -> it.id },
                             contentType = { _, _ -> "call_log_entry" }
                         ) { index, entry ->
                             // Date separator
-                            val showDateHeader = index == 0 || !isSameDayCallLog(
-                                filtered[index - 1].timestamp,
+                            val showDateHeader = index == 0 || !isSameTimestampDay(
+                                filteredEntries[index - 1].timestamp,
                                 entry.timestamp
                             )
                             if (showDateHeader) {
-                                CallLogDateHeader(entry.timestamp)
+                                SectionDateHeader(entry.timestamp)
                             }
 
-                            // Staggered slide-in animation
-                            var itemVisible by remember { mutableStateOf(false) }
-                            LaunchedEffect(entry.id) {
-                                itemVisible = true
-                            }
-
-                            AnimatedVisibility(
-                                visible = itemVisible,
-                                enter = slideInVertically(
-                                    animationSpec = spring(
-                                        dampingRatio = Spring.DampingRatioLowBouncy,
-                                        stiffness = Spring.StiffnessMediumLow
-                                    ),
-                                    initialOffsetY = { it / 2 }
-                                ) + fadeIn(
-                                    animationSpec = tween(
-                                        durationMillis = 300,
-                                        delayMillis = (index * 30).coerceAtMost(300)
-                                    )
-                                )
-                            ) {
-                                SwipeableCallLogItem(
-                                    entry = entry,
-                                    onClick = {
-                                        val encoded = java.net.URLEncoder.encode(entry.phoneNumber, "UTF-8")
-                                        rootNavController.navigate("caller_id_lookup/$encoded")
-                                    },
-                                    onLongPress = {
-                                        selectedEntry = entry
-                                        showActionSheet = true
-                                    },
-                                    onCall = {
-                                        val intent = Intent(Intent.ACTION_DIAL).apply {
-                                            data = Uri.parse("tel:${entry.phoneNumber}")
-                                        }
-                                        context.startActivity(intent)
-                                    },
-                                    onBlock = {
-                                        val encoded = java.net.URLEncoder.encode(entry.phoneNumber, "UTF-8")
-                                        rootNavController.navigate("caller_id_lookup/$encoded")
+                            SwipeableCallLogItem(
+                                entry = entry,
+                                onClick = {
+                                    val encoded = java.net.URLEncoder.encode(entry.phoneNumber, "UTF-8")
+                                    rootNavController.navigate("caller_id_lookup/$encoded")
+                                },
+                                onLongPress = {
+                                    selectedEntry = entry
+                                    showActionSheet = true
+                                },
+                                onCall = {
+                                    val intent = Intent(Intent.ACTION_DIAL).apply {
+                                        data = Uri.parse("tel:${entry.phoneNumber}")
                                     }
-                                )
-                            }
+                                    context.startActivity(intent)
+                                },
+                                onBlock = {
+                                    val encoded = java.net.URLEncoder.encode(entry.phoneNumber, "UTF-8")
+                                    rootNavController.navigate("caller_id_lookup/$encoded")
+                                }
+                            )
                         }
                         // Bottom padding
-                        item { Spacer(modifier = Modifier.height(8.dp)) }
+                        item { Spacer(modifier = Modifier.height(100.dp)) }
                     }
                 }
             }
         }
     } // end Column
+    } // end PullToRefreshBox
+
+        // -- Dial FAB --
+        FloatingActionButton(
+            onClick = {
+                rootNavController.navigate("dial_pad")
+            },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = 80.dp),
+            shape = CircleShape,
+            containerColor = colorScheme.primary,
+            contentColor = colorScheme.onPrimary,
+            elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(0.dp, 0.dp, 0.dp, 0.dp)
+        ) {
+            Icon(Icons.Default.Phone, contentDescription = "Dial")
+        }
 
         // -- Snackbar at bottom --
         SnackbarHost(
@@ -478,7 +496,7 @@ fun CallLogScreen(
                 ListItem(
                     headlineContent = {
                         Text(
-                            text = if (entry.isBlocked) "Unblock number" else "Block number",
+                            text = if (entry.isBlocked) "Unreject number" else "Reject number",
                             fontWeight = FontWeight.Medium
                         )
                     },
@@ -515,7 +533,7 @@ fun CallLogScreen(
                         Icon(
                             imageVector = if (entry.isSpam) Icons.Default.CheckCircle else Icons.Default.Warning,
                             contentDescription = null,
-                            tint = if (entry.isSpam) Color(0xFF4CAF50) else Color(0xFFFFA000)
+                            tint = if (entry.isSpam) Color(0xFF4CAF50) else BrandGold
                         )
                     },
                     colors = ListItemDefaults.colors(containerColor = Color.Transparent),
@@ -558,96 +576,6 @@ fun CallLogScreen(
                     }
                 )
             }
-        }
-    }
-}
-
-// -- Date Header --
-
-@Composable
-private fun CallLogDateHeader(timestamp: Long) {
-    val colorScheme = MaterialTheme.colorScheme
-    val label = formatCallLogDateHeader(timestamp)
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(0.5.dp)
-                .background(colorScheme.outlineVariant)
-        )
-        Text(
-            text = label,
-            color = colorScheme.onSurface.copy(alpha = 0.5f),
-            fontSize = 11.sp,
-            fontWeight = FontWeight.SemiBold,
-            letterSpacing = 0.5.sp,
-            modifier = Modifier.padding(horizontal = 12.dp)
-        )
-        Box(
-            modifier = Modifier
-                .weight(1f)
-                .height(0.5.dp)
-                .background(colorScheme.outlineVariant)
-        )
-    }
-}
-
-// -- Permission Prompt --
-
-@Composable
-private fun CallLogPermissionPrompt(onGrant: () -> Unit) {
-    val colorScheme = MaterialTheme.colorScheme
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(40.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Box(
-            modifier = Modifier
-                .size(80.dp)
-                .background(colorScheme.primary.copy(alpha = 0.1f), CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                Icons.Default.Phone, null,
-                modifier = Modifier.size(40.dp), tint = colorScheme.primary
-            )
-        }
-        Spacer(modifier = Modifier.height(20.dp))
-        Text(
-            "Call Log Permission Required",
-            fontWeight = FontWeight.Bold,
-            fontSize = 20.sp,
-            color = colorScheme.onBackground
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            "Allow call log access to view your call history with caller ID and spam protection.",
-            color = colorScheme.onBackground.copy(alpha = 0.6f),
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-            lineHeight = 20.sp
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        TextButton(
-            onClick = onGrant,
-            modifier = Modifier
-                .background(colorScheme.primary, RoundedCornerShape(12.dp))
-                .padding(horizontal = 16.dp)
-        ) {
-            Text(
-                "Grant Permission",
-                color = colorScheme.onPrimary,
-                fontWeight = FontWeight.Bold,
-                fontSize = 15.sp
-            )
         }
     }
 }
@@ -765,7 +693,7 @@ private fun CallLogItem(
 
     val callTypeColor = when (entry.callType) {
         CallType.INCOMING -> Color(0xFF4CAF50)
-        CallType.OUTGOING -> Color(0xFF42A5F5)
+        CallType.OUTGOING -> LogoBlueLight
         CallType.MISSED -> colorScheme.error
         CallType.REJECTED -> colorScheme.error
         CallType.BLOCKED -> colorScheme.error
@@ -784,7 +712,7 @@ private fun CallLogItem(
         CallType.OUTGOING -> "Outgoing"
         CallType.MISSED -> "Missed"
         CallType.REJECTED -> "Rejected"
-        CallType.BLOCKED -> "Blocked"
+        CallType.BLOCKED -> "Rejected"
     }
 
     val displayName = entry.name ?: entry.phoneNumber
@@ -796,9 +724,7 @@ private fun CallLogItem(
                 onClick = onClick,
                 onLongClick = onLongPress
             )
-            .background(
-                if (entry.callType == CallType.MISSED) colorScheme.surfaceVariant else colorScheme.background
-            )
+            .background(colorScheme.background)
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalAlignment = Alignment.Top
     ) {
@@ -818,7 +744,7 @@ private fun CallLogItem(
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
                     text = displayName,
-                    fontWeight = if (entry.callType == CallType.MISSED) FontWeight.Bold else FontWeight.SemiBold,
+                    fontWeight = FontWeight.SemiBold,
                     fontSize = 15.sp,
                     color = if (entry.isSpam) colorScheme.error else colorScheme.onBackground,
                     modifier = Modifier.weight(1f),
@@ -827,10 +753,10 @@ private fun CallLogItem(
                 )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(
-                    text = formatCallLogTime(entry.timestamp),
+                    text = formatRelativeTimestamp(entry.timestamp),
                     fontSize = 11.sp,
-                    color = if (entry.callType == CallType.MISSED) colorScheme.error else colorScheme.onSurface.copy(alpha = 0.5f),
-                    fontWeight = if (entry.callType == CallType.MISSED) FontWeight.Bold else FontWeight.Normal
+                    color = colorScheme.onSurface.copy(alpha = 0.5f),
+                    fontWeight = FontWeight.Normal
                 )
             }
 
@@ -853,7 +779,7 @@ private fun CallLogItem(
                 if (entry.duration > 0) {
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = formatDuration(entry.duration),
+                        text = formatCallDuration(entry.duration),
                         fontSize = 12.sp,
                         color = colorScheme.onSurface.copy(alpha = 0.7f)
                     )
@@ -861,10 +787,10 @@ private fun CallLogItem(
 
                 Spacer(modifier = Modifier.weight(1f))
 
-                // Blocked badge
+                // Rejected badge
                 if (entry.isBlocked) {
                     TruCallerBadge(
-                        text = "Blocked",
+                        text = "Rejected",
                         type = BadgeType.Spam,
                         icon = Icons.Default.Block
                     )
@@ -900,53 +826,7 @@ private fun CallLogItem(
             .fillMaxWidth()
             .padding(start = 82.dp)
             .height(0.5.dp)
-            .background(colorScheme.outlineVariant)
+            .background(colorScheme.outline)
     )
 }
 
-// -- Helpers --
-
-private fun formatCallLogTime(timestamp: Long): String {
-    val now = System.currentTimeMillis()
-    val diff = now - timestamp
-
-    return when {
-        diff < TimeUnit.MINUTES.toMillis(1) -> "Now"
-        diff < TimeUnit.HOURS.toMillis(1) -> "${TimeUnit.MILLISECONDS.toMinutes(diff)}m"
-        diff < TimeUnit.HOURS.toMillis(24) -> "${TimeUnit.MILLISECONDS.toHours(diff)}h"
-        diff < TimeUnit.DAYS.toMillis(2) -> "Yesterday"
-        diff < TimeUnit.DAYS.toMillis(7) -> SimpleDateFormat("EEE", Locale.US).format(Date(timestamp))
-        else -> SimpleDateFormat("dd/MM", Locale.US).format(Date(timestamp))
-    }
-}
-
-private fun formatCallLogDateHeader(timestamp: Long): String {
-    val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
-    val today = Calendar.getInstance()
-    val yesterday = Calendar.getInstance().apply { add(Calendar.DAY_OF_YEAR, -1) }
-
-    return when {
-        isSameDayCalendar(cal, today) -> "Today"
-        isSameDayCalendar(cal, yesterday) -> "Yesterday"
-        else -> SimpleDateFormat("EEEE, MMM d", Locale.US).format(Date(timestamp))
-    }
-}
-
-private fun formatDuration(seconds: Long): String {
-    return when {
-        seconds < 60 -> "${seconds}s"
-        seconds < 3600 -> "${seconds / 60}m ${seconds % 60}s"
-        else -> "${seconds / 3600}h ${(seconds % 3600) / 60}m"
-    }
-}
-
-private fun isSameDayCallLog(ts1: Long, ts2: Long): Boolean {
-    val c1 = Calendar.getInstance().apply { timeInMillis = ts1 }
-    val c2 = Calendar.getInstance().apply { timeInMillis = ts2 }
-    return isSameDayCalendar(c1, c2)
-}
-
-private fun isSameDayCalendar(c1: Calendar, c2: Calendar): Boolean {
-    return c1.get(Calendar.YEAR) == c2.get(Calendar.YEAR) &&
-            c1.get(Calendar.DAY_OF_YEAR) == c2.get(Calendar.DAY_OF_YEAR)
-}

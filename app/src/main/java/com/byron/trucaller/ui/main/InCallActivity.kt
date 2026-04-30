@@ -13,8 +13,13 @@ import android.telecom.CallAudioState
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,6 +53,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
@@ -148,7 +155,7 @@ fun InCallContent(
     LaunchedEffect(call) {
         if (call != null) {
             val handle = try { call!!.details.handle } catch (_: Exception) { null }
-            val number = handle?.schemeSpecificPart ?: ""
+            val number = handle?.schemeSpecificPart?.takeIf { it.isNotBlank() } ?: ""
             if (number.isNotEmpty()) {
                 val app = context.applicationContext as TruCallerApplication
                 val repo = app.container.callerIdRepository
@@ -169,8 +176,20 @@ fun InCallContent(
 
     val state = if (isCallEnded) Call.STATE_DISCONNECTED else call?.state ?: Call.STATE_DISCONNECTED
     val handle = try { call?.details?.handle } catch (_: Exception) { null }
-    val phoneNumber = handle?.schemeSpecificPart ?: callerInfo?.phoneNumber ?: "Unknown"
-    val displayName = callerInfo?.name ?: if (phoneNumber != "Unknown") phoneNumber else "Unknown Caller"
+    val rawPhoneNumber = handle?.schemeSpecificPart?.takeIf { it.isNotBlank() } 
+        ?: callerInfo?.phoneNumber?.takeIf { it.isNotBlank() } 
+        ?: ""
+    
+    val phoneNumber = when {
+        rawPhoneNumber.isEmpty() -> "Private Number"
+        rawPhoneNumber == "-1" -> "Unknown"
+        rawPhoneNumber == "-2" -> "Voicemail"
+        else -> rawPhoneNumber
+    }
+    
+    val displayName = callerInfo?.name?.takeIf { it.isNotBlank() } 
+        ?: if (phoneNumber != "Private Number" && phoneNumber != "Unknown") phoneNumber else "Unknown Caller"
+        
     val isSpam = callerInfo?.category == SpamCategory.SPAM || (callerInfo?.spamScore ?: 0) > 60
     val isIdentifiedByApp = lookupSource == "caller_id_db"
 
@@ -201,127 +220,193 @@ fun InCallContent(
     val isMuted = audioState?.isMuted ?: false
     val isSpeaker = (audioState?.route ?: CallAudioState.ROUTE_EARPIECE) == CallAudioState.ROUTE_SPEAKER
 
+    // Pulse animation for ringing
+    val infiniteTransition = androidx.compose.animation.core.rememberInfiniteTransition(label = "pulse")
+    val pulseScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = if (state == Call.STATE_RINGING) 1.15f else 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = androidx.compose.animation.core.tween(1000),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "pulseScale"
+    )
+
+    val backgroundBrush = if (isSpam) {
+        androidx.compose.ui.graphics.Brush.verticalGradient(
+            colors = listOf(Color(0xFF2E0000), Color(0xFF630000), Color(0xFF2E0000))
+        )
+    } else {
+        androidx.compose.ui.graphics.Brush.verticalGradient(
+            colors = listOf(Color(0xFF0F1724), Color(0xFF1E293B), Color(0xFF0F1724))
+        )
+    }
+
     Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = if (isSpam) Color(0xFF450000) else Color(0xFF0F1724)
+        modifier = Modifier.fillMaxSize()
     ) {
-        Column(
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(top = 80.dp, bottom = 64.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceBetween
+                .background(backgroundBrush)
         ) {
-            // Upper: Identity
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                TruCallerAvatar(
-                    name = displayName,
-                    size = 140.dp
-                )
-                Spacer(modifier = Modifier.height(24.dp))
-                
-                if (isIdentifiedByApp && !isSpam) {
-                    TruCallerBadge(
-                        text = "Identified by Trucaller",
-                        type = BadgeType.Success,
-                        icon = Icons.Default.Shield
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                }
-
-                if (isSpam) {
-                    Text(
-                        text = "POTENTIAL SPAM",
-                        color = Color.Red,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        letterSpacing = 2.sp
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                }
-
-                Text(
-                    text = displayName,
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 24.dp)
-                )
-                
-                Text(
-                    text = phoneNumber,
-                    fontSize = 18.sp,
-                    color = Color.White.copy(alpha = 0.6f),
-                    modifier = Modifier.padding(top = 4.dp)
-                )
-
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    text = durationText,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = if (isSpam) Color.Red else colorScheme.primary
-                )
-            }
-
-            // Lower: Controls
             Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(top = 80.dp, bottom = 64.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.SpaceBetween
             ) {
-                if (state == Call.STATE_RINGING) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        CallButton(
-                            icon = Icons.Default.CallEnd,
-                            label = "Reject",
-                            color = Color(0xFFEB002B),
-                            onClick = { call?.let { onDecline(it) } }
-                        )
-                        CallButton(
-                            icon = Icons.Default.Call,
-                            label = "Answer",
-                            color = Color(0xFF24B024),
-                            onClick = { call?.let { onAnswer(it) } }
-                        )
-                    }
-                } else if (state != Call.STATE_DISCONNECTED) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 32.dp),
-                        horizontalArrangement = Arrangement.SpaceEvenly
-                    ) {
-                        SmallControlItem(
-                            icon = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
-                            label = if (isMuted) "Unmute" else "Mute",
-                            active = isMuted,
-                            onClick = { 
-                                CustomInCallService.toggleMute(isMuted)
-                            }
-                        )
-                        SmallControlItem(
-                            icon = Icons.Default.VolumeUp,
-                            label = "Speaker",
-                            active = isSpeaker,
-                            onClick = { 
-                                CustomInCallService.toggleSpeaker(isSpeaker)
-                            }
+                // Upper: Identity
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.padding(horizontal = 24.dp)
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        // Background pulse circle
+                        if (state == Call.STATE_RINGING) {
+                            Box(
+                                modifier = Modifier
+                                    .size(160.dp)
+                                    .clip(CircleShape)
+                                    .background(
+                                        if (isSpam) Color.Red.copy(alpha = 0.2f) 
+                                        else colorScheme.primary.copy(alpha = 0.2f)
+                                    )
+                                    .scale(pulseScale)
+                            )
+                        }
+                        
+                        TruCallerAvatar(
+                            name = displayName,
+                            size = 140.dp
                         )
                     }
                     
-                    Spacer(modifier = Modifier.height(48.dp))
+                    Spacer(modifier = Modifier.height(32.dp))
                     
-                    CallButton(
-                        icon = Icons.Default.CallEnd,
-                        label = "End",
-                        color = Color(0xFFEB002B),
-                        onClick = { onHangUp(call!!) }
+                    if (isIdentifiedByApp && !isSpam) {
+                        TruCallerBadge(
+                            text = "Verified Identity",
+                            type = BadgeType.Success,
+                            icon = Icons.Default.Shield
+                        )
+                        Spacer(modifier = Modifier.height(12.dp))
+                    }
+
+                    if (isSpam) {
+                        Text(
+                            text = "POTENTIAL SPAM",
+                            color = Color.Red,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            letterSpacing = 3.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Text(
+                        text = displayName,
+                        fontSize = 36.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White,
+                        textAlign = TextAlign.Center,
+                        lineHeight = 44.sp
                     )
+                    
+                    Text(
+                        text = phoneNumber,
+                        fontSize = 20.sp,
+                        color = Color.White.copy(alpha = 0.7f),
+                        modifier = Modifier.padding(top = 8.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+                    
+                    Surface(
+                        color = if (isSpam) Color.Red.copy(alpha = 0.1f) else Color.White.copy(alpha = 0.05f),
+                        shape = CircleShape,
+                        modifier = Modifier.padding(horizontal = 16.dp)
+                    ) {
+                        Text(
+                            text = durationText,
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = if (isSpam) Color.Red else colorScheme.primary,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        )
+                    }
+                }
+
+                // Lower: Controls
+                Column(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    if (state == Call.STATE_RINGING) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 48.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            CallButton(
+                                icon = Icons.Default.CallEnd,
+                                label = "Decline",
+                                color = Color(0xFFEB002B),
+                                onClick = { call?.let { onDecline(it) } }
+                            )
+                            CallButton(
+                                icon = Icons.Default.Call,
+                                label = "Answer",
+                                color = Color(0xFF24B024),
+                                onClick = { call?.let { onAnswer(it) } }
+                            )
+                        }
+                    } else if (state != Call.STATE_DISCONNECTED) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 48.dp),
+                            horizontalArrangement = Arrangement.SpaceEvenly
+                        ) {
+                            SmallControlItem(
+                                icon = if (isMuted) Icons.Default.MicOff else Icons.Default.Mic,
+                                label = if (isMuted) "Muted" else "Mute",
+                                active = isMuted,
+                                onClick = { 
+                                    CustomInCallService.toggleMute(isMuted)
+                                }
+                            )
+                            SmallControlItem(
+                                icon = Icons.Default.VolumeUp,
+                                label = "Speaker",
+                                active = isSpeaker,
+                                onClick = { 
+                                    CustomInCallService.toggleSpeaker(isSpeaker)
+                                }
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.height(48.dp))
+                        
+                        IconButton(
+                            onClick = { onHangUp(call!!) },
+                            modifier = Modifier
+                                .size(84.dp)
+                                .clip(CircleShape)
+                                .background(Color(0xFFEB002B))
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CallEnd,
+                                contentDescription = "End Call",
+                                tint = Color.White,
+                                modifier = Modifier.size(40.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text(text = "End Call", color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp)
+                    }
                 }
             }
         }

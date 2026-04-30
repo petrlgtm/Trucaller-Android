@@ -17,6 +17,7 @@ import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
 import com.trucaller.backend.service.IpGeolocationService
+import com.trucaller.backend.data.models.NearbyDevice
 import org.bson.Document
 import org.bson.types.ObjectId
 import java.time.Instant
@@ -71,7 +72,10 @@ data class IpLogResponse(
     val latitude: Double,
     val longitude: Double,
     val networkType: String,
-    val timestamp: String
+    val timestamp: String,
+    val startTime: String = timestamp,
+    val lastSeen: String = timestamp,
+    val nearbyDevices: List<NearbyDevice> = emptyList()
 )
 
 @Serializable
@@ -160,19 +164,53 @@ private fun Route.registerDevice() {
             IpGeolocationService.resolve(deviceIp)
         }
 
-        val ipLogDoc = Document()
-            .append("_id", ObjectId().toString())
-            .append("deviceId", request.deviceId)
-            .append("ipAddress", deviceIp)
-            .append("isp", request.isp ?: geo?.isp ?: "unknown")
-            .append("city", request.city ?: geo?.city ?: "unknown")
-            .append("country", request.country ?: geo?.country ?: "unknown")
-            .append("latitude", request.latitude ?: geo?.lat ?: 0.0)
-            .append("longitude", request.longitude ?: geo?.lon ?: 0.0)
-            .append("networkType", request.networkType ?: "unknown")
-            .append("timestamp", now)
+        val resolvedCity = request.city ?: geo?.city ?: "unknown"
+        val resolvedCountry = request.country ?: geo?.country ?: "unknown"
+        val resolvedIsp = request.isp ?: geo?.isp ?: "unknown"
+        val resolvedLat = request.latitude ?: geo?.lat ?: 0.0
+        val resolvedLon = request.longitude ?: geo?.lon ?: 0.0
+        val resolvedNetwork = request.networkType ?: "unknown"
 
-        Collections.ipLogs.insertOne(ipLogDoc)
+        // Check if the latest log for this device is at the same location
+        val latestLog = Collections.ipLogs
+            .find(Filters.eq("deviceId", request.deviceId))
+            .sort(Sorts.descending("startTime"))
+            .limit(1)
+            .firstOrNull()
+
+        val sameLocation = latestLog != null &&
+            (latestLog.getString("city") ?: "") == resolvedCity &&
+            (latestLog.getString("country") ?: "") == resolvedCountry
+
+        if (sameLocation && latestLog != null) {
+            // Same location — just update lastSeen timestamp
+            val logId = latestLog.getString("_id") ?: latestLog.getObjectId("_id").toString()
+            Collections.ipLogs.updateOne(
+                Filters.eq("_id", logId),
+                Document("\$set", Document()
+                    .append("lastSeen", now)
+                    .append("ipAddress", deviceIp)
+                    .append("networkType", resolvedNetwork)
+                )
+            )
+        } else {
+            // New location — create a new log entry
+            val ipLogDoc = Document()
+                .append("_id", ObjectId().toString())
+                .append("deviceId", request.deviceId)
+                .append("ipAddress", deviceIp)
+                .append("isp", resolvedIsp)
+                .append("city", resolvedCity)
+                .append("country", resolvedCountry)
+                .append("latitude", resolvedLat)
+                .append("longitude", resolvedLon)
+                .append("networkType", resolvedNetwork)
+                .append("timestamp", now)
+                .append("startTime", now)
+                .append("lastSeen", now)
+
+            Collections.ipLogs.insertOne(ipLogDoc)
+        }
 
         // Retrieve the upserted/updated device to return
         val deviceDoc = Collections.devices
@@ -432,10 +470,11 @@ private fun Route.getIpLogsByDevice() {
 
         val docs = Collections.ipLogs
             .find(Filters.eq("deviceId", deviceId))
-            .sort(Sorts.descending("timestamp"))
+            .sort(Sorts.descending("startTime"))
             .toList()
 
         val logs = docs.map { doc ->
+            val ts = doc.getString("timestamp") ?: doc.getString("startTime") ?: ""
             IpLogResponse(
                 id = doc.getString("_id") ?: doc.getObjectId("_id").toString(),
                 deviceId = doc.getString("deviceId"),
@@ -446,7 +485,9 @@ private fun Route.getIpLogsByDevice() {
                 latitude = doc.getDouble("latitude") ?: 0.0,
                 longitude = doc.getDouble("longitude") ?: 0.0,
                 networkType = doc.getString("networkType") ?: "unknown",
-                timestamp = doc.getString("timestamp")
+                timestamp = ts,
+                startTime = doc.getString("startTime") ?: ts,
+                lastSeen = doc.getString("lastSeen") ?: ts
             )
         }
 
@@ -495,10 +536,11 @@ private fun Route.getDeviceForensics() {
         // Fetch all IP logs for this device, sorted newest-first
         val docs = Collections.ipLogs
             .find(Filters.eq("deviceId", deviceId))
-            .sort(Sorts.descending("timestamp"))
+            .sort(Sorts.descending("startTime"))
             .toList()
 
         val logs = docs.map { doc ->
+            val ts = doc.getString("timestamp") ?: doc.getString("startTime") ?: ""
             IpLogResponse(
                 id = doc.getString("_id") ?: doc.getObjectId("_id").toString(),
                 deviceId = doc.getString("deviceId"),
@@ -509,7 +551,9 @@ private fun Route.getDeviceForensics() {
                 latitude = doc.getDouble("latitude") ?: 0.0,
                 longitude = doc.getDouble("longitude") ?: 0.0,
                 networkType = doc.getString("networkType") ?: "unknown",
-                timestamp = doc.getString("timestamp")
+                timestamp = ts,
+                startTime = doc.getString("startTime") ?: ts,
+                lastSeen = doc.getString("lastSeen") ?: ts
             )
         }
 

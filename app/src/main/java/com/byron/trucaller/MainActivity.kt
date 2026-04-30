@@ -28,7 +28,7 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         setContent {
             val themePreferences = remember { ThemePreferences(applicationContext) }
-            val themeMode by themePreferences.themeMode.collectAsState(initial = ThemeMode.SYSTEM)
+            val themeMode by themePreferences.themeMode.collectAsState(initial = ThemeMode.DARK)
             val authViewModel: AuthViewModel = viewModel(factory = AuthViewModel.Factory)
 
             // Theme wraps the nav graph — Crossfade only animates the theme,

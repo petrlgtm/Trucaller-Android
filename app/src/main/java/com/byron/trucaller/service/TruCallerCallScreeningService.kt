@@ -70,7 +70,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
                     respondToCall(callDetails, response)
 
                     // Show a notification so the user knows a call was blocked
-                    val lookup = callerIdRepo.lookupNumber(phoneNumber)
+                    // Important: do not hit backend here; call screening must stay fast.
+                    val lookup = callerIdRepo.lookupNumberLocal(phoneNumber)
                     val blockedEntry = lookup.callerIdEntry
                     CallNotificationHelper.showBlockedCallNotification(
                         context = this@TruCallerCallScreeningService,
@@ -82,7 +83,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
                 }
 
                 // --- 2. Caller-ID lookup ---
-                val lookupResult = callerIdRepo.lookupNumber(phoneNumber)
+                // Important: do not hit backend here; call screening must stay fast.
+                val lookupResult = callerIdRepo.lookupNumberLocal(phoneNumber)
                 val entry = lookupResult.callerIdEntry
 
                 // Cache the result so the overlay service can reuse it
@@ -151,7 +153,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
                                 .build()
                             respondToCall(callDetails, response)
 
-                            val lookup = callerIdRepo.lookupNumber(phoneNumber)
+                            // Important: do not hit backend here; call screening must stay fast.
+                            val lookup = callerIdRepo.lookupNumberLocal(phoneNumber)
                             CallNotificationHelper.showBlockedCallNotification(
                                 context = this@TruCallerCallScreeningService,
                                 callerName = lookup.callerIdEntry?.name,

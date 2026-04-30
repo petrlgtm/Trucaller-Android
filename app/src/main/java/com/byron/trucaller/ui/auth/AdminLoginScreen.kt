@@ -46,11 +46,13 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import androidx.compose.material3.MaterialTheme
 import com.byron.trucaller.ui.theme.Accent
 import com.byron.trucaller.ui.theme.Background
 import com.byron.trucaller.ui.theme.Brand
 import com.byron.trucaller.ui.theme.BrandDark
 import com.byron.trucaller.ui.theme.Danger
+import com.byron.trucaller.ui.theme.SurfaceLight
 import com.byron.trucaller.ui.theme.TextPrimary
 import com.byron.trucaller.ui.theme.TextSecondary
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -59,6 +61,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel) {
+    val colorScheme = MaterialTheme.colorScheme
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -80,7 +83,7 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
         Box(
             modifier = Modifier
                 .size(80.dp)
-                .background(Color(0xFF6A1B9A), CircleShape),
+                .background(Brand, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Icon(
@@ -117,7 +120,7 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF6A1B9A), unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = colorScheme.outline, focusedContainerColor = SurfaceLight, unfocusedContainerColor = SurfaceLight)
         )
 
         Spacer(modifier = Modifier.height(16.dp))
@@ -140,7 +143,7 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Color(0xFF6A1B9A), unfocusedBorderColor = Color(0xFF444444), focusedContainerColor = Color(0xFF252525), unfocusedContainerColor = Color(0xFF252525))
+            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = colorScheme.outline, focusedContainerColor = SurfaceLight, unfocusedContainerColor = SurfaceLight)
         )
 
         // Error
@@ -187,7 +190,7 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
                 .fillMaxWidth()
                 .height(52.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF6A1B9A)),
+            colors = ButtonDefaults.buttonColors(containerColor = Brand),
             enabled = !isLoading
         ) {
             if (isLoading) {
@@ -223,7 +226,7 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Color(0xFF6A1B9A).copy(alpha = 0.05f), RoundedCornerShape(8.dp))
+                .background(Brand.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
                 .padding(12.dp)
         ) {
             Text(

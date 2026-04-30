@@ -79,6 +79,7 @@ data class UserWithDevices(
  * - `GET    /api/admin/users`            -- paginated user list
  * - `GET    /api/admin/users/{userId}`   -- single user + their devices
  * - `GET    /api/admin/devices`          -- paginated device list
+ * - `PUT    /api/admin/devices/{deviceId}/status` -- update device status
  * - `GET    /api/admin/caller-ids`       -- paginated caller ID list
  * - `POST   /api/admin/caller-ids`      -- create a caller ID entry
  * - `PUT    /api/admin/caller-ids/{id}`  -- update a caller ID entry
@@ -235,6 +236,74 @@ fun Route.adminRoutes() {
                         success = true,
                         data = devices.map { it.toJson() },
                         message = "Retrieved ${devices.size} device(s)"
+                    )
+                )
+            }
+
+            // ── PUT /api/admin/devices/{deviceId}/status ─────────────────
+            put("/devices/{deviceId}/status") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@put
+                }
+
+                val deviceId = call.parameters["deviceId"]
+                if (deviceId.isNullOrBlank()) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Missing deviceId")
+                    )
+                    return@put
+                }
+
+                val request = try {
+                    call.receive<AdminStatusUpdateRequest>()
+                } catch (e: Exception) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(success = false, error = "Invalid request body")
+                    )
+                    return@put
+                }
+
+                val validStatuses = listOf("ACTIVE", "STOLEN", "LOCKED", "LOST", "RECOVERED", "DEACTIVATED")
+                if (request.status !in validStatuses) {
+                    call.respond(
+                        HttpStatusCode.BadRequest,
+                        ApiResponse<Nothing>(
+                            success = false,
+                            error = "Invalid status. Must be one of: ${validStatuses.joinToString()}"
+                        )
+                    )
+                    return@put
+                }
+
+                val updateFields = Document("status", request.status)
+                    .append("updatedAt", java.time.Instant.now().toString())
+
+                val result = Collections.devices.updateOne(
+                    Filters.eq("deviceId", deviceId),
+                    Document("\$set", updateFields)
+                )
+
+                if (result.matchedCount == 0L) {
+                    call.respond(
+                        HttpStatusCode.NotFound,
+                        ApiResponse<Nothing>(success = false, error = "Device not found")
+                    )
+                    return@put
+                }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse<Nothing>(
+                        success = true,
+                        message = "Device status updated to ${request.status}"
                     )
                 )
             }

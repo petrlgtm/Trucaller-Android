@@ -24,6 +24,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.testTag
@@ -83,7 +84,7 @@ fun TruCallerButton(
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.96f else 1f,
+        targetValue = if (isPressed) 0.985f else 1f,
         animationSpec = tween(durationMillis = 100),
         label = "buttonScale"
     )
@@ -123,9 +124,15 @@ fun TruCallerButton(
         }
     }
 
+    val shape = RoundedCornerShape(16.dp)
     val buttonModifier = modifier
         .scale(scale)
-        .height(48.dp)
+        .height(50.dp)
+        .shadow(
+            elevation = if (enabled && !isLoading && style != TruCallerButtonStyle.Secondary) 10.dp else 0.dp,
+            shape = shape,
+            clip = false
+        )
         .semantics { this.contentDescription = contentDesc }
         .let { mod -> if (testTag != null) mod.testTag(testTag) else mod }
 
@@ -150,7 +157,7 @@ fun TruCallerButton(
                 Text(
                     text = text,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp
+                    fontSize = 15.sp
                 )
                 if (trailingIcon != null) {
                     Spacer(modifier = Modifier.width(8.dp))
@@ -169,16 +176,16 @@ fun TruCallerButton(
             onClick = onClick,
             modifier = buttonModifier,
             enabled = enabled && !isLoading,
-            shape = RoundedCornerShape(12.dp),
+            shape = shape,
             border = BorderStroke(
-                width = 1.5.dp,
+                width = 1.dp,
                 color = if (enabled) colorScheme.primary else colorScheme.primary.copy(alpha = 0.38f)
             ),
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = colorScheme.primary,
                 disabledContentColor = disabledContentColor
             ),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
             interactionSource = interactionSource
         ) {
             ButtonContent()
@@ -188,14 +195,14 @@ fun TruCallerButton(
             onClick = onClick,
             modifier = buttonModifier,
             enabled = enabled && !isLoading,
-            shape = RoundedCornerShape(12.dp),
+            shape = shape,
             colors = ButtonDefaults.buttonColors(
                 containerColor = containerColor,
                 contentColor = contentColor,
                 disabledContainerColor = disabledContainerColor,
                 disabledContentColor = disabledContentColor
             ),
-            contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
+            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 14.dp),
             interactionSource = interactionSource
         ) {
             ButtonContent()

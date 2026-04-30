@@ -4,6 +4,9 @@ import android.content.Intent
 import android.net.Uri
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.res.painterResource
+import com.byron.trucaller.R
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -74,16 +77,11 @@ import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.components.TruCallerButtonStyle
 import com.byron.trucaller.ui.components.TruCallerHeader
-import com.byron.trucaller.ui.theme.Background
+import com.byron.trucaller.ui.theme.Accent
 import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
 import com.byron.trucaller.ui.theme.Danger
-import com.byron.trucaller.ui.theme.Divider
+import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.ui.theme.Success
-import com.byron.trucaller.ui.theme.SurfaceCard
-import com.byron.trucaller.ui.theme.SurfaceElevated
-import com.byron.trucaller.ui.theme.TextPrimary
-import com.byron.trucaller.ui.theme.TextSecondary
 import com.byron.trucaller.ui.theme.Warning
 import com.byron.trucaller.util.formatPhoneNumber
 import com.byron.trucaller.util.getSpamScoreColor
@@ -93,9 +91,11 @@ import com.byron.trucaller.viewmodel.VerificationUiState
 
 @Composable
 fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthViewModel) {
+    val colorScheme = MaterialTheme.colorScheme
     var searchQuery by remember { mutableStateOf("") }
 
     val lookupResult by callerIdViewModel.lookupResult.collectAsState()
+    val isLookingUp by callerIdViewModel.isLookingUp.collectAsState()
     val recentLookups by callerIdViewModel.recentLookups.collectAsState()
     val notFound by callerIdViewModel.notFound.collectAsState()
     val actionMessage by callerIdViewModel.actionMessage.collectAsState()
@@ -140,16 +140,13 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Background)
+            .background(colorScheme.background)
             .verticalScroll(rememberScrollState())
     ) {
         // Header - using TruCallerHeader component
         TruCallerHeader(
             title = "Caller ID",
-            subtitle = "Search any phone number",
-            gradientColors = listOf(BrandDark, Background),
-            titleColor = Color.White,
-            subtitleColor = Color.White.copy(alpha = 0.8f)
+            subtitle = "Search any phone number"
         )
 
         Column(modifier = Modifier.padding(16.dp)) {
@@ -157,14 +154,14 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
             if (actionMessage != null) {
                 Snackbar(
                     modifier = Modifier.padding(bottom = 8.dp),
-                    containerColor = SurfaceCard,
+                    containerColor = colorScheme.surface,
                     action = {
                         TextButton(onClick = { callerIdViewModel.clearActionMessage() }) {
-                            Text("OK", color = Brand)
+                            Text("OK", color = colorScheme.primary)
                         }
                     }
                 ) {
-                    Text(actionMessage!!, color = TextPrimary)
+                    Text(actionMessage!!, color = colorScheme.onSurface)
                 }
             }
 
@@ -187,15 +184,34 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                 modifier = Modifier.fillMaxWidth().testTag("caller_id_search_input"),
                 shape = RoundedCornerShape(12.dp),
                 colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = Brand,
-                    unfocusedBorderColor = Divider,
-                    focusedContainerColor = SurfaceElevated,
-                    unfocusedContainerColor = SurfaceElevated
+                    focusedBorderColor = colorScheme.primary,
+                    unfocusedBorderColor = GlassBorder,
+                    focusedContainerColor = colorScheme.surface,
+                    unfocusedContainerColor = colorScheme.surface
                 )
             )
 
+            // Loading state
+            if (isLookingUp) {
+                Spacer(modifier = Modifier.height(40.dp))
+                androidx.compose.material3.CircularProgressIndicator(
+                    modifier = Modifier
+                        .align(Alignment.CenterHorizontally)
+                        .size(40.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 3.dp
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    "Looking up number...",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    fontSize = 14.sp,
+                    modifier = Modifier.align(Alignment.CenterHorizontally)
+                )
+            }
+
             // Not-found state with EmptyStateView illustration
-            if (notFound) {
+            if (notFound && !isLookingUp) {
                 EmptyStateView(
                     title = "No Results Found",
                     subtitle = "We couldn't find any information for this phone number. Try a different number or check the format.",
@@ -210,8 +226,8 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard),
-                    elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
                         // Source indicator using TruCallerBadge
@@ -250,7 +266,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                             }
                             if (isNumberBlocked) {
                                 TruCallerBadge(
-                                    text = "BLOCKED",
+                                    text = "REJECTED",
                                     type = BadgeType.Spam
                                 )
                             }
@@ -265,8 +281,8 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                             )
                             Spacer(modifier = Modifier.width(16.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(entry.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
-                                Text(formatPhoneNumber(entry.phoneNumber), fontSize = 14.sp, color = TextSecondary)
+                                Text(entry.name, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
+                                Text(formatPhoneNumber(entry.phoneNumber), fontSize = 14.sp, color = colorScheme.onSurfaceVariant)
                             }
                         }
 
@@ -288,12 +304,12 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                     },
                                     modifier = Modifier
                                         .size(48.dp)
-                                        .background(Success.copy(alpha = 0.1f), CircleShape)
+                                        .background(Success.copy(alpha = 0.12f), CircleShape)
                                 ) {
                                     Icon(Icons.Default.Call, "Call", tint = Success, modifier = Modifier.size(24.dp))
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("Call", fontSize = 12.sp, color = TextSecondary)
+                                Text("Call", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
                             }
 
                             // WhatsApp button
@@ -308,17 +324,17 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                     },
                                     modifier = Modifier
                                         .size(48.dp)
-                                        .background(Color(0xFF25D366).copy(alpha = 0.1f), CircleShape)
+                                        .background(Color(0xFF25D366).copy(alpha = 0.12f), CircleShape)
                                 ) {
                                     Icon(
-                                        Icons.Default.Call,
+                                        painter = painterResource(R.drawable.ic_whatsapp),
                                         "WhatsApp",
-                                        tint = Color(0xFF25D366),
+                                        tint = Color.Unspecified,
                                         modifier = Modifier.size(24.dp)
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("WhatsApp", fontSize = 12.sp, color = TextSecondary)
+                                Text("WhatsApp", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
                             }
 
                             // Edit button
@@ -330,12 +346,12 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                     },
                                     modifier = Modifier
                                         .size(48.dp)
-                                        .background(Brand.copy(alpha = 0.1f), CircleShape)
+                                        .background(Brand.copy(alpha = 0.12f), CircleShape)
                                 ) {
                                     Icon(Icons.Default.Edit, "Edit", tint = Brand, modifier = Modifier.size(24.dp))
                                 }
                                 Spacer(modifier = Modifier.height(4.dp))
-                                Text("Edit", fontSize = 12.sp, color = TextSecondary)
+                                Text("Edit", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
                             }
 
                             // Block/Unblock button
@@ -351,13 +367,13 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                     modifier = Modifier
                                         .size(48.dp)
                                         .background(
-                                            if (isNumberBlocked) Success.copy(alpha = 0.1f) else Danger.copy(alpha = 0.1f),
+                                            if (isNumberBlocked) Success.copy(alpha = 0.12f) else Danger.copy(alpha = 0.12f),
                                             CircleShape
                                         )
                                 ) {
                                     Icon(
                                         if (isNumberBlocked) Icons.Default.CheckCircle else Icons.Default.Block,
-                                        if (isNumberBlocked) "Unblock" else "Block",
+                                        if (isNumberBlocked) "Unreject" else "Reject",
                                         tint = if (isNumberBlocked) Success else Danger,
                                         modifier = Modifier.size(24.dp)
                                     )
@@ -366,7 +382,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                 Text(
                                     if (isNumberBlocked) "Unblock" else "Block",
                                     fontSize = 12.sp,
-                                    color = TextSecondary
+                                    color = colorScheme.onSurfaceVariant
                                 )
                             }
                         }
@@ -374,7 +390,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                         Spacer(modifier = Modifier.height(20.dp))
 
                         // Spam score with animated progress bar
-                        Text("Spam Score", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = TextSecondary)
+                        Text("Spam Score", fontWeight = FontWeight.SemiBold, fontSize = 13.sp, color = colorScheme.onSurfaceVariant)
                         Spacer(modifier = Modifier.height(6.dp))
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             LinearProgressIndicator(
@@ -384,7 +400,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                     .height(8.dp)
                                     .clip(RoundedCornerShape(4.dp)),
                                 color = getSpamScoreColor(entry.spamScore),
-                                trackColor = Divider
+                                trackColor = colorScheme.surfaceVariant
                             )
                             Spacer(modifier = Modifier.width(12.dp))
                             Text(
@@ -401,7 +417,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                         val (catLabel, catBadgeType, catColor) = when (entry.category) {
                             SpamCategory.SAFE -> Triple("Safe", BadgeType.Success, Success)
                             SpamCategory.SUSPECTED_SPAM -> Triple("Suspected Spam", BadgeType.Warning, Warning)
-                            SpamCategory.SPAM -> Triple("Spam", BadgeType.Spam, Color(0xFFF4511E))
+                            SpamCategory.SPAM -> Triple("Spam", BadgeType.Spam, Accent)
                             SpamCategory.FRAUD -> Triple("Fraud", BadgeType.Spam, Danger)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -412,7 +428,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                 backgroundColor = catColor.copy(alpha = 0.12f)
                             )
                             Spacer(modifier = Modifier.width(12.dp))
-                            Text("${entry.reportCount} reports", color = TextSecondary, fontSize = 13.sp)
+                            Text("${entry.reportCount} reports", color = colorScheme.onSurfaceVariant, fontSize = 13.sp)
                         }
 
                         Spacer(modifier = Modifier.height(20.dp))
@@ -445,7 +461,7 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                 "Community Verification",
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 13.sp,
-                                color = TextSecondary
+                                color = colorScheme.onSurfaceVariant
                             )
                             Spacer(modifier = Modifier.height(8.dp))
 
@@ -498,19 +514,20 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
             // Recent lookups
             if (recentLookups.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(24.dp))
-                Text("Recent Lookups", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = TextPrimary)
+                Text("Recent Lookups", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = colorScheme.onSurface)
                 Spacer(modifier = Modifier.height(12.dp))
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(12.dp),
-                    colors = CardDefaults.cardColors(containerColor = SurfaceCard)
+                    colors = CardDefaults.cardColors(containerColor = colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
                 ) {
                     Column {
                         recentLookups.forEach { recentEntry ->
                             val catColor = when (recentEntry.category) {
                                 SpamCategory.SAFE -> Success
                                 SpamCategory.SUSPECTED_SPAM -> Warning
-                                SpamCategory.SPAM -> Color(0xFFF4511E)
+                                SpamCategory.SPAM -> Accent
                                 SpamCategory.FRAUD -> Danger
                             }
                             Row(
@@ -528,11 +545,11 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                                 )
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text(recentEntry.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = TextPrimary)
+                                    Text(recentEntry.name, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colorScheme.onSurface)
                                     Text(
                                         formatPhoneNumber(recentEntry.phoneNumber),
                                         fontSize = 12.sp,
-                                        color = TextSecondary,
+                                        color = colorScheme.onSurfaceVariant,
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
@@ -556,10 +573,11 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
     if (showEditDialog && entry != null) {
         AlertDialog(
             onDismissRequest = { showEditDialog = false },
-            title = { Text("Edit Name", fontWeight = FontWeight.Bold, color = TextPrimary) },
+            containerColor = MaterialTheme.colorScheme.surface,
+            title = { Text("Edit Name", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface) },
             text = {
                 Column {
-                    Text("Phone: ${formatPhoneNumber(entry.phoneNumber)}", fontSize = 13.sp, color = TextSecondary)
+                    Text("Phone: ${formatPhoneNumber(entry.phoneNumber)}", fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(modifier = Modifier.height(12.dp))
                     OutlinedTextField(
                         value = editName,
@@ -569,10 +587,10 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(8.dp),
                         colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = Brand,
-                            unfocusedBorderColor = Divider,
-                            focusedContainerColor = SurfaceElevated,
-                            unfocusedContainerColor = SurfaceElevated
+                            focusedBorderColor = MaterialTheme.colorScheme.primary,
+                            unfocusedBorderColor = GlassBorder,
+                            focusedContainerColor = MaterialTheme.colorScheme.surface,
+                            unfocusedContainerColor = MaterialTheme.colorScheme.surface
                         )
                     )
                 }
@@ -586,12 +604,12 @@ fun CallerIdScreen(callerIdViewModel: CallerIdViewModel, authViewModel: AuthView
                         }
                     }
                 ) {
-                    Text("Save", color = Brand, fontWeight = FontWeight.Bold)
+                    Text("Save", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
                 }
             },
             dismissButton = {
                 TextButton(onClick = { showEditDialog = false }) {
-                    Text("Cancel", color = TextSecondary)
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         )

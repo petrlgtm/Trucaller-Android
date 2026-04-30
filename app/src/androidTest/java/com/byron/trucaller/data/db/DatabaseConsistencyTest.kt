@@ -5,10 +5,13 @@ import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.google.common.truth.Truth.assertThat
+import com.byron.trucaller.data.model.TrustLevel
+import com.byron.trucaller.data.model.User
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import kotlinx.coroutines.runBlocking
 
 /**
  * Instrumented tests for database consistency and entity integrity.
@@ -67,9 +70,9 @@ class DatabaseConsistencyTest {
     // ── Database Version ──────────────────────────────────────────────────
 
     @Test
-    fun databaseVersionIs14() {
+    fun databaseVersionIs15() {
         val db = database.openHelper.readableDatabase
-        assertThat(db.version).isEqualTo(14)
+        assertThat(db.version).isEqualTo(15)
     }
 
     // ── Table Existence ──────────────────────────────────────────────────
@@ -227,8 +230,28 @@ class DatabaseConsistencyTest {
 
     @Test
     fun databaseHasTypeConverters() {
-        // Verify database instance can be created (TypeConverters must be valid)
-        assertThat(database).isNotNull()
-        assertThat(database.isOpen).isTrue()
+        // Validate that Room actually applies our TypeConverters by doing a real roundtrip.
+        // `User.trustLevel` is persisted via Converters.
+        runBlocking {
+            val user = User(
+                id = "type-converter-user-1",
+                fullName = "Converter Test",
+                phoneNumber = "+256700000000",
+                email = null,
+                passwordHash = "hash",
+                createdAt = "2026-03-01T00:00:00Z",
+                lastLogin = null,
+                isActive = true,
+                avatarUrl = null,
+                securityPin = null,
+                trustScore = 42,
+                trustLevel = TrustLevel.TRUSTED
+            )
+            database.userDao().insert(user)
+
+            val loaded = database.userDao().getById(user.id)
+            assertThat(loaded).isNotNull()
+            assertThat(loaded!!.trustLevel).isEqualTo(TrustLevel.TRUSTED)
+        }
     }
 }

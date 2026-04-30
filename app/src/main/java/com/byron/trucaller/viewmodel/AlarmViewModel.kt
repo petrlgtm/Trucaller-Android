@@ -298,6 +298,11 @@ class AlarmViewModel(
      * Executes device lock locally on this device.
      * Called directly when target is the current device, or from TruCallerMessagingService via FCM.
      */
+    override fun onCleared() {
+        super.onCleared()
+        stopAlarm()
+    }
+
     fun executeLocalLockDevice(logId: String) {
         viewModelScope.launch {
             try {

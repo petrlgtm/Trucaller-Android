@@ -58,6 +58,8 @@ import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.components.TruCallerButtonStyle
 import com.byron.trucaller.ui.components.TruCallerCard
+import com.byron.trucaller.ui.theme.Brand
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AdminSettingsViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -116,15 +118,15 @@ fun AdminSettingsScreen(
                     Text(
                         "Settings",
                         fontWeight = FontWeight.Bold,
-                        color = colorScheme.onPrimary
+                        color = colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onPrimary)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.primary)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
             )
 
             Column(
@@ -145,8 +147,8 @@ fun AdminSettingsScreen(
                     TruCallerBadge(
                         text = "Super Admin",
                         type = BadgeType.Custom,
-                        color = Color(0xFF6A1B9A),
-                        backgroundColor = Color(0xFF6A1B9A).copy(alpha = 0.1f)
+                        color = Brand,
+                        backgroundColor = Brand.copy(alpha = 0.1f)
                     )
 
                     Spacer(modifier = Modifier.height(Spacing.md))
@@ -157,8 +159,8 @@ fun AdminSettingsScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colorScheme.primary,
                             unfocusedBorderColor = colorScheme.outline,
-                            focusedContainerColor = colorScheme.surfaceVariant,
-                            unfocusedContainerColor = colorScheme.surfaceVariant
+                            focusedContainerColor = colorScheme.surface,
+                            unfocusedContainerColor = colorScheme.surface
                         )
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -169,8 +171,8 @@ fun AdminSettingsScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colorScheme.primary,
                             unfocusedBorderColor = colorScheme.outline,
-                            focusedContainerColor = colorScheme.surfaceVariant,
-                            unfocusedContainerColor = colorScheme.surfaceVariant
+                            focusedContainerColor = colorScheme.surface,
+                            unfocusedContainerColor = colorScheme.surface
                         )
                     )
                     Spacer(modifier = Modifier.height(Spacing.md))
@@ -240,8 +242,8 @@ fun AdminSettingsScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colorScheme.primary,
                             unfocusedBorderColor = colorScheme.outline,
-                            focusedContainerColor = colorScheme.surfaceVariant,
-                            unfocusedContainerColor = colorScheme.surfaceVariant
+                            focusedContainerColor = colorScheme.surface,
+                            unfocusedContainerColor = colorScheme.surface
                         )
                     )
                     Spacer(modifier = Modifier.height(12.dp))
@@ -253,8 +255,8 @@ fun AdminSettingsScreen(
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedBorderColor = colorScheme.primary,
                             unfocusedBorderColor = colorScheme.outline,
-                            focusedContainerColor = colorScheme.surfaceVariant,
-                            unfocusedContainerColor = colorScheme.surfaceVariant
+                            focusedContainerColor = colorScheme.surface,
+                            unfocusedContainerColor = colorScheme.surface
                         )
                     )
                     Spacer(modifier = Modifier.height(Spacing.md))
@@ -341,13 +343,13 @@ private fun SyncStatusIndicator(syncStatus: SyncStatus) {
                         Icons.Default.Warning,
                         contentDescription = null,
                         modifier = Modifier.size(16.dp),
-                        tint = Color(0xFFFF9800)
+                        tint = BrandGold
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
                         syncStatus.message,
                         fontSize = 13.sp,
-                        color = Color(0xFFFF9800)
+                        color = BrandGold
                     )
                 }
                 else -> {}

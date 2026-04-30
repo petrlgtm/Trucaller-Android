@@ -266,7 +266,7 @@ class SmsViewModel(
 
     fun sendSms(address: String, body: String, contentResolver: ContentResolver) {
         if (body.isBlank()) return
-        
+
         viewModelScope.launch {
             try {
                 val smsManager = if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.M) {
@@ -275,18 +275,19 @@ class SmsViewModel(
                     @Suppress("DEPRECATION")
                     SmsManager.getDefault()
                 }
-                
+
                 if (smsManager == null) {
                     _actionMessage.value = "SMS service unavailable"
                     return@launch
                 }
 
+                val sentAt = System.currentTimeMillis()
                 // Optimistic UI update: add a local version of the message immediately
                 val optimisticMsg = SmsMessage(
-                    id = -System.currentTimeMillis(), // Negative ID to distinguish from system messages
+                    id = -sentAt,
                     address = address,
                     body = body,
-                    date = System.currentTimeMillis(),
+                    date = sentAt,
                     type = SmsType.SENT,
                     read = true,
                     category = SmsCategory.PERSONAL
@@ -295,31 +296,43 @@ class SmsViewModel(
 
                 val parts = smsManager.divideMessage(body)
                 smsManager.sendMultipartTextMessage(address, null, parts, null, null)
-                
-                // Try to save to sent folder (requires default app status on Android 10+)
+
+                // Try to save to sent folder (only works when app is the default SMS app)
+                var savedToProvider = false
                 try {
                     val values = ContentValues().apply {
                         put(Telephony.Sms.ADDRESS, address)
                         put(Telephony.Sms.BODY, body)
-                        put(Telephony.Sms.DATE, System.currentTimeMillis())
+                        put(Telephony.Sms.DATE, sentAt)
                         put(Telephony.Sms.READ, 1)
                         put(Telephony.Sms.TYPE, Telephony.Sms.MESSAGE_TYPE_SENT)
                     }
-                    contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+                    val uri = contentResolver.insert(Telephony.Sms.Sent.CONTENT_URI, values)
+                    savedToProvider = uri != null
                 } catch (e: Exception) {
-                    Log.w(TAG, "Failed to save message to system provider (not default app?)", e)
+                    Log.w(TAG, "Failed to save to provider — app is not default SMS app", e)
                 }
-                
-                _actionMessage.value = "Message sent"
-                
-                // Small delay to allow system provider to index the new message
-                delay(400)
 
-                // Reload conversation from system provider to get the real ID and final state
+                _actionMessage.value = "Message sent"
+
+                // Allow system provider a moment to index the new message
+                delay(600)
+
                 val authApp = getApplication<TruCallerApplication>()
                 val userId = authApp.container.userPreferences.loggedInUserId.firstOrNull() ?: "unknown"
-                loadConversation(contentResolver, address, userId)
-                
+                val reloaded = smsRepository.getConversation(contentResolver, address, userId)
+
+                // If the sent message is now in the provider, use real data.
+                // If not (not default app), keep the optimistic message so it stays visible.
+                val sentFoundInProvider = reloaded.any { msg ->
+                    msg.body == body && msg.type == SmsType.SENT
+                }
+                _currentMessages.value = if (sentFoundInProvider) {
+                    reloaded
+                } else {
+                    reloaded.filter { it.id > 0 } + optimisticMsg
+                }
+
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to send SMS", e)
                 _actionMessage.value = "Failed to send: ${e.message}"

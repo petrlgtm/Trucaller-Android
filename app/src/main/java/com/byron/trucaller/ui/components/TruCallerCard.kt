@@ -1,5 +1,6 @@
 package com.byron.trucaller.ui.components
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -17,29 +18,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.byron.trucaller.ui.theme.BorderRadius
+import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.ui.theme.Spacing
 
-/**
- * A consistent, themed card composable used throughout the app.
- *
- * Uses [MaterialTheme.colorScheme.surfaceVariant] as the default container
- * color, ensuring proper appearance in both light and dark themes.
- *
- * @param modifier Modifier applied to the card.
- * @param cornerRadius Corner radius of the card. Defaults to [BorderRadius.lg] (16dp).
- * @param elevation Default elevation of the card.
- * @param containerColor Background color of the card body.
- * @param gradientColors When provided, renders a gradient header strip above
- *   the card body using the given color stops.
- * @param gradientHeaderContent Optional composable content for the gradient header area.
- * @param content The main card body content.
- */
 @Composable
 fun TruCallerCard(
     modifier: Modifier = Modifier,
-    cornerRadius: Dp = BorderRadius.lg,
-    elevation: Dp = 2.dp,
-    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant,
+    cornerRadius: Dp = 24.dp,
+    elevation: Dp = 4.dp,
+    containerColor: Color = MaterialTheme.colorScheme.surface,
     gradientColors: List<Color>? = null,
     gradientHeaderContent: (@Composable () -> Unit)? = null,
     content: @Composable ColumnScope.() -> Unit
@@ -48,7 +35,8 @@ fun TruCallerCard(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(cornerRadius),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = elevation)
+        elevation = CardDefaults.cardElevation(defaultElevation = elevation),
+            border = BorderStroke(0.5.dp, GlassBorder)
     ) {
         // Optional gradient header
         if (gradientColors != null && gradientColors.size >= 2) {
@@ -59,9 +47,7 @@ fun TruCallerCard(
                         Brush.verticalGradient(colors = gradientColors),
                         shape = RoundedCornerShape(
                             topStart = cornerRadius,
-                            topEnd = cornerRadius,
-                            bottomStart = 0.dp,
-                            bottomEnd = 0.dp
+                            topEnd = cornerRadius
                         )
                     )
                     .padding(horizontal = Spacing.md, vertical = Spacing.sm)
@@ -70,11 +56,10 @@ fun TruCallerCard(
             }
         }
 
-        // Main card body
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(Spacing.md),
+                .padding(Spacing.cardPadding),
             content = content
         )
     }

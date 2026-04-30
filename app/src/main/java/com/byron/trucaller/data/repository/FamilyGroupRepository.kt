@@ -1,12 +1,15 @@
 package com.byron.trucaller.data.repository
 
+import androidx.room.withTransaction
 import com.byron.trucaller.data.dao.FamilyGroupDao
 import com.byron.trucaller.data.dao.FamilyMemberDao
+import com.byron.trucaller.data.db.TruCallerDatabase
 import com.byron.trucaller.data.model.FamilyGroup
 import com.byron.trucaller.data.model.FamilyMember
 import kotlinx.coroutines.flow.Flow
 
 class FamilyGroupRepository(
+    private val database: TruCallerDatabase,
     private val familyGroupDao: FamilyGroupDao,
     private val familyMemberDao: FamilyMemberDao
 ) {
@@ -40,8 +43,10 @@ class FamilyGroupRepository(
         familyGroupDao.delete(group)
 
     suspend fun deleteGroupById(id: String) {
-        familyMemberDao.deleteByGroupId(id)
-        familyGroupDao.deleteById(id)
+        database.withTransaction {
+            familyMemberDao.deleteByGroupId(id)
+            familyGroupDao.deleteById(id)
+        }
     }
 
     fun getGroupCount(): Flow<Int> =

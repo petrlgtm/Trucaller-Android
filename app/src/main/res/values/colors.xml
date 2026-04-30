@@ -1,11 +1,23 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="purple_200">#FFBB86FC</color>
-    <color name="purple_500">#FF6200EE</color>
-    <color name="purple_700">#FF3700B3</color>
-    <color name="teal_200">#FF03DAC5</color>
-    <color name="teal_700">#FF018786</color>
+    <!-- Official Truecaller Colors -->
+    <color name="true_blue">#0087FF</color>
+    <color name="true_blue_dark">#0047AB</color>
+    <color name="true_blue_light">#E1F0FF</color>
+    <color name="true_spam">#EB002B</color>
+    <color name="true_verified">#24B024</color>
+
     <color name="black">#FF000000</color>
     <color name="white">#FFFFFFFF</color>
-    <color name="ic_launcher_background">#1A1A1A</color>
+    
+    <!-- System & UI -->
+    <color name="ic_launcher_background">#0087FF</color>
+    <color name="splash_bg">#0087FF</color>
+    
+    <!-- Legacy support (mapped to brand) -->
+    <color name="purple_200">#8B3DFF</color>
+    <color name="purple_500">#0087FF</color>
+    <color name="purple_700">#0047AB</color>
+    <color name="teal_200">#24B024</color>
+    <color name="teal_700">#1B8E1B</color>
 </resources>

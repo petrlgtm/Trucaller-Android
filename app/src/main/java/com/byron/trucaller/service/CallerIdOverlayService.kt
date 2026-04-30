@@ -45,16 +45,16 @@ class CallerIdOverlayService : Service() {
 
         // Spam category colors
         private const val COLOR_SAFE = 0xFF2E7D32.toInt()           // Green
-        private const val COLOR_SUSPECTED_SPAM = 0xFFFFCD00.toInt() // Yellow
+        private const val COLOR_SUSPECTED_SPAM = 0xFFFFB300.toInt() // Gold (warning)
         private const val COLOR_SPAM = 0xFFFF9800.toInt()           // Orange
-        private const val COLOR_FRAUD = 0xFFD90000.toInt()          // Red
+        private const val COLOR_FRAUD = 0xFFC62828.toInt()          // Crimson
 
-        // Brand color
-        private const val COLOR_BRAND = 0xFFFFCD00.toInt()
+        // Brand color (Logo Blue)
+        private const val COLOR_BRAND = 0xFF1E88E5.toInt()
 
         // Dark theme colors
-        private const val DARK_CARD_BG = 0xE61E1E1E.toInt()        // Semi-transparent dark
-        private const val DARK_CARD_BG_SOLID = 0xFF1E1E1E.toInt()
+        private const val DARK_CARD_BG = 0xE61A1F2E.toInt()        // Semi-transparent navy
+        private const val DARK_CARD_BG_SOLID = 0xFF1A1F2E.toInt()
         private const val DARK_TEXT_PRIMARY = 0xFFF5F5F5.toInt()
         private const val DARK_TEXT_SECONDARY = 0xFFB0B0B0.toInt()
         private const val DARK_SURFACE_ELEVATED = 0xFF252525.toInt()

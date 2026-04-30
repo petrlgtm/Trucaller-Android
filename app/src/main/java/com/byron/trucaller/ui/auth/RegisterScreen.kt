@@ -113,7 +113,7 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                     Text(
                         "Create Account",
                         fontWeight = FontWeight.Bold,
-                        color = colorScheme.onPrimary
+                        color = colorScheme.onBackground
                     )
                 },
                 navigationIcon = {
@@ -121,12 +121,12 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             "Back",
-                            tint = colorScheme.onPrimary
+                            tint = colorScheme.onBackground
                         )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = colorScheme.onPrimary
+                    containerColor = colorScheme.background
                 )
             )
         }

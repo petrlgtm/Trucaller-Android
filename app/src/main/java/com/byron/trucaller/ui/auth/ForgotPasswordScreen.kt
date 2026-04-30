@@ -2,6 +2,8 @@ package com.byron.trucaller.ui.auth
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.keyframes
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -15,7 +17,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardOptions
@@ -57,6 +62,7 @@ import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.components.TruCallerTextField
+import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.util.isValidPhoneInput
 import com.byron.trucaller.util.maskPhoneNumber
 import com.byron.trucaller.viewmodel.AuthViewModel
@@ -123,7 +129,7 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                 Text(
                     "Reset Password",
                     fontWeight = FontWeight.Bold,
-                    color = colorScheme.onPrimary
+                    color = colorScheme.onBackground
                 )
             },
             navigationIcon = {
@@ -138,14 +144,70 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowBack,
                         "Back",
-                        tint = colorScheme.onPrimary
+                        tint = colorScheme.onBackground
                     )
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = colorScheme.onPrimary
+                containerColor = colorScheme.background
             )
         )
+
+        // Step progress indicator
+        if (!success) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(colorScheme.surface)
+                    .padding(horizontal = 24.dp, vertical = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.Center
+            ) {
+                val steps = listOf("Phone", "Verify", "Password")
+                steps.forEachIndexed { index, label ->
+                    val stepNum = index + 1
+                    val isActive = step >= stepNum
+                    val isCurrent = step == stepNum
+
+                    // Circle
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .background(
+                                if (isActive) colorScheme.primary else colorScheme.outlineVariant,
+                                CircleShape
+                            ),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            "$stepNum",
+                            color = if (isActive) colorScheme.onPrimary else colorScheme.onSurfaceVariant,
+                            fontSize = 12.sp,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        label,
+                        fontSize = 12.sp,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        color = if (isActive) colorScheme.primary else colorScheme.onSurfaceVariant
+                    )
+                    if (index < steps.lastIndex) {
+                        Box(
+                            modifier = Modifier
+                                .padding(horizontal = 8.dp)
+                                .width(28.dp)
+                                .height(2.dp)
+                                .background(
+                                    if (step > stepNum) colorScheme.primary else colorScheme.outlineVariant,
+                                    RoundedCornerShape(1.dp)
+                                )
+                        )
+                    }
+                }
+            }
+        }
 
         Column(
             modifier = Modifier
@@ -313,26 +375,25 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                     Box(
                                         modifier = Modifier
                                             .weight(1f)
-                                            .height(52.dp)
+                                            .height(56.dp)
                                             .border(
-                                                width = if (isFocused) 2.dp else 1.5.dp,
+                                                width = if (isFocused) 2.dp else 1.dp,
                                                 color = when {
                                                     error != null -> colorScheme.error
                                                     isFocused -> colorScheme.primary
-                                                    char.isNotEmpty() -> colorScheme.primary
-                                                    else -> colorScheme.outline
+                                                    else -> GlassBorder
                                                 },
-                                                shape = RoundedCornerShape(12.dp)
+                                                shape = RoundedCornerShape(14.dp)
                                             )
                                             .background(
-                                                if (char.isNotEmpty()) colorScheme.surfaceVariant else colorScheme.background,
-                                                RoundedCornerShape(12.dp)
+                                                colorScheme.surface,
+                                                RoundedCornerShape(14.dp)
                                             ),
                                         contentAlignment = Alignment.Center
                                     ) {
                                         Text(
                                             text = char,
-                                            fontSize = 22.sp,
+                                            fontSize = 24.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = colorScheme.onBackground,
                                             textAlign = TextAlign.Center
@@ -400,7 +461,7 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                         }) {
                             Text(
                                 "Resend Code",
-                                color = colorScheme.secondary,
+                                color = colorScheme.primary,
                                 fontWeight = FontWeight.SemiBold
                             )
                         }
