@@ -46,6 +46,9 @@ dependencies {
     // Firebase Admin SDK (FCM push notifications)
     implementation("com.google.firebase:firebase-admin:9.4.3")
 
+    // Redis cache (graceful degradation when REDIS_URL not set)
+    implementation("io.lettuce:lettuce-core:6.4.0.RELEASE")
+
     // Logging
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
 

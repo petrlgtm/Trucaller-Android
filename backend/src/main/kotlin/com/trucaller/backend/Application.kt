@@ -9,6 +9,8 @@ import com.trucaller.backend.data.MongoDB
 import com.trucaller.backend.plugins.RateLimiterPlugin
 import com.trucaller.backend.plugins.RequestSizeLimiterPlugin
 import com.trucaller.backend.plugins.SecurityLogger
+import com.trucaller.backend.service.BackgroundJobs
+import com.trucaller.backend.service.RedisCache
 import com.trucaller.backend.service.FcmService
 import com.trucaller.backend.routes.adminRoutes
 import com.trucaller.backend.routes.alarmRoutes
@@ -134,6 +136,10 @@ fun Application.module() {
         }
     }
 
+    // ── Redis cache ──────────────────────────────────────────────────────
+    val redisUrl = environment.config.propertyOrNull("redis.url")?.getString()
+    RedisCache.initialize(redisUrl)
+
     // ── JWT Authentication ───────────────────────────────────────────────
     JwtConfig.init(environment)
     JwtConfig.configureAuth(this)
@@ -147,10 +153,12 @@ fun Application.module() {
         app.launch {
             MongoDB.connect(mongoUri)
             AdminSeeder.seed()
+            BackgroundJobs.start(this)
         }
     }
     environment.monitor.subscribe(ApplicationStopped) {
         MongoDB.close()
+        RedisCache.close()
     }
 
     // ── Routing ──────────────────────────────────────────────────────────

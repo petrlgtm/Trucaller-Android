@@ -2,21 +2,26 @@ package com.trucaller.backend.routes
 
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Updates
+import com.trucaller.backend.auth.getAdminRole
+import com.trucaller.backend.auth.userId
 import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
 import com.trucaller.backend.data.models.LookupResponse
 import com.trucaller.backend.data.models.SpamCategory
+import com.trucaller.backend.service.CallerIdService
+import com.trucaller.backend.service.PhoneNormalizer
+import com.trucaller.backend.service.RedisCache
+import com.trucaller.backend.service.SearchLogger
 import io.ktor.http.*
 import io.ktor.server.application.*
-import com.trucaller.backend.auth.getAdminRole
-import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.bson.Document
 import org.bson.types.ObjectId
 import java.time.Instant
@@ -39,15 +44,11 @@ data class VerificationStatus(
     val confirmCount: Int,
     val disputeCount: Int,
     val communityVerified: Boolean,
-    val userVote: String?     // "confirm", "dispute", or null
+    val userVote: String?
 )
 
-/**
- * Registers Caller ID routes under `/api/caller-id`.
- *
- * - `GET  /api/caller-id/lookup/{phoneNumber}` — 3-tier caller ID lookup (authenticated)
- * - `POST /api/caller-id/report`               — report a phone number as spam (authenticated)
- */
+private val cacheJson = Json { ignoreUnknownKeys = true }
+
 fun Route.callerIdRoutes() {
 
     route("/api/caller-id") {
@@ -60,48 +61,60 @@ fun Route.callerIdRoutes() {
                 if (rawPhone.isNullOrBlank()) {
                     call.respond(
                         HttpStatusCode.BadRequest,
-                        ApiResponse<LookupResponse>(
-                            success = false,
-                            error = "Phone number is required."
-                        )
+                        ApiResponse<LookupResponse>(success = false, error = "Phone number is required.")
                     )
                     return@get
                 }
 
-                val phoneNumber = normalizeToE164(rawPhone)
-
+                val phone = PhoneNormalizer.normalize(rawPhone)
                 val userId = call.userId()
+                val startMs = System.currentTimeMillis()
 
-                // ── Tier 1: callerIds collection ────────────────────────
+                // ── Redis cache ─────────────────────────────────────────
+                val cached = RedisCache.get(phone)
+                if (cached != null) {
+                    runCatching { cacheJson.decodeFromString<LookupResponse>(cached) }
+                        .onSuccess { response ->
+                            val found = response.source != "not_found"
+                            SearchLogger.log(phone, userId, cacheHit = true, lookupMs = System.currentTimeMillis() - startMs, found = found)
+                            val status = if (found) HttpStatusCode.OK else HttpStatusCode.NotFound
+                            call.respond(status, ApiResponse(success = found, data = response))
+                            return@get
+                        }
+                    // Decode failure → fall through to MongoDB
+                }
+
+                // ── Tier 1: callerIds (uses bestName ranking) ───────────
                 val callerIdDoc = Collections.callerIds
-                    .find(Filters.eq("phoneNumber", phoneNumber))
+                    .find(Filters.eq("phoneNumber", phone))
                     .firstOrNull()
 
                 if (callerIdDoc != null) {
+                    val displayName = callerIdDoc.getString("bestName")
+                        ?: callerIdDoc.getString("name")
+                    val score = callerIdDoc.getInteger("spamScore", 0)
                     val response = LookupResponse(
-                        phoneNumber = callerIdDoc.getString("phoneNumber"),
-                        name = callerIdDoc.getString("name"),
-                        spamScore = callerIdDoc.getInteger("spamScore", 0),
+                        phoneNumber = phone,
+                        name = displayName,
+                        spamScore = score,
                         reportCount = callerIdDoc.getInteger("reportCount", 0),
-                        category = categoryFromScore(callerIdDoc.getInteger("spamScore", 0)),
+                        category = categoryFromScore(score),
                         source = "caller_id_db",
                         confidence = 90
                     )
-                    call.respond(
-                        HttpStatusCode.OK,
-                        ApiResponse(success = true, data = response)
-                    )
+                    cacheAndLog(phone, response, userId, startMs)
+                    call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = response))
                     return@get
                 }
 
-                // ── Tier 2: users collection (registered user) ─────────
+                // ── Tier 2: registered user ─────────────────────────────
                 val userDoc = Collections.users
-                    .find(Filters.eq("phoneNumber", phoneNumber))
+                    .find(Filters.eq("phoneNumber", phone))
                     .firstOrNull()
 
                 if (userDoc != null) {
                     val response = LookupResponse(
-                        phoneNumber = userDoc.getString("phoneNumber"),
+                        phoneNumber = phone,
                         name = userDoc.getString("fullName"),
                         spamScore = 0,
                         reportCount = 0,
@@ -109,26 +122,22 @@ fun Route.callerIdRoutes() {
                         source = "registered_user",
                         confidence = 80
                     )
-                    call.respond(
-                        HttpStatusCode.OK,
-                        ApiResponse(success = true, data = response)
-                    )
+                    cacheAndLog(phone, response, userId, startMs)
+                    call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = response))
                     return@get
                 }
 
-                // ── Tier 3: contacts collection (user's contacts) ──────
+                // ── Tier 3: caller's own contacts ───────────────────────
                 val contactDoc = Collections.contacts
-                    .find(
-                        Filters.and(
-                            Filters.eq("userId", userId),
-                            Filters.eq("phoneNumber", phoneNumber)
-                        )
-                    )
+                    .find(Filters.and(
+                        Filters.eq("userId", userId),
+                        Filters.eq("phoneNumber", phone)
+                    ))
                     .firstOrNull()
 
                 if (contactDoc != null) {
                     val response = LookupResponse(
-                        phoneNumber = contactDoc.getString("phoneNumber"),
+                        phoneNumber = phone,
                         name = contactDoc.getString("name"),
                         spamScore = 0,
                         reportCount = 0,
@@ -136,16 +145,14 @@ fun Route.callerIdRoutes() {
                         source = "contacts",
                         confidence = 70
                     )
-                    call.respond(
-                        HttpStatusCode.OK,
-                        ApiResponse(success = true, data = response)
-                    )
+                    cacheAndLog(phone, response, userId, startMs)
+                    call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = response))
                     return@get
                 }
 
-                // ── Not found ──────────────────────────────────────────
-                val notFoundResponse = LookupResponse(
-                    phoneNumber = phoneNumber,
+                // ── Not found ───────────────────────────────────────────
+                val notFound = LookupResponse(
+                    phoneNumber = phone,
                     name = null,
                     spamScore = 0,
                     reportCount = 0,
@@ -153,24 +160,18 @@ fun Route.callerIdRoutes() {
                     source = "not_found",
                     confidence = 0
                 )
+                runCatching { RedisCache.set(phone, cacheJson.encodeToString(notFound), notFound = true) }
+                SearchLogger.log(phone, userId, cacheHit = false, lookupMs = System.currentTimeMillis() - startMs, found = false)
                 call.respond(
                     HttpStatusCode.NotFound,
-                    ApiResponse(
-                        success = false,
-                        data = notFoundResponse,
-                        error = "No caller ID information found for $phoneNumber"
-                    )
+                    ApiResponse(success = false, data = notFound, error = "No caller ID found for $phone")
                 )
             }
 
             // ── POST /api/caller-id/upload ────────────────────────────────
             post("/upload") {
-                // Admin-only: reject non-admin users
                 if (call.getAdminRole() == null) {
-                    call.respond(
-                        HttpStatusCode.Forbidden,
-                        ApiResponse<Unit>(success = false, error = "Admin access required")
-                    )
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Unit>(success = false, error = "Admin access required"))
                     return@post
                 }
 
@@ -189,10 +190,7 @@ fun Route.callerIdRoutes() {
                 val request = try {
                     call.receive<BulkUploadRequest>()
                 } catch (e: Exception) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ApiResponse<Unit>(success = false, error = "Invalid request body. 'entries' array is required.")
-                    )
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(success = false, error = "Invalid request body. 'entries' array is required."))
                     return@post
                 }
 
@@ -201,13 +199,10 @@ fun Route.callerIdRoutes() {
                 var updated = 0
 
                 for (entry in request.entries) {
-                    val phoneNumber = normalizeToE164(entry.phoneNumber)
-                    val existing = Collections.callerIds
-                        .find(Filters.eq("phoneNumber", phoneNumber))
-                        .firstOrNull()
+                    val phoneNumber = PhoneNormalizer.normalize(entry.phoneNumber)
+                    val existing = Collections.callerIds.find(Filters.eq("phoneNumber", phoneNumber)).firstOrNull()
 
                     if (existing != null) {
-                        // Update name if it changed
                         Collections.callerIds.updateOne(
                             Filters.eq("phoneNumber", phoneNumber),
                             Updates.combine(
@@ -217,25 +212,26 @@ fun Route.callerIdRoutes() {
                         )
                         updated++
                     } else {
-                        val doc = Document()
-                            .append("_id", ObjectId().toString())
-                            .append("phoneNumber", phoneNumber)
-                            .append("name", entry.name)
-                            .append("spamScore", entry.spamScore)
-                            .append("reportCount", entry.reportCount)
-                            .append("category", entry.category)
-                            .append("lastUpdated", now)
-                        Collections.callerIds.insertOne(doc)
+                        Collections.callerIds.insertOne(
+                            Document()
+                                .append("_id", ObjectId().toString())
+                                .append("phoneNumber", phoneNumber)
+                                .append("name", entry.name)
+                                .append("spamScore", entry.spamScore)
+                                .append("reportCount", entry.reportCount)
+                                .append("category", entry.category)
+                                .append("verifiedBusiness", false)
+                                .append("claimed", false)
+                                .append("lastUpdated", now)
+                        )
                         inserted++
                     }
+                    runCatching { RedisCache.invalidate(phoneNumber) }
                 }
 
                 call.respond(
                     HttpStatusCode.OK,
-                    ApiResponse<Unit>(
-                        success = true,
-                        message = "Caller IDs synced: $inserted new, $updated updated."
-                    )
+                    ApiResponse<Unit>(success = true, message = "Caller IDs synced: $inserted new, $updated updated.")
                 )
             }
 
@@ -244,89 +240,52 @@ fun Route.callerIdRoutes() {
                 val request = try {
                     call.receive<SpamReportRequest>()
                 } catch (e: Exception) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ApiResponse<Unit>(
-                            success = false,
-                            error = "Invalid request body. 'phoneNumber' is required."
-                        )
-                    )
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(success = false, error = "Invalid request body. 'phoneNumber' is required."))
                     return@post
                 }
 
-                val phoneNumber = normalizeToE164(request.phoneNumber)
+                val phoneNumber = PhoneNormalizer.normalize(request.phoneNumber)
 
-                if (!phoneNumber.matches(Regex("^\\+[1-9]\\d{6,14}$"))) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ApiResponse<Unit>(
-                            success = false,
-                            error = "Invalid phone number format. Use E.164 format (e.g. +256XXXXXXXXX)."
-                        )
-                    )
+                if (!PhoneNormalizer.isValid(phoneNumber)) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(success = false, error = "Invalid phone number format. Use E.164 (e.g. +256XXXXXXXXX)."))
                     return@post
                 }
 
                 val now = Instant.now().toString()
-
-                // Determine reporter's trust weight (higher trust = more impact)
                 val reporterId = call.userId()
-                val reporterDoc = Collections.users
-                    .find(Filters.eq("_id", reporterId))
-                    .firstOrNull()
-                val reporterTrustScore = reporterDoc?.getInteger("trustScore", 0) ?: 0
-                val trustWeight = trustWeightFromScore(reporterTrustScore)
+                val reporterDoc = Collections.users.find(Filters.eq("_id", reporterId)).firstOrNull()
+                val trustWeight = trustWeightFromScore(reporterDoc?.getInteger("trustScore", 0) ?: 0)
 
-                // Check if an entry already exists
-                val existingDoc = Collections.callerIds
-                    .find(Filters.eq("phoneNumber", phoneNumber))
-                    .firstOrNull()
+                val existingDoc = Collections.callerIds.find(Filters.eq("phoneNumber", phoneNumber)).firstOrNull()
 
                 if (existingDoc != null) {
-                    // Update existing entry: increment reportCount, increase spamScore weighted by trust
-                    val currentScore = existingDoc.getInteger("spamScore", 0)
-                    val newScore = minOf(currentScore + trustWeight, 100)
-                    val newCategory = categoryFromScore(newScore)
-
+                    val newScore = minOf(existingDoc.getInteger("spamScore", 0) + trustWeight, 100)
                     Collections.callerIds.updateOne(
                         Filters.eq("phoneNumber", phoneNumber),
                         Updates.combine(
                             Updates.inc("reportCount", 1),
                             Updates.set("spamScore", newScore),
-                            Updates.set("category", newCategory.name),
+                            Updates.set("category", categoryFromScore(newScore).name),
                             Updates.set("lastUpdated", now)
                         )
                     )
-
-                    call.respond(
-                        HttpStatusCode.OK,
-                        ApiResponse<Unit>(
-                            success = true,
-                            message = "Spam report recorded. Score updated to $newScore (trust weight: $trustWeight)."
-                        )
-                    )
+                    runCatching { RedisCache.invalidate(phoneNumber) }
+                    call.respond(HttpStatusCode.OK, ApiResponse<Unit>(success = true, message = "Spam report recorded. Score updated to $newScore (trust weight: $trustWeight)."))
                 } else {
-                    // Create a new CallerIdEntry, seeded with trust-weighted score
                     val initialScore = trustWeight
-                    val newCategory = categoryFromScore(initialScore)
-                    val newDoc = Document()
-                        .append("_id", ObjectId().toString())
-                        .append("phoneNumber", phoneNumber)
-                        .append("name", "Unknown")
-                        .append("spamScore", initialScore)
-                        .append("reportCount", 1)
-                        .append("category", newCategory.name)
-                        .append("lastUpdated", now)
-
-                    Collections.callerIds.insertOne(newDoc)
-
-                    call.respond(
-                        HttpStatusCode.OK,
-                        ApiResponse<Unit>(
-                            success = true,
-                            message = "Spam report recorded. New entry created (trust weight: $trustWeight)."
-                        )
+                    Collections.callerIds.insertOne(
+                        Document()
+                            .append("_id", ObjectId().toString())
+                            .append("phoneNumber", phoneNumber)
+                            .append("name", "Unknown")
+                            .append("spamScore", initialScore)
+                            .append("reportCount", 1)
+                            .append("category", categoryFromScore(initialScore).name)
+                            .append("verifiedBusiness", false)
+                            .append("claimed", false)
+                            .append("lastUpdated", now)
                     )
+                    call.respond(HttpStatusCode.OK, ApiResponse<Unit>(success = true, message = "Spam report recorded. New entry created (trust weight: $trustWeight)."))
                 }
             }
 
@@ -335,99 +294,61 @@ fun Route.callerIdRoutes() {
                 val request = try {
                     call.receive<SpamVerifyRequest>()
                 } catch (e: Exception) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ApiResponse<Unit>(
-                            success = false,
-                            error = "Invalid request body. 'phoneNumber' and 'vote' (confirm/dispute) are required."
-                        )
-                    )
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(success = false, error = "Invalid request body. 'phoneNumber' and 'vote' (confirm/dispute) are required."))
                     return@post
                 }
 
                 if (request.vote !in listOf("confirm", "dispute")) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ApiResponse<Unit>(success = false, error = "Vote must be 'confirm' or 'dispute'.")
-                    )
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Unit>(success = false, error = "Vote must be 'confirm' or 'dispute'."))
                     return@post
                 }
 
-                val phoneNumber = normalizeToE164(request.phoneNumber)
+                val phoneNumber = PhoneNormalizer.normalize(request.phoneNumber)
                 val voterId = call.userId()
                 val now = Instant.now().toString()
 
-                // Check if user already voted on this number
                 val existingVote = Collections.spamVerifications
-                    .find(
-                        Filters.and(
-                            Filters.eq("phoneNumber", phoneNumber),
-                            Filters.eq("userId", voterId)
-                        )
-                    )
+                    .find(Filters.and(Filters.eq("phoneNumber", phoneNumber), Filters.eq("userId", voterId)))
                     .firstOrNull()
 
                 if (existingVote != null) {
-                    // Update existing vote
                     Collections.spamVerifications.updateOne(
-                        Filters.and(
-                            Filters.eq("phoneNumber", phoneNumber),
-                            Filters.eq("userId", voterId)
-                        ),
-                        Updates.combine(
-                            Updates.set("vote", request.vote),
-                            Updates.set("updatedAt", now)
-                        )
+                        Filters.and(Filters.eq("phoneNumber", phoneNumber), Filters.eq("userId", voterId)),
+                        Updates.combine(Updates.set("vote", request.vote), Updates.set("updatedAt", now))
                     )
                 } else {
-                    // Insert new vote
-                    val doc = Document()
-                        .append("_id", ObjectId().toString())
-                        .append("phoneNumber", phoneNumber)
-                        .append("userId", voterId)
-                        .append("vote", request.vote)
-                        .append("createdAt", now)
-                        .append("updatedAt", now)
-                    Collections.spamVerifications.insertOne(doc)
+                    Collections.spamVerifications.insertOne(
+                        Document()
+                            .append("_id", ObjectId().toString())
+                            .append("phoneNumber", phoneNumber)
+                            .append("userId", voterId)
+                            .append("vote", request.vote)
+                            .append("createdAt", now)
+                            .append("updatedAt", now)
+                    )
                 }
 
-                // Count votes for this phone number
                 val confirmCount = Collections.spamVerifications.countDocuments(
-                    Filters.and(
-                        Filters.eq("phoneNumber", phoneNumber),
-                        Filters.eq("vote", "confirm")
-                    )
+                    Filters.and(Filters.eq("phoneNumber", phoneNumber), Filters.eq("vote", "confirm"))
                 ).toInt()
                 val disputeCount = Collections.spamVerifications.countDocuments(
-                    Filters.and(
-                        Filters.eq("phoneNumber", phoneNumber),
-                        Filters.eq("vote", "dispute")
-                    )
+                    Filters.and(Filters.eq("phoneNumber", phoneNumber), Filters.eq("vote", "dispute"))
                 ).toInt()
 
-                // Mark as community verified if >=5 confirms and confirms > 2x disputes
                 val communityVerified = confirmCount >= 5 && confirmCount > disputeCount * 2
                 if (communityVerified) {
                     Collections.callerIds.updateOne(
                         Filters.eq("phoneNumber", phoneNumber),
-                        Updates.combine(
-                            Updates.set("communityVerified", true),
-                            Updates.set("lastUpdated", now)
-                        )
+                        Updates.combine(Updates.set("communityVerified", true), Updates.set("lastUpdated", now))
                     )
+                    runCatching { RedisCache.invalidate(phoneNumber) }
                 }
 
                 call.respond(
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = VerificationStatus(
-                            phoneNumber = phoneNumber,
-                            confirmCount = confirmCount,
-                            disputeCount = disputeCount,
-                            communityVerified = communityVerified,
-                            userVote = request.vote
-                        ),
+                        data = VerificationStatus(phoneNumber, confirmCount, disputeCount, communityVerified, request.vote),
                         message = "Vote recorded."
                     )
                 )
@@ -437,55 +358,35 @@ fun Route.callerIdRoutes() {
             get("/verify/{phoneNumber}") {
                 val rawPhone = call.parameters["phoneNumber"]
                 if (rawPhone.isNullOrBlank()) {
-                    call.respond(
-                        HttpStatusCode.BadRequest,
-                        ApiResponse<VerificationStatus>(success = false, error = "Phone number is required.")
-                    )
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<VerificationStatus>(success = false, error = "Phone number is required."))
                     return@get
                 }
 
-                val phoneNumber = normalizeToE164(rawPhone)
+                val phoneNumber = PhoneNormalizer.normalize(rawPhone)
                 val voterId = call.userId()
 
                 val confirmCount = Collections.spamVerifications.countDocuments(
-                    Filters.and(
-                        Filters.eq("phoneNumber", phoneNumber),
-                        Filters.eq("vote", "confirm")
-                    )
+                    Filters.and(Filters.eq("phoneNumber", phoneNumber), Filters.eq("vote", "confirm"))
                 ).toInt()
                 val disputeCount = Collections.spamVerifications.countDocuments(
-                    Filters.and(
-                        Filters.eq("phoneNumber", phoneNumber),
-                        Filters.eq("vote", "dispute")
-                    )
+                    Filters.and(Filters.eq("phoneNumber", phoneNumber), Filters.eq("vote", "dispute"))
                 ).toInt()
 
-                val userVoteDoc = Collections.spamVerifications
-                    .find(
-                        Filters.and(
-                            Filters.eq("phoneNumber", phoneNumber),
-                            Filters.eq("userId", voterId)
-                        )
-                    )
+                val userVote = Collections.spamVerifications
+                    .find(Filters.and(Filters.eq("phoneNumber", phoneNumber), Filters.eq("userId", voterId)))
                     .firstOrNull()
-                val userVote = userVoteDoc?.getString("vote")
+                    ?.getString("vote")
 
-                val callerDoc = Collections.callerIds
+                val communityVerified = Collections.callerIds
                     .find(Filters.eq("phoneNumber", phoneNumber))
                     .firstOrNull()
-                val communityVerified = callerDoc?.getBoolean("communityVerified", false) ?: false
+                    ?.getBoolean("communityVerified", false) ?: false
 
                 call.respond(
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = VerificationStatus(
-                            phoneNumber = phoneNumber,
-                            confirmCount = confirmCount,
-                            disputeCount = disputeCount,
-                            communityVerified = communityVerified,
-                            userVote = userVote
-                        )
+                        data = VerificationStatus(phoneNumber, confirmCount, disputeCount, communityVerified, userVote)
                     )
                 )
             }
@@ -493,31 +394,13 @@ fun Route.callerIdRoutes() {
     }
 }
 
-// ── Helper functions ────────────────────────────────────────────────────────
+// ── Private helpers ─────────────────────────────────────────────────────────
 
-/**
- * Normalizes a phone number to E.164 format (+256... for Uganda).
- * Handles common formats: 07XXXXXXXX → +25607XXXXXXXX, 25607... → +25607...
- */
-private fun normalizeToE164(phone: String): String {
-    val digits = phone.replace(Regex("[^+\\d]"), "")
-
-    return when {
-        digits.startsWith("+") -> digits
-        digits.startsWith("256") -> "+$digits"
-        digits.startsWith("0") -> "+256${digits.substring(1)}"
-        else -> "+$digits"
-    }
+private suspend fun cacheAndLog(phone: String, response: LookupResponse, userId: String, startMs: Long) {
+    runCatching { RedisCache.set(phone, cacheJson.encodeToString(response)) }
+    SearchLogger.log(phone, userId, cacheHit = false, lookupMs = System.currentTimeMillis() - startMs, found = true)
 }
 
-/**
- * Determines the [SpamCategory] from a numeric spam score (0-100).
- *
- * - 0–20   → SAFE
- * - 21–60  → SUSPECTED_SPAM
- * - 61–80  → SPAM
- * - 81–100 → FRAUD
- */
 private fun categoryFromScore(score: Int): SpamCategory = when {
     score <= 20 -> SpamCategory.SAFE
     score <= 60 -> SpamCategory.SUSPECTED_SPAM
@@ -525,14 +408,6 @@ private fun categoryFromScore(score: Int): SpamCategory = when {
     else -> SpamCategory.FRAUD
 }
 
-/**
- * Converts a user's trust score (0-100) into a spam-report weight.
- *
- * - 0–19  (NEW)       → +3  (minimal impact)
- * - 20–49 (BASIC)     → +5  (standard impact)
- * - 50–79 (TRUSTED)   → +8  (significant impact)
- * - 80+   (VERIFIED+) → +12 (high impact)
- */
 private fun trustWeightFromScore(trustScore: Int): Int = when {
     trustScore < 20 -> 3
     trustScore < 50 -> 5

@@ -3,17 +3,20 @@ package com.trucaller.backend.routes
 import com.mongodb.client.model.Filters
 import com.mongodb.client.model.UpdateOneModel
 import com.mongodb.client.model.UpdateOptions
+import com.trucaller.backend.auth.userId
 import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
+import com.trucaller.backend.service.CallerIdService
+import com.trucaller.backend.service.PhoneNormalizer
 import io.ktor.http.*
 import io.ktor.server.application.*
-import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
-import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import org.bson.Document
 import org.bson.types.ObjectId
@@ -107,6 +110,19 @@ private fun Route.uploadContacts() {
         }
 
         val result = Collections.contacts.bulkWrite(operations)
+
+        // Contribute names to the aliases collection so the ranking engine
+        // can improve caller ID accuracy over time. Done in the background
+        // so it doesn't add latency to the upload response.
+        val aliasEntries = request.contacts
+            .filter { it.name.isNotBlank() && it.phoneNumber.isNotBlank() }
+            .map { Triple(PhoneNormalizer.normalize(it.phoneNumber), it.name, userId) }
+
+        if (aliasEntries.isNotEmpty()) {
+            GlobalScope.launch {
+                runCatching { CallerIdService.contributeAliasBatch(aliasEntries) }
+            }
+        }
 
         call.respond(
             HttpStatusCode.OK,

@@ -65,6 +65,12 @@ object Collections {
     val familyMembers: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("familyMembers")
 
+    val aliases: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("aliases")
+
+    val searches: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("searches")
+
     // ── Index creation ───────────────────────────────────────────────────
 
     /**
@@ -179,5 +185,27 @@ object Collections {
         // Index on userId for family members (lookup groups by user)
         database.getCollection<Document>("familyMembers")
             .createIndex(Indexes.ascending("userId"))
+
+        // Compound unique index on (phone, label) for alias deduplication
+        database.getCollection<Document>("aliases")
+            .createIndex(
+                Indexes.compoundIndex(Indexes.ascending("phone"), Indexes.ascending("label")),
+                IndexOptions().unique(true)
+            )
+
+        // Index on phone for alias lookups / ranking
+        database.getCollection<Document>("aliases")
+            .createIndex(Indexes.ascending("phone"))
+
+        // Index on searchedBy for per-user analytics
+        database.getCollection<Document>("searches")
+            .createIndex(Indexes.ascending("searchedBy"))
+
+        // TTL index: auto-delete search logs 90 days after creation
+        database.getCollection<Document>("searches")
+            .createIndex(
+                Indexes.ascending("createdAt"),
+                IndexOptions().expireAfter(90L * 24 * 3600, java.util.concurrent.TimeUnit.SECONDS)
+            )
     }
 }
