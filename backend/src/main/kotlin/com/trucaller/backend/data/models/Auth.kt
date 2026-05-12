@@ -54,6 +54,16 @@ data class ResetPasswordRequest(
     val newPassword: String
 )
 
+@Serializable
+data class RefreshRequest(
+    val refreshToken: String
+)
+
+@Serializable
+data class LogoutRequest(
+    val refreshToken: String? = null
+)
+
 // ── Response DTOs ──
 
 @Serializable

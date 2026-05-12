@@ -1,5 +1,6 @@
 package com.byron.trucaller.service
 
+import android.content.Intent
 import android.util.Log
 import com.byron.trucaller.BuildConfig
 import com.google.gson.Gson
@@ -36,11 +37,80 @@ object ApiClient {
      */
     private val certificatePinner = CertificatePinner.Builder()
         .add(
-            "trucaller-backend.onrender.com",
+            "trucaller-backend-sh3t.onrender.com",
             // Let's Encrypt ISRG Root X1 — SHA-256 pin
             "sha256/C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M="
         )
         .build()
+
+    // Used only for token refresh calls — no authenticator to prevent recursion
+    private val refreshClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(30, TimeUnit.SECONDS)
+            .apply { if (!BuildConfig.DEBUG) certificatePinner(certificatePinner) }
+            .build()
+    }
+
+    private val tokenAuthenticator = okhttp3.Authenticator { _, response ->
+        // If the failing request had no Authorization header, don't retry
+        if (response.request.header("Authorization") == null) return@Authenticator null
+
+        synchronized(refreshLock) {
+            val currentRefreshToken = refreshToken
+            if (currentRefreshToken == null) {
+                broadcastSessionExpired()
+                return@synchronized null
+            }
+
+            // Another thread may have already refreshed — check if current token differs
+            val failingToken = response.request.header("Authorization")?.removePrefix("Bearer ")
+            val currentAccessToken = authToken
+            if (currentAccessToken != null && failingToken != currentAccessToken) {
+                return@synchronized response.request.newBuilder()
+                    .header("Authorization", "Bearer $currentAccessToken")
+                    .build()
+            }
+
+            try {
+                val refreshBody = gson.toJson(mapOf("refreshToken" to currentRefreshToken))
+                    .toRequestBody(JSON_MEDIA)
+                val refreshRequest = Request.Builder()
+                    .url("$baseUrl/api/auth/refresh")
+                    .post(refreshBody)
+                    .build()
+
+                val refreshResponse = refreshClient.newCall(refreshRequest).execute()
+                if (!refreshResponse.isSuccessful) {
+                    authToken = null
+                    refreshToken = null
+                    broadcastSessionExpired()
+                    return@synchronized null
+                }
+
+                val bodyStr = refreshResponse.body?.string() ?: return@synchronized null
+                val type = object : TypeToken<ApiResult<TokenResponse>>() {}.type
+                val result: ApiResult<TokenResponse> = gson.fromJson(bodyStr, type)
+                val newTokens = result.data ?: run {
+                    authToken = null
+                    refreshToken = null
+                    broadcastSessionExpired()
+                    return@synchronized null
+                }
+
+                authToken = newTokens.token
+                refreshToken = newTokens.refreshToken
+
+                response.request.newBuilder()
+                    .header("Authorization", "Bearer ${newTokens.token}")
+                    .build()
+            } catch (e: Exception) {
+                Log.e(TAG, "Token refresh failed", e)
+                broadcastSessionExpired()
+                null
+            }
+        }
+    }
 
     private val client: OkHttpClient by lazy {
         OkHttpClient.Builder()
@@ -53,6 +123,7 @@ object ApiClient {
                     certificatePinner(certificatePinner)
                 }
             }
+            .authenticator(tokenAuthenticator)
             .addInterceptor(
                 HttpLoggingInterceptor().apply {
                     level = if (BuildConfig.LOG_HTTP_REQUESTS) {
@@ -66,6 +137,10 @@ object ApiClient {
     }
 
     private var authToken: String? = null
+    @Volatile private var refreshToken: String? = null
+    private val refreshLock = Any()
+
+    var sessionExpiredBroadcastAction: String? = null
 
     fun setBaseUrl(url: String) {
         baseUrl = url.trimEnd('/')
@@ -75,10 +150,31 @@ object ApiClient {
         authToken = token
     }
 
+    fun setRefreshToken(token: String?) {
+        refreshToken = token
+    }
+
+    // ── Session helpers ─────────────────────────────────────────────────
+
+    private var appContext: android.content.Context? = null
+
+    fun init(context: android.content.Context) {
+        appContext = context.applicationContext
+    }
+
+    private fun broadcastSessionExpired() {
+        val action = sessionExpiredBroadcastAction ?: return
+        val ctx = appContext ?: return
+        ctx.sendBroadcast(Intent(action))
+    }
+
     // ── Auth Endpoints ──────────────────────────────────────────────────
 
-    suspend fun login(phoneNumber: String, password: String): ApiResult<TokenResponse> =
-        post("/api/auth/login", mapOf("phoneNumber" to phoneNumber, "password" to password))
+    suspend fun login(phoneNumber: String, password: String): ApiResult<TokenResponse> {
+        val result: ApiResult<TokenResponse> = post("/api/auth/login", mapOf("phoneNumber" to phoneNumber, "password" to password))
+        result.data?.let { setRefreshToken(it.refreshToken) }
+        return result
+    }
 
     suspend fun register(fullName: String, phoneNumber: String, password: String): ApiResult<TokenResponse> =
         post("/api/auth/register", mapOf(

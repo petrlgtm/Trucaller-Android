@@ -9,5 +9,6 @@ data class ContactAlias(
     val phoneNumber: String,
     val name: String,
     val source: String,  // "user", "caller_id", "contact_book", "whatsapp", etc.
-    val addedAt: String
+    val addedAt: String,
+    val userId: String? = null
 )

@@ -71,6 +71,15 @@ object Collections {
     val searches: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("searches")
 
+    val refreshTokens: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("refreshTokens")
+
+    val loginAuditLog: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("loginAuditLog")
+
+    val spamReports: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("spamReports")
+
     // ── Index creation ───────────────────────────────────────────────────
 
     /**
@@ -206,6 +215,65 @@ object Collections {
             .createIndex(
                 Indexes.ascending("createdAt"),
                 IndexOptions().expireAfter(90L * 24 * 3600, java.util.concurrent.TimeUnit.SECONDS)
+            )
+
+        // ── Task 3.3: Missing indexes ───────────────────────────────────────
+
+        // Compound index for weekly spam-decay job: callerIds where spamScore > 0 and lastUpdated < cutoff
+        database.getCollection<Document>("callerIds")
+            .createIndex(Indexes.compoundIndex(
+                Indexes.descending("spamScore"),
+                Indexes.ascending("lastUpdated")
+            ))
+
+        // Index on aliases.updatedAt for hourly bestName refresh job
+        database.getCollection<Document>("aliases")
+            .createIndex(Indexes.ascending("updatedAt"))
+
+        // Compound index on contacts.(userId, phoneNumber) for privacy-scoped lookups
+        database.getCollection<Document>("contacts")
+            .createIndex(Indexes.compoundIndex(
+                Indexes.ascending("userId"),
+                Indexes.ascending("phoneNumber")
+            ))
+
+        // ── Task 2.1: Refresh tokens ────────────────────────────────────────
+
+        // Unique index on refreshTokens.token for O(1) lookup
+        database.getCollection<Document>("refreshTokens")
+            .createIndex(Indexes.ascending("token"), IndexOptions().unique(true))
+
+        // Index on refreshTokens.userId to revoke all sessions for a user
+        database.getCollection<Document>("refreshTokens")
+            .createIndex(Indexes.ascending("userId"))
+
+        // TTL index: auto-delete expired refresh tokens (30 days)
+        database.getCollection<Document>("refreshTokens")
+            .createIndex(
+                Indexes.ascending("expiresAt"),
+                IndexOptions().expireAfter(0, java.util.concurrent.TimeUnit.SECONDS)
+            )
+
+        // ── Task 5.2: Login audit log ───────────────────────────────────────
+
+        // Index on loginAuditLog.phone for per-user audit queries
+        database.getCollection<Document>("loginAuditLog")
+            .createIndex(Indexes.ascending("phone"))
+
+        // TTL index: auto-delete login audit entries after 90 days
+        database.getCollection<Document>("loginAuditLog")
+            .createIndex(
+                Indexes.ascending("timestamp"),
+                IndexOptions().expireAfter(90L * 24 * 3600, java.util.concurrent.TimeUnit.SECONDS)
+            )
+
+        // ── Task 3.4: Spam report deduplication ────────────────────────────
+
+        // Unique compound index preventing a user from reporting the same number twice
+        database.getCollection<Document>("spamReports")
+            .createIndex(
+                Indexes.compoundIndex(Indexes.ascending("userId"), Indexes.ascending("phoneNumber")),
+                IndexOptions().unique(true)
             )
     }
 }

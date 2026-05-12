@@ -253,6 +253,26 @@ fun Route.callerIdRoutes() {
 
                 val now = Instant.now().toString()
                 val reporterId = call.userId()
+
+                // Dedup: one report per user per number
+                val alreadyReported = Collections.spamReports
+                    .find(Filters.and(
+                        Filters.eq("userId", reporterId),
+                        Filters.eq("phoneNumber", phoneNumber)
+                    ))
+                    .firstOrNull()
+                if (alreadyReported != null) {
+                    call.respond(HttpStatusCode.Conflict, ApiResponse<Unit>(success = false, error = "You have already reported this number."))
+                    return@post
+                }
+                Collections.spamReports.insertOne(
+                    Document()
+                        .append("userId", reporterId)
+                        .append("phoneNumber", phoneNumber)
+                        .append("reason", request.reason)
+                        .append("reportedAt", now)
+                )
+
                 val reporterDoc = Collections.users.find(Filters.eq("_id", reporterId)).firstOrNull()
                 val trustWeight = trustWeightFromScore(reporterDoc?.getInteger("trustScore", 0) ?: 0)
 
@@ -389,6 +409,53 @@ fun Route.callerIdRoutes() {
                         data = VerificationStatus(phoneNumber, confirmCount, disputeCount, communityVerified, userVote)
                     )
                 )
+            }
+
+            // ── GET /api/caller-id/spam-sync ──────────────────────────────
+            authenticate("auth-jwt") {
+                get("/spam-sync") {
+                    val since = call.request.queryParameters["since"] ?: "1970-01-01T00:00:00Z"
+                    val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 100).coerceIn(1, 500)
+                    val cursor = call.request.queryParameters["cursor"]
+
+                    val baseFilter = Filters.gt("lastUpdated", since)
+                    val filter = if (cursor != null) {
+                        Filters.and(baseFilter, Filters.gt("_id", cursor))
+                    } else {
+                        baseFilter
+                    }
+
+                    val entries = mutableListOf<Map<String, Any?>>()
+                    var lastId: String? = null
+
+                    Collections.callerIds
+                        .find(filter)
+                        .sort(Document("_id", 1))
+                        .limit(limit)
+                        .collect { doc ->
+                            lastId = doc.getString("_id")
+                            entries.add(mapOf(
+                                "phoneNumber" to doc.getString("phoneNumber"),
+                                "name" to (doc.getString("bestName") ?: doc.getString("name")),
+                                "spamScore" to doc.getInteger("spamScore", 0),
+                                "reportCount" to doc.getInteger("reportCount", 0),
+                                "category" to doc.getString("category"),
+                                "lastUpdated" to doc.getString("lastUpdated")
+                            ))
+                        }
+
+                    call.respond(
+                        HttpStatusCode.OK,
+                        ApiResponse(
+                            success = true,
+                            data = mapOf(
+                                "entries" to entries,
+                                "nextCursor" to lastId,
+                                "hasMore" to (entries.size == limit)
+                            )
+                        )
+                    )
+                }
             }
         }
     }

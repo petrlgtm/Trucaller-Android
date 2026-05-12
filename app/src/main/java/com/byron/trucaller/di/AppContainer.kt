@@ -25,7 +25,7 @@ class AppContainer(context: Context) {
         TruCallerDatabase::class.java,
         "trucaller_database"
     )
-        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12, TruCallerDatabase.MIGRATION_12_13, TruCallerDatabase.MIGRATION_13_14, TruCallerDatabase.MIGRATION_14_15, TruCallerDatabase.MIGRATION_15_16, TruCallerDatabase.MIGRATION_16_17)
+        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12, TruCallerDatabase.MIGRATION_12_13, TruCallerDatabase.MIGRATION_13_14, TruCallerDatabase.MIGRATION_14_15, TruCallerDatabase.MIGRATION_15_16, TruCallerDatabase.MIGRATION_16_17, TruCallerDatabase.MIGRATION_17_18)
         .fallbackToDestructiveMigration(true)
         .build()
 

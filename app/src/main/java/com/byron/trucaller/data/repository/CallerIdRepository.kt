@@ -55,11 +55,13 @@ class CallerIdRepository(
     }
 
     /**
-     * Fast local-only lookup — checks Room DB, users, contacts, and aliases
-     * but skips the backend API call. Use this for bulk operations like
-     * call log and SMS enrichment where speed matters.
+     * Fast local-only lookup scoped to [currentUserId].
+     *
+     * Contact and alias results are only returned if they belong to the
+     * requesting user — preventing cross-user data leakage. Pass `null`
+     * to skip the contact/alias tier entirely (e.g. unauthenticated contexts).
      */
-    suspend fun lookupNumberLocal(rawQuery: String): LookupResult {
+    suspend fun lookupNumberLocal(rawQuery: String, currentUserId: String? = null): LookupResult {
         val fullPhone = PhoneUtils.normalizePhone(rawQuery)
 
         val callerIdEntry = callerIdDao.getByPhone(fullPhone)
@@ -82,59 +84,64 @@ class CallerIdRepository(
             )
         }
 
-        val contact = contactDao.getByPhone(fullPhone)
-        if (contact != null) {
-            return LookupResult(
-                callerIdEntry = CallerIdEntry(
-                    id = "contact-${contact.id}",
-                    phoneNumber = contact.phoneNumber,
-                    name = contact.name,
-                    spamScore = 0, reportCount = 0,
-                    category = SpamCategory.SAFE,
-                    lastUpdated = contact.syncedAt
-                ),
-                contactMatch = contact, source = "central_drive"
-            )
-        }
+        // Contact and alias tiers are scoped to the requesting user only.
+        if (currentUserId != null) {
+            val contact = contactDao.getByPhoneAndUser(fullPhone, currentUserId)
+            if (contact != null) {
+                return LookupResult(
+                    callerIdEntry = CallerIdEntry(
+                        id = "contact-${contact.id}",
+                        phoneNumber = contact.phoneNumber,
+                        name = contact.name,
+                        spamScore = 0, reportCount = 0,
+                        category = SpamCategory.SAFE,
+                        lastUpdated = contact.syncedAt
+                    ),
+                    contactMatch = contact, source = "contacts"
+                )
+            }
 
-        val aliases = contactAliasDao.getAliasesByPhoneOnce(fullPhone)
-        if (aliases.isNotEmpty()) {
-            val sourcePriority = listOf("user", "contact_book", "whatsapp", "caller_id")
-            val bestAlias = aliases.sortedBy { alias ->
-                val idx = sourcePriority.indexOf(alias.source)
-                if (idx == -1) sourcePriority.size else idx
-            }.first()
-            return LookupResult(
-                callerIdEntry = CallerIdEntry(
-                    id = "alias-${bestAlias.id}",
-                    phoneNumber = bestAlias.phoneNumber,
-                    name = bestAlias.name,
-                    spamScore = 0, reportCount = 0,
-                    category = SpamCategory.SAFE,
-                    lastUpdated = bestAlias.addedAt
-                ),
-                contactMatch = null, source = "alias"
-            )
+            val aliases = contactAliasDao.getAliasesByPhoneOnce(fullPhone)
+            val userAliases = aliases.filter { it.userId == currentUserId }
+            if (userAliases.isNotEmpty()) {
+                val sourcePriority = listOf("user", "contact_book", "whatsapp", "caller_id")
+                val bestAlias = userAliases.sortedBy { alias ->
+                    val idx = sourcePriority.indexOf(alias.source)
+                    if (idx == -1) sourcePriority.size else idx
+                }.first()
+                return LookupResult(
+                    callerIdEntry = CallerIdEntry(
+                        id = "alias-${bestAlias.id}",
+                        phoneNumber = bestAlias.phoneNumber,
+                        name = bestAlias.name,
+                        spamScore = 0, reportCount = 0,
+                        category = SpamCategory.SAFE,
+                        lastUpdated = bestAlias.addedAt
+                    ),
+                    contactMatch = null, source = "alias"
+                )
+            }
         }
 
         return LookupResult(callerIdEntry = null, contactMatch = null, source = "not_found")
     }
 
     /**
-     * Central drive lookup: search caller ID DB first, then search ALL contacts
-     * across all users. If a phone number belongs to any user in the system,
-     * return their name. Includes a backend API fallback (up to 5s timeout).
+     * Full lookup with backend API fallback, scoped to [currentUserId].
+     *
+     * Contact results are restricted to contacts owned by [currentUserId] to
+     * prevent one user from seeing another user's contact names.
      */
-    suspend fun lookupNumber(rawQuery: String): LookupResult {
+    suspend fun lookupNumber(rawQuery: String, currentUserId: String? = null): LookupResult {
         val fullPhone = PhoneUtils.normalizePhone(rawQuery)
 
-        // 1. Check caller ID database
+        // 1. Community caller-ID database (shared, non-personal)
         val callerIdEntry = callerIdDao.getByPhone(fullPhone)
         if (callerIdEntry != null) {
             return LookupResult(callerIdEntry = callerIdEntry, contactMatch = null, source = "caller_id_db")
         }
 
-        // 2. Check registered users - if caller is a registered user, show their true name
+        // 2. Registered users (public profile data only — name is self-submitted)
         val registeredUser = userDao.getByPhone(fullPhone)
         if (registeredUser != null) {
             return LookupResult(
@@ -152,48 +159,51 @@ class CallerIdRepository(
             )
         }
 
-        // 3. Check central contacts drive - if ANY user has this number in contacts, we know who it is
-        val contact = contactDao.getByPhone(fullPhone)
-        if (contact != null) {
-            return LookupResult(
-                callerIdEntry = CallerIdEntry(
-                    id = "contact-${contact.id}",
-                    phoneNumber = contact.phoneNumber,
-                    name = contact.name,
-                    spamScore = 0,
-                    reportCount = 0,
-                    category = SpamCategory.SAFE,
-                    lastUpdated = contact.syncedAt
-                ),
-                contactMatch = contact,
-                source = "central_drive"
-            )
+        // 3. Requesting user's own contacts (scoped — never cross-user)
+        if (currentUserId != null) {
+            val contact = contactDao.getByPhoneAndUser(fullPhone, currentUserId)
+            if (contact != null) {
+                return LookupResult(
+                    callerIdEntry = CallerIdEntry(
+                        id = "contact-${contact.id}",
+                        phoneNumber = contact.phoneNumber,
+                        name = contact.name,
+                        spamScore = 0,
+                        reportCount = 0,
+                        category = SpamCategory.SAFE,
+                        lastUpdated = contact.syncedAt
+                    ),
+                    contactMatch = contact,
+                    source = "contacts"
+                )
+            }
+
+            // 4. Aliases owned by this user only
+            val aliases = contactAliasDao.getAliasesByPhoneOnce(fullPhone)
+            val userAliases = aliases.filter { it.userId == currentUserId }
+            if (userAliases.isNotEmpty()) {
+                val sourcePriority = listOf("user", "contact_book", "whatsapp", "caller_id")
+                val bestAlias = userAliases.sortedBy { alias ->
+                    val idx = sourcePriority.indexOf(alias.source)
+                    if (idx == -1) sourcePriority.size else idx
+                }.first()
+                return LookupResult(
+                    callerIdEntry = CallerIdEntry(
+                        id = "alias-${bestAlias.id}",
+                        phoneNumber = bestAlias.phoneNumber,
+                        name = bestAlias.name,
+                        spamScore = 0,
+                        reportCount = 0,
+                        category = SpamCategory.SAFE,
+                        lastUpdated = bestAlias.addedAt
+                    ),
+                    contactMatch = null,
+                    source = "alias"
+                )
+            }
         }
 
-        // 4. Check contact aliases — user-assigned or imported alternate names for this number
-        val aliases = contactAliasDao.getAliasesByPhoneOnce(fullPhone)
-        if (aliases.isNotEmpty()) {
-            val sourcePriority = listOf("user", "contact_book", "whatsapp", "caller_id")
-            val bestAlias = aliases.sortedBy { alias ->
-                val idx = sourcePriority.indexOf(alias.source)
-                if (idx == -1) sourcePriority.size else idx
-            }.first()
-            return LookupResult(
-                callerIdEntry = CallerIdEntry(
-                    id = "alias-${bestAlias.id}",
-                    phoneNumber = bestAlias.phoneNumber,
-                    name = bestAlias.name,
-                    spamScore = 0,
-                    reportCount = 0,
-                    category = SpamCategory.SAFE,
-                    lastUpdated = bestAlias.addedAt
-                ),
-                contactMatch = null,
-                source = "alias"
-            )
-        }
-
-        // 5. Backend API fallback — query the server for community-sourced caller ID
+        // 5. Backend API fallback — community-sourced caller ID only
         try {
             val apiResult = withTimeoutOrNull(5_000L) {
                 ApiClient.lookupCallerId(fullPhone)
@@ -201,13 +211,11 @@ class CallerIdRepository(
             if (apiResult != null && apiResult.success && apiResult.data != null) {
                 val entry = BackendMappers.mapLookupToCallerIdEntry(apiResult.data)
                 if (entry != null) {
-                    callerIdDao.insert(entry) // Cache locally for future lookups
+                    callerIdDao.insert(entry)
                     return LookupResult(callerIdEntry = entry, contactMatch = null, source = "backend_api")
                 }
             }
-        } catch (_: Exception) {
-            // Network error or other failure — fall through to not_found gracefully
-        }
+        } catch (_: Exception) { }
 
         return LookupResult(callerIdEntry = null, contactMatch = null, source = "not_found")
     }

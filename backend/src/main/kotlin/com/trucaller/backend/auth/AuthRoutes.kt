@@ -5,9 +5,12 @@ import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Updates
 import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.*
+import com.trucaller.backend.service.RedisCache
+import com.trucaller.backend.service.SmsService
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
+import io.ktor.server.auth.jwt.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
@@ -27,6 +30,9 @@ fun Routing.authRoutes() {
         loginRoute()
         resetPasswordRoute()
         deleteAccountRoute()
+        refreshTokenRoute()
+        logoutRoute()
+        revokeAllSessionsRoute()
     }
 }
 
@@ -227,8 +233,23 @@ private fun Route.sendOtpRoute() {
         val otp = generateOtp()
         storeOtp(request.phoneNumber, otp, request.purpose)
 
-        // In production, send OTP via SMS gateway here.
-        // For development, the OTP is returned in the response.
+        // Send OTP via Africa's Talking SMS gateway (falls back to log in dev mode)
+        val smsSent = SmsService.sendOtp(request.phoneNumber, otp)
+        if (!smsSent) {
+            // Gateway failure — clean up the stored OTP so user can retry
+            Collections.otpCodes.deleteMany(
+                Filters.and(
+                    Filters.eq("phoneNumber", request.phoneNumber),
+                    Filters.eq("purpose", request.purpose)
+                )
+            )
+            call.respond(
+                HttpStatusCode.ServiceUnavailable,
+                ApiResponse<Unit>(success = false, error = "Could not send verification SMS. Please try again.")
+            )
+            return@post
+        }
+
         call.respond(
             HttpStatusCode.OK,
             ApiResponse(
@@ -397,11 +418,26 @@ private fun Route.loginRoute() {
             return@post
         }
 
+        val phone = request.phoneNumber
+        val ip = call.request.local.remoteAddress
+
+        // Brute-force protection: 5 failed attempts locks account for 15 min
+        if (RedisCache.isLoginLocked(phone)) {
+            writeAuditLog(phone, ip, success = false, reason = "account_locked")
+            call.respond(
+                HttpStatusCode.TooManyRequests,
+                ApiResponse<Unit>(success = false, error = "Too many failed login attempts. Try again in 15 minutes.")
+            )
+            return@post
+        }
+
         val userDoc = Collections.users
-            .find(Filters.eq("phoneNumber", request.phoneNumber))
+            .find(Filters.eq("phoneNumber", phone))
             .firstOrNull()
 
         if (userDoc == null) {
+            RedisCache.recordFailedLogin(phone)
+            writeAuditLog(phone, ip, success = false, reason = "user_not_found")
             call.respond(
                 HttpStatusCode.Unauthorized,
                 ApiResponse<Unit>(success = false, error = "Invalid credentials.")
@@ -415,6 +451,8 @@ private fun Route.loginRoute() {
             .verified
 
         if (!verified) {
+            RedisCache.recordFailedLogin(phone)
+            writeAuditLog(phone, ip, success = false, reason = "wrong_password")
             call.respond(
                 HttpStatusCode.Unauthorized,
                 ApiResponse<Unit>(success = false, error = "Invalid credentials.")
@@ -422,21 +460,36 @@ private fun Route.loginRoute() {
             return@post
         }
 
-        val userId = userDoc.getString("_id")
-        val token = JwtConfig.makeToken(userId, role = "user")
+        RedisCache.clearLoginAttempts(phone)
 
-        // Update lastLogin timestamp
+        val userId = userDoc.getString("_id")
+        val accessToken = JwtConfig.makeToken(userId, role = "user")
+        val refreshTokenStr = JwtConfig.makeRefreshToken(userId)
+
+        // Persist refresh token (auto-deleted after 30 days by TTL index)
+        Collections.refreshTokens.insertOne(
+            Document()
+                .append("token", refreshTokenStr)
+                .append("userId", userId)
+                .append("createdAt", Date.from(Instant.now()))
+                .append("expiresAt", Date.from(Instant.now().plusMillis(JwtConfig.REFRESH_TOKEN_EXPIRATION_MS)))
+                .append("ip", ip)
+        )
+
         Collections.users.updateOne(
             Filters.eq("_id", userId),
             Document("\$set", Document("lastLogin", Instant.now().toString()))
         )
+
+        writeAuditLog(phone, ip, success = true, reason = "ok")
 
         call.respond(
             HttpStatusCode.OK,
             ApiResponse(
                 success = true,
                 data = TokenResponse(
-                    token = token,
+                    token = accessToken,
+                    refreshToken = refreshTokenStr,
                     expiresIn = JwtConfig.expiresInSeconds(),
                     userId = userId
                 ),
@@ -603,6 +656,150 @@ private fun Route.deleteAccountRoute() {
                     success = true,
                     message = "Account and all associated data have been permanently deleted."
                 )
+            )
+        }
+    }
+}
+
+// ── Audit log helper ─────────────────────────────────────────────────────
+
+private suspend fun writeAuditLog(phone: String, ip: String, success: Boolean, reason: String) {
+    runCatching {
+        Collections.loginAuditLog.insertOne(
+            Document()
+                .append("phone", phone)
+                .append("ip", ip)
+                .append("success", success)
+                .append("reason", reason)
+                .append("timestamp", Date.from(Instant.now()))
+        )
+    }
+}
+
+// ── POST /api/auth/refresh ──────────────────────────────────────────────
+
+private fun Route.refreshTokenRoute() {
+    post("/refresh") {
+        val body = try {
+            call.receive<RefreshRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body. Required: refreshToken")
+            )
+            return@post
+        }
+
+        // Verify JWT signature + type claim
+        val userId = JwtConfig.decodeRefreshToken(body.refreshToken)
+        if (userId == null) {
+            call.respond(
+                HttpStatusCode.Unauthorized,
+                ApiResponse<Unit>(success = false, error = "Invalid or expired refresh token.")
+            )
+            return@post
+        }
+
+        // Ensure the token exists in DB (guards against replay after rotation)
+        val tokenDoc = Collections.refreshTokens
+            .find(Filters.eq("token", body.refreshToken))
+            .firstOrNull()
+        if (tokenDoc == null) {
+            call.respond(
+                HttpStatusCode.Unauthorized,
+                ApiResponse<Unit>(success = false, error = "Refresh token not found or already used.")
+            )
+            return@post
+        }
+
+        // Rotate: delete old token, issue new access + refresh pair
+        Collections.refreshTokens.deleteOne(Filters.eq("token", body.refreshToken))
+
+        val newAccess = JwtConfig.makeToken(userId, role = "user")
+        val newRefresh = JwtConfig.makeRefreshToken(userId)
+        val ip = call.request.local.remoteAddress
+
+        Collections.refreshTokens.insertOne(
+            Document()
+                .append("token", newRefresh)
+                .append("userId", userId)
+                .append("createdAt", Date.from(Instant.now()))
+                .append("expiresAt", Date.from(Instant.now().plusMillis(JwtConfig.REFRESH_TOKEN_EXPIRATION_MS)))
+                .append("ip", ip)
+        )
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse(
+                success = true,
+                data = TokenResponse(
+                    token = newAccess,
+                    refreshToken = newRefresh,
+                    expiresIn = JwtConfig.expiresInSeconds(),
+                    userId = userId
+                )
+            )
+        )
+    }
+}
+
+// ── POST /api/auth/logout ───────────────────────────────────────────────
+
+private fun Route.logoutRoute() {
+    authenticate("auth-jwt") {
+        post("/logout") {
+            val userId = call.userId()
+            val principal = call.principal<JWTPrincipal>()
+
+            // Revoke the current access token's jti
+            val jti = principal?.payload?.id
+            if (jti != null) {
+                val expiresMs = principal.payload.expiresAt?.time ?: 0L
+                val ttlSeconds = maxOf(0L, (expiresMs - System.currentTimeMillis()) / 1000)
+                RedisCache.revokeToken(jti, ttlSeconds)
+            }
+
+            // If the client provides a refresh token, delete it from DB
+            val body = runCatching { call.receive<LogoutRequest>() }.getOrNull()
+            if (body?.refreshToken != null) {
+                Collections.refreshTokens.deleteOne(
+                    Filters.and(
+                        Filters.eq("token", body.refreshToken),
+                        Filters.eq("userId", userId)
+                    )
+                )
+            }
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Unit>(success = true, message = "Logged out successfully.")
+            )
+        }
+    }
+}
+
+// ── DELETE /api/auth/sessions ───────────────────────────────────────────
+
+private fun Route.revokeAllSessionsRoute() {
+    authenticate("auth-jwt") {
+        delete("/sessions") {
+            val userId = call.userId()
+            val principal = call.principal<JWTPrincipal>()
+
+            // Revoke current access token
+            val jti = principal?.payload?.id
+            if (jti != null) {
+                val expiresMs = principal.payload.expiresAt?.time ?: 0L
+                val ttlSeconds = maxOf(0L, (expiresMs - System.currentTimeMillis()) / 1000)
+                RedisCache.revokeToken(jti, ttlSeconds)
+            }
+
+            // Delete all refresh tokens for this user (signs out every device)
+            Collections.refreshTokens.deleteMany(Filters.eq("userId", userId))
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Unit>(success = true, message = "All sessions revoked.")
             )
         }
     }

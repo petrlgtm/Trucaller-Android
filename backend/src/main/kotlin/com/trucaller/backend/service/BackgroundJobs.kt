@@ -6,7 +6,6 @@ import com.trucaller.backend.data.Collections
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -69,12 +68,11 @@ object BackgroundJobs {
     /** Refresh bestName for any alias updated in the last 2 hours. */
     private suspend fun refreshRecentBestNames() {
         val cutoff = Instant.now().minus(2, ChronoUnit.HOURS).toString()
-        val phones = Collections.aliases
+        val phones = mutableSetOf<String>()
+        Collections.aliases
             .find(Filters.gt("updatedAt", cutoff))
-            .toList()
-            .mapNotNull { it.getString("phone") }
-            .distinct()
-
+            .batchSize(500)
+            .collect { doc -> doc.getString("phone")?.let { phones.add(it) } }
         phones.forEach { phone ->
             runCatching { CallerIdService.refreshBestName(phone) }
         }
@@ -97,9 +95,8 @@ object BackgroundJobs {
 
     /** Recompute the category field from the current spamScore for every callerIds doc. */
     private suspend fun rebuildSpamCategories() {
-        val docs = Collections.callerIds.find().toList()
         var updated = 0
-        for (doc in docs) {
+        Collections.callerIds.find().batchSize(500).collect { doc ->
             val score = doc.getInteger("spamScore", 0)
             val expected = categoryFromScore(score)
             if (doc.getString("category") != expected) {
@@ -121,28 +118,27 @@ object BackgroundJobs {
      */
     private suspend fun decayOldSpamScores() {
         val cutoff = Instant.now().minus(90, ChronoUnit.DAYS).toString()
-        val stale = Collections.callerIds
+        val now = Instant.now().toString()
+        var decayed = 0
+        Collections.callerIds
             .find(Filters.and(
                 Filters.gt("spamScore", 0),
                 Filters.lt("lastUpdated", cutoff)
             ))
-            .toList()
-
-        var decayed = 0
-        val now = Instant.now().toString()
-        for (doc in stale) {
-            val newScore = maxOf(doc.getInteger("spamScore", 0) - 5, 0)
-            Collections.callerIds.updateOne(
-                Filters.eq("_id", doc["_id"]),
-                Updates.combine(
-                    Updates.set("spamScore", newScore),
-                    Updates.set("category", categoryFromScore(newScore)),
-                    Updates.set("lastUpdated", now)
+            .batchSize(500)
+            .collect { doc ->
+                val newScore = maxOf(doc.getInteger("spamScore", 0) - 5, 0)
+                Collections.callerIds.updateOne(
+                    Filters.eq("_id", doc["_id"]),
+                    Updates.combine(
+                        Updates.set("spamScore", newScore),
+                        Updates.set("category", categoryFromScore(newScore)),
+                        Updates.set("lastUpdated", now)
+                    )
                 )
-            )
-            doc.getString("phoneNumber")?.let { RedisCache.invalidate(it) }
-            decayed++
-        }
+                doc.getString("phoneNumber")?.let { RedisCache.invalidate(it) }
+                decayed++
+            }
         logger.info("Weekly: decayed spam scores for $decayed numbers")
     }
 

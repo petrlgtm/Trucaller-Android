@@ -21,11 +21,12 @@ object FcmService {
     /**
      * Initialises the Firebase Admin SDK.
      *
-     * Credentials are resolved via the standard
-     * `GOOGLE_APPLICATION_CREDENTIALS` environment variable (path to a
-     * service-account JSON file) which is picked up automatically by
-     * [GoogleCredentials.getApplicationDefault].
+     * Credential resolution order:
+     *  1. `FIREBASE_CREDENTIALS_JSON` — raw service-account JSON string.
+     *     Use this on Render/Docker where there is no persistent filesystem.
+     *  2. `GOOGLE_APPLICATION_CREDENTIALS` — file path (local dev, GCP VMs).
      *
+     * If neither is set, FCM is disabled and push notifications are skipped.
      * Safe to call multiple times — subsequent calls are no-ops.
      */
     fun initialize() {
@@ -33,16 +34,37 @@ object FcmService {
 
         try {
             if (FirebaseApp.getApps().isEmpty()) {
-                val options = FirebaseOptions.builder()
-                    .setCredentials(GoogleCredentials.getApplicationDefault())
-                    .build()
-                FirebaseApp.initializeApp(options)
+                val credentials = buildCredentials() ?: run {
+                    log.warn("Firebase credentials not configured (set FIREBASE_CREDENTIALS_JSON) — push notifications disabled")
+                    return
+                }
+                FirebaseApp.initializeApp(
+                    FirebaseOptions.builder().setCredentials(credentials).build()
+                )
             }
             initialised = true
             log.info("Firebase Admin SDK initialised successfully")
         } catch (e: Exception) {
             log.error("Failed to initialise Firebase Admin SDK: ${e.message}", e)
         }
+    }
+
+    private fun buildCredentials(): GoogleCredentials? {
+        // Preferred on Render/Docker: inline JSON passed as an env var
+        val inlineJson = System.getenv("FIREBASE_CREDENTIALS_JSON")
+        if (!inlineJson.isNullOrBlank()) {
+            return GoogleCredentials.fromStream(
+                java.io.ByteArrayInputStream(inlineJson.toByteArray(Charsets.UTF_8))
+            )
+        }
+
+        // Fallback: file path (local dev, GCP VMs with workload identity)
+        val credsPath = System.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+        if (!credsPath.isNullOrBlank()) {
+            return GoogleCredentials.getApplicationDefault()
+        }
+
+        return null
     }
 
     /**

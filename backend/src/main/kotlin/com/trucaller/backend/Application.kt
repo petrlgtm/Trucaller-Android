@@ -36,6 +36,7 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import io.sentry.Sentry
 import org.slf4j.LoggerFactory
 
 @Serializable
@@ -129,11 +130,26 @@ fun Application.module() {
         }
         exception<Throwable> { call, cause ->
             logger.error("Unhandled exception on ${call.request.local.uri}", cause)
+            Sentry.captureException(cause)
             call.respond(
                 HttpStatusCode.InternalServerError,
                 mapOf("success" to false, "error" to "Internal server error")
             )
         }
+    }
+
+    // ── Sentry error tracking ────────────────────────────────────────────
+    val sentryDsn = System.getenv("SENTRY_DSN")
+    if (!sentryDsn.isNullOrBlank()) {
+        Sentry.init { options ->
+            options.dsn = sentryDsn
+            options.environment = System.getenv("KTOR_ENV") ?: "development"
+            options.release = "trucaller-backend@1.0.0"
+            options.tracesSampleRate = 0.1  // 10 % performance sampling
+        }
+        logger.info("Sentry initialized (environment=${System.getenv("KTOR_ENV") ?: "development"})")
+    } else {
+        logger.warn("SENTRY_DSN not set — error tracking disabled")
     }
 
     // ── Redis cache ──────────────────────────────────────────────────────

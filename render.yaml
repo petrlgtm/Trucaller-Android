@@ -5,16 +5,45 @@ services:
     dockerfilePath: ./backend/Dockerfile
     dockerContext: .
     region: frankfurt
-    plan: free
+    plan: starter
     branch: main
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: PORT
         value: "8080"
+      - key: KTOR_ENV
+        value: "production"
+
+      # MongoDB — set in Render dashboard, never commit the real URI
       - key: MONGO_URI
         sync: false
+
+      # JWT — must be a strong random secret (min 32 chars)
       - key: JWT_SECRET
         sync: false
+
+      # Redis — Redis Cloud connection URL
+      - key: REDIS_URL
+        sync: false
+
+      # Africa's Talking SMS gateway
+      - key: AT_API_KEY
+        sync: false
+      - key: AT_USERNAME
+        sync: false
+      - key: AT_SENDER_ID
+        sync: false
+
+      # Firebase Admin SDK — paste the full service-account JSON as a single-line string
+      # (Render has no persistent filesystem, so file paths don't work)
+      - key: FIREBASE_CREDENTIALS_JSON
+        sync: false
+
+      # Sentry error monitoring
+      - key: SENTRY_DSN
+        sync: false
+
+      # CORS — comma-separated list of allowed frontend origins
       - key: CORS_ALLOWED_ORIGINS
         value: https://trucaller-backend-sh3t.onrender.com

@@ -73,6 +73,9 @@ class CallerIdOverlayService : Service() {
         private const val ANIM_EXIT_DURATION = 250L
         private const val SWIPE_VELOCITY_THRESHOLD = 300f
 
+        // Auto-dismiss the overlay after this delay if not manually dismissed
+        private const val OVERLAY_AUTO_DISMISS_MS = 30_000L
+
         fun show(context: Context, phoneNumber: String) {
             val intent = Intent(context, CallerIdOverlayService::class.java).apply {
                 putExtra(EXTRA_PHONE_NUMBER, phoneNumber)
@@ -90,6 +93,9 @@ class CallerIdOverlayService : Service() {
     private var overlayView: View? = null
     private var isDismissing = false
 
+    private val autoDismissHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val autoDismissRunnable = Runnable { animateExit() }
+
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -99,7 +105,8 @@ class CallerIdOverlayService : Service() {
             return START_NOT_STICKY
         }
 
-        // Remove any existing overlay before showing a new one
+        // Remove any existing overlay and cancel any pending auto-dismiss before showing a new one
+        autoDismissHandler.removeCallbacks(autoDismissRunnable)
         removeOverlay()
         isDismissing = false
 
@@ -133,6 +140,9 @@ class CallerIdOverlayService : Service() {
                 }
             }
         }
+
+        // Schedule auto-dismiss so the overlay doesn't stay up indefinitely
+        autoDismissHandler.postDelayed(autoDismissRunnable, OVERLAY_AUTO_DISMISS_MS)
 
         return START_NOT_STICKY
     }
@@ -594,6 +604,7 @@ class CallerIdOverlayService : Service() {
     private fun animateExit() {
         if (isDismissing) return
         isDismissing = true
+        autoDismissHandler.removeCallbacks(autoDismissRunnable)
 
         val view = overlayView ?: run {
             stopSelf()
@@ -643,8 +654,9 @@ class CallerIdOverlayService : Service() {
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        autoDismissHandler.removeCallbacks(autoDismissRunnable)
         removeOverlay()
+        super.onDestroy()
     }
 
     private fun dpToPx(dp: Int): Int {

@@ -49,6 +49,9 @@ dependencies {
     // Redis cache (graceful degradation when REDIS_URL not set)
     implementation("io.lettuce:lettuce-core:6.4.0.RELEASE")
 
+    // Sentry error tracking
+    implementation("io.sentry:sentry:7.14.0")
+
     // Logging
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
 

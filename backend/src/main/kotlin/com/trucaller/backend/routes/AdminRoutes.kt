@@ -918,6 +918,39 @@ fun Route.adminRoutes() {
                     )
                 )
             }
+
+            // ── GET /api/admin/audit/logins ────────────────────────────────
+            get("/audit/logins") {
+                val phone = call.request.queryParameters["phone"]
+                val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 50).coerceIn(1, 500)
+                val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0
+
+                val filter = if (phone != null) Filters.eq("phone", phone) else Filters.empty()
+
+                val logs = Collections.loginAuditLog
+                    .find(filter)
+                    .sort(org.bson.Document("timestamp", -1))
+                    .skip(skip)
+                    .limit(limit)
+                    .toList()
+                    .map { doc ->
+                        mapOf(
+                            "phone" to doc.getString("phone"),
+                            "ip" to doc.getString("ip"),
+                            "success" to doc.getBoolean("success", false),
+                            "reason" to doc.getString("reason"),
+                            "timestamp" to doc["timestamp"]?.toString()
+                        )
+                    }
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse(
+                        success = true,
+                        data = mapOf("logs" to logs, "count" to logs.size)
+                    )
+                )
+            }
         }
     }
 }
