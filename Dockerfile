@@ -36,8 +36,8 @@ include(":backend")\n' > settings.gradle.kts
 
 RUN gradle :backend:shadowJar --no-daemon
 
-# Stage 2: Minimal JRE runtime
-FROM eclipse-temurin:17-jre-alpine
+# Stage 2: Minimal JRE runtime (Debian/glibc — Alpine musl breaks MongoDB Atlas TLS)
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=build /app/backend/build/libs/trucaller-backend.jar app.jar
 
