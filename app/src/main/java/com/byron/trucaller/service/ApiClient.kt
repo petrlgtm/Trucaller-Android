@@ -24,7 +24,7 @@ object ApiClient {
     private const val TAG = "ApiClient"
 
     // Default to local backend — override via setBaseUrl()
-    private var baseUrl = "https://trucaller-backend.onrender.com"
+    private var baseUrl = "https://trucaller-backend-sh3t.onrender.com"
 
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     private val gson = Gson()

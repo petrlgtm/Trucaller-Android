@@ -17,4 +17,4 @@ services:
       - key: JWT_SECRET
         sync: false
       - key: CORS_ALLOWED_ORIGINS
-        value: https://trucaller-backend.onrender.com
+        value: https://trucaller-backend-sh3t.onrender.com
