@@ -32,7 +32,11 @@ object SmsService {
 
     private val isEnabled: Boolean get() = !apiKey.isNullOrBlank()
 
-    private val AT_SMS_URL = "https://api.africastalking.com/version1/messaging"
+    // Sandbox and production use different base URLs
+    private val AT_SMS_URL = if (username == "sandbox")
+        "https://api.sandbox.africastalking.com/version1/messaging"
+    else
+        "https://api.africastalking.com/version1/messaging"
 
     private val httpClient = HttpClient(CIO) {
         engine { requestTimeout = 15_000 }
