@@ -8,6 +8,14 @@ COPY gradle/ gradle/
 COPY gradlew .
 COPY backend/ backend/
 
+# Override root build.gradle.kts: strip Android/Google plugins that need google() repo + Android SDK.
+# The :backend module declares all its own plugins directly; the root only needs JVM/serialization/shadow.
+RUN printf 'plugins {\n\
+    alias(libs.plugins.kotlin.jvm) apply false\n\
+    alias(libs.plugins.kotlin.serialization) apply false\n\
+    alias(libs.plugins.shadow) apply false\n\
+}\n' > build.gradle.kts
+
 # Create a minimal settings.gradle.kts that includes only :backend
 # (the root settings.gradle.kts also includes :app which needs Android SDK)
 RUN printf 'pluginManagement {\n\
