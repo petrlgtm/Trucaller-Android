@@ -236,13 +236,15 @@ private fun Route.sendOtpRoute() {
         // Send OTP via Africa's Talking SMS gateway (falls back to log in dev mode)
         val smsSent = SmsService.sendOtp(request.phoneNumber, otp)
         if (!smsSent) {
-            // Gateway failure — clean up the stored OTP so user can retry
-            Collections.otpCodes.deleteMany(
-                Filters.and(
-                    Filters.eq("phoneNumber", request.phoneNumber),
-                    Filters.eq("purpose", request.purpose)
+            // Gateway failure — best-effort cleanup so user can retry immediately
+            runCatching {
+                Collections.otpCodes.deleteMany(
+                    Filters.and(
+                        Filters.eq("phoneNumber", request.phoneNumber),
+                        Filters.eq("purpose", request.purpose)
+                    )
                 )
-            )
+            }
             call.respond(
                 HttpStatusCode.ServiceUnavailable,
                 ApiResponse<Unit>(success = false, error = "Could not send verification SMS. Please try again.")

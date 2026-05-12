@@ -2,12 +2,11 @@ package com.trucaller.backend.service
 
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.client.statement.*
 import io.ktor.http.*
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 
 /**
@@ -39,7 +38,11 @@ object SmsService {
         "https://api.africastalking.com/version1/messaging"
 
     private val httpClient = HttpClient(CIO) {
-        engine { requestTimeout = 15_000 }
+        install(HttpTimeout) {
+            connectTimeoutMillis = 5_000
+            requestTimeoutMillis = 12_000
+            socketTimeoutMillis = 10_000
+        }
     }
 
     /**
@@ -58,32 +61,30 @@ object SmsService {
             return true
         }
 
-        return withContext(Dispatchers.IO) {
-            try {
-                val response: HttpResponse = httpClient.post(AT_SMS_URL) {
-                    header("apiKey", apiKey)
-                    header("Accept", "application/json")
-                    contentType(ContentType.Application.FormUrlEncoded)
-                    setBody(FormDataContent(Parameters.build {
-                        append("username", username)
-                        append("to", phoneNumber)
-                        append("message", message)
-                        if (!senderId.isNullOrBlank()) append("from", senderId)
-                    }))
-                }
+        return try {
+            val response: HttpResponse = httpClient.post(AT_SMS_URL) {
+                header("apiKey", apiKey)
+                header("Accept", "application/json")
+                contentType(ContentType.Application.FormUrlEncoded)
+                setBody(FormDataContent(Parameters.build {
+                    append("username", username)
+                    append("to", phoneNumber)
+                    append("message", message)
+                    if (!senderId.isNullOrBlank()) append("from", senderId)
+                }))
+            }
 
-                val body = response.bodyAsText()
-                if (response.status.isSuccess()) {
-                    logger.info("OTP SMS sent to $phoneNumber via Africa's Talking")
-                    true
-                } else {
-                    logger.error("Africa's Talking SMS failed (HTTP ${response.status.value}): $body")
-                    false
-                }
-            } catch (e: Exception) {
-                logger.error("SMS send failed for $phoneNumber: ${e.message}", e)
+            val body = response.bodyAsText()
+            if (response.status.isSuccess()) {
+                logger.info("OTP SMS sent to $phoneNumber via Africa's Talking")
+                true
+            } else {
+                logger.error("Africa's Talking SMS failed (HTTP ${response.status.value}): $body")
                 false
             }
+        } catch (e: Exception) {
+            logger.error("SMS send failed for $phoneNumber: ${e.message}", e)
+            false
         }
     }
 
@@ -97,27 +98,25 @@ object SmsService {
             return true
         }
 
-        return withContext(Dispatchers.IO) {
-            try {
-                val response: HttpResponse = httpClient.post(AT_SMS_URL) {
-                    header("apiKey", apiKey)
-                    header("Accept", "application/json")
-                    contentType(ContentType.Application.FormUrlEncoded)
-                    setBody(FormDataContent(Parameters.build {
-                        append("username", username)
-                        append("to", phoneNumber)
-                        append("message", message)
-                        if (!senderId.isNullOrBlank()) append("from", senderId)
-                    }))
-                }
-
-                response.status.isSuccess().also { ok ->
-                    if (!ok) logger.error("AT SMS raw send failed: HTTP ${response.status.value}")
-                }
-            } catch (e: Exception) {
-                logger.error("SMS raw send failed for $phoneNumber: ${e.message}", e)
-                false
+        return try {
+            val response: HttpResponse = httpClient.post(AT_SMS_URL) {
+                header("apiKey", apiKey)
+                header("Accept", "application/json")
+                contentType(ContentType.Application.FormUrlEncoded)
+                setBody(FormDataContent(Parameters.build {
+                    append("username", username)
+                    append("to", phoneNumber)
+                    append("message", message)
+                    if (!senderId.isNullOrBlank()) append("from", senderId)
+                }))
             }
+
+            response.status.isSuccess().also { ok ->
+                if (!ok) logger.error("AT SMS raw send failed: HTTP ${response.status.value}")
+            }
+        } catch (e: Exception) {
+            logger.error("SMS raw send failed for $phoneNumber: ${e.message}", e)
+            false
         }
     }
 }
