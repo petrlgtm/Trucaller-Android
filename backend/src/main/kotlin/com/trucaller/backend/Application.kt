@@ -160,6 +160,24 @@ fun Application.module() {
             call.respond(HttpStatusCode.OK, HealthResponse(status = "ok"))
         }
 
+        get("/api/health/db") {
+            try {
+                MongoDB.database.runCommand(org.bson.Document("ping", 1))
+                call.respond(HttpStatusCode.OK, mapOf(
+                    "status" to "ok",
+                    "db" to "connected",
+                    "timestamp" to java.time.Instant.now().toString()
+                ))
+            } catch (e: Exception) {
+                logger.error("MongoDB ping failed", e)
+                call.respond(HttpStatusCode.ServiceUnavailable, mapOf(
+                    "status" to "error",
+                    "db" to "unreachable",
+                    "error" to (e.message ?: "unknown")
+                ))
+            }
+        }
+
         get("/") {
             call.resolveResource("static/index.html")?.let {
                 call.respond(it)

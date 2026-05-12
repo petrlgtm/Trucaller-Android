@@ -1,0 +1,36 @@
+name: Database Keepalive
+
+on:
+  schedule:
+    # Ping DB every 20 minutes — keeps the MongoDB Atlas connection active
+    # (Atlas M0 free clusters pause after 60 days of zero connections)
+    - cron: '*/20 * * * *'
+  workflow_dispatch:
+
+jobs:
+  ping-db:
+    name: Ping database health endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Ping /api/health/db
+        run: |
+          STATUS=$(curl -s -o /tmp/db_response.json -w "%{http_code}" \
+            --max-time 40 \
+            https://trucaller-backend-sh3t.onrender.com/api/health/db)
+          echo "HTTP status: $STATUS"
+          cat /tmp/db_response.json || true
+          if [ "$STATUS" = "200" ]; then
+            echo "Database is connected."
+          else
+            echo "Warning: DB health returned $STATUS — backend may be cold-starting or DB unreachable."
+          fi
+
+      - name: Wake backend then re-check DB (retry on failure)
+        if: failure()
+        run: |
+          echo "DB check failed — waking backend first, then retrying in 90s..."
+          curl -s --max-time 60 https://trucaller-backend-sh3t.onrender.com/api/health || true
+          sleep 90
+          curl -s --max-time 60 https://trucaller-backend-sh3t.onrender.com/api/health/db
