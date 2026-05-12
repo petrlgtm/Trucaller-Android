@@ -1,0 +1,33 @@
+name: Backend Keepalive
+
+on:
+  schedule:
+    # Ping every 14 minutes — keeps Render free tier from spinning down (15-min timeout)
+    - cron: '*/14 * * * *'
+  workflow_dispatch: # allow manual trigger from GitHub Actions tab
+
+jobs:
+  ping:
+    name: Ping backend health endpoint
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+
+    steps:
+      - name: Ping /api/health
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" \
+            --max-time 30 \
+            https://trucaller-backend.onrender.com/api/health)
+          echo "HTTP status: $STATUS"
+          if [ "$STATUS" = "200" ]; then
+            echo "Backend is alive."
+          else
+            echo "Warning: backend returned $STATUS — may be cold-starting."
+          fi
+
+      - name: Wake if sleeping (retry once after 60s)
+        if: failure()
+        run: |
+          echo "Backend did not respond, waiting 60s and retrying..."
+          sleep 60
+          curl -s --max-time 60 https://trucaller-backend.onrender.com/api/health
