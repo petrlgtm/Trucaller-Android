@@ -150,23 +150,24 @@ class AuthViewModel(
         return true
     }
 
-    suspend fun adminLogin(email: String, password: String): Boolean {
+    suspend fun adminLogin(phoneNumber: String, password: String): Boolean {
         // Try backend API login first
         try {
-            val apiResult = ApiClient.adminLogin(email, password)
+            val apiResult = ApiClient.adminLogin(phoneNumber, password)
             if (apiResult.success && apiResult.data != null) {
                 val tokenData = apiResult.data
                 ApiClient.setAuthToken(tokenData.token)
                 viewModelScope.launch { preferences.setAuthToken(tokenData.token) }
 
                 // Sync with local Room DB, or create a local record from the backend response
-                var admin = userRepository.getAdminByCredentials(email, password)
+                var admin = userRepository.getAdminByPhoneCredentials(phoneNumber, password)
                 if (admin == null) {
                     val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
                     admin = AdminUser(
                         id = tokenData.userId,
-                        name = email.substringBefore("@"),
-                        email = email,
+                        name = "Admin",
+                        phoneNumber = phoneNumber,
+                        email = "",
                         password = hashPassword(password),
                         role = "SUPER_ADMIN",
                         lastLogin = now,
@@ -175,16 +176,16 @@ class AuthViewModel(
                     userRepository.insertAdminUser(admin)
                 }
                 preferences.setAdminId(admin.id)
-                preferences.setAdminProfile(admin.name, admin.email)
+                preferences.setAdminProfile(admin.name, admin.phoneNumber)
                 _adminUser.value = admin
                 return true
             }
         } catch (_: Exception) { }
 
-        // Fallback: local Room login
-        val admin = userRepository.getAdminByCredentials(email, password) ?: return false
+        // Fallback: local Room login by phone
+        val admin = userRepository.getAdminByPhoneCredentials(phoneNumber, password) ?: return false
         preferences.setAdminId(admin.id)
-        preferences.setAdminProfile(admin.name, admin.email)
+        preferences.setAdminProfile(admin.name, admin.phoneNumber)
         _adminUser.value = admin
         return true
     }

@@ -7,7 +7,8 @@ import androidx.room.PrimaryKey
 data class AdminUser(
     @PrimaryKey val id: String,
     val name: String,
-    val email: String,
+    val phoneNumber: String = "",
+    val email: String = "",
     val password: String,
     val role: String,
     val lastLogin: String,

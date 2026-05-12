@@ -29,7 +29,7 @@ import com.byron.trucaller.data.model.*
         FamilyGroup::class,
         FamilyMember::class
     ],
-    version = 16,
+    version = 17,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -163,6 +163,13 @@ abstract class TruCallerDatabase : RoomDatabase() {
         val MIGRATION_15_16 = object : Migration(15, 16) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE ip_logs ADD COLUMN nearbyDevices TEXT NOT NULL DEFAULT '[]'")
+            }
+        }
+
+        /** Migration 16 -> 17: add phoneNumber column to admin_users for phone-based admin login. */
+        val MIGRATION_16_17 = object : Migration(16, 17) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE admin_users ADD COLUMN phoneNumber TEXT NOT NULL DEFAULT ''")
             }
         }
     }

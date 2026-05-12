@@ -19,6 +19,8 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.Button
@@ -26,6 +28,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Text
@@ -46,23 +49,20 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import androidx.compose.material3.MaterialTheme
 import com.byron.trucaller.ui.theme.Accent
 import com.byron.trucaller.ui.theme.Background
 import com.byron.trucaller.ui.theme.Brand
-import com.byron.trucaller.ui.theme.BrandDark
 import com.byron.trucaller.ui.theme.Danger
 import com.byron.trucaller.ui.theme.SurfaceLight
 import com.byron.trucaller.ui.theme.TextPrimary
 import com.byron.trucaller.ui.theme.TextSecondary
 import com.byron.trucaller.viewmodel.AuthViewModel
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 @Composable
 fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel) {
     val colorScheme = MaterialTheme.colorScheme
-    var email by remember { mutableStateOf("") }
+    var phoneNumber by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf<String?>(null) }
@@ -79,7 +79,6 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
     ) {
         Spacer(modifier = Modifier.height(60.dp))
 
-        // Admin icon
         Box(
             modifier = Modifier
                 .size(80.dp)
@@ -103,33 +102,40 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
             color = TextPrimary
         )
         Text(
-            text = "Sign in with your admin credentials",
+            text = "Authorised personnel only",
             fontSize = 14.sp,
             color = TextSecondary
         )
 
         Spacer(modifier = Modifier.height(40.dp))
 
-        // Email input
+        // Phone number field
         OutlinedTextField(
-            value = email,
-            onValueChange = { email = it; error = null },
-            label = { Text("Email") },
-            placeholder = { Text("admin@trucaller.co.ug") },
-            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+            value = phoneNumber,
+            onValueChange = { phoneNumber = it; error = null },
+            label = { Text("Admin Phone Number") },
+            placeholder = { Text("e.g. 0787959715") },
+            leadingIcon = { Icon(Icons.Default.Phone, null, tint = Brand) },
+            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = colorScheme.outline, focusedContainerColor = SurfaceLight, unfocusedContainerColor = SurfaceLight)
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Brand,
+                unfocusedBorderColor = colorScheme.outline,
+                focusedContainerColor = SurfaceLight,
+                unfocusedContainerColor = SurfaceLight
+            )
         )
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Password input
+        // Password field
         OutlinedTextField(
             value = password,
             onValueChange = { password = it; error = null },
             label = { Text("Password") },
+            leadingIcon = { Icon(Icons.Default.Lock, null, tint = Brand) },
             singleLine = true,
             visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
             trailingIcon = {
@@ -143,10 +149,14 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
-            colors = OutlinedTextFieldDefaults.colors(focusedBorderColor = Brand, unfocusedBorderColor = colorScheme.outline, focusedContainerColor = SurfaceLight, unfocusedContainerColor = SurfaceLight)
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Brand,
+                unfocusedBorderColor = colorScheme.outline,
+                focusedContainerColor = SurfaceLight,
+                unfocusedContainerColor = SurfaceLight
+            )
         )
 
-        // Error
         if (error != null) {
             Spacer(modifier = Modifier.height(12.dp))
             Text(
@@ -160,11 +170,11 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // Login button
         Button(
             onClick = {
-                if (email.isBlank()) {
-                    error = "Enter your admin email"
+                val trimmed = phoneNumber.trim()
+                if (trimmed.isBlank()) {
+                    error = "Enter your admin phone number"
                     return@Button
                 }
                 if (password.length < 6) {
@@ -174,15 +184,14 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
                 isLoading = true
                 error = null
                 scope.launch {
-                    delay(800)
-                    val success = authViewModel.adminLogin(email, password)
+                    val success = authViewModel.adminLogin(trimmed, password)
                     isLoading = false
                     if (success) {
                         navController.navigate("admin_dashboard") {
                             popUpTo("admin_login") { inclusive = true }
                         }
                     } else {
-                        error = "Invalid email or password"
+                        error = "Access denied. Unauthorised number or wrong password."
                     }
                 }
             },
@@ -206,7 +215,6 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // Back to user login
         Row(horizontalArrangement = Arrangement.Center) {
             Text("Not an admin? ", color = TextSecondary, fontSize = 14.sp)
             Text(
@@ -214,27 +222,7 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
                 color = Accent,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.clickable {
-                    navController.popBackStack()
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        // Demo hint
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Brand.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-                .padding(12.dp)
-        ) {
-            Text(
-                text = "Demo: admin@trucaller.co.ug / admin123",
-                color = TextSecondary,
-                fontSize = 13.sp,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.clickable { navController.popBackStack() }
             )
         }
     }

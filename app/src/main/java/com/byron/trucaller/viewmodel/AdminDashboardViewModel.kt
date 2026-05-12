@@ -16,11 +16,16 @@ import com.byron.trucaller.data.repository.SmsRepository
 import com.byron.trucaller.data.repository.StolenReportRepository
 import com.byron.trucaller.data.repository.UserRepository
 import com.byron.trucaller.service.ApiClient
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+
+private const val REALTIME_POLL_INTERVAL_MS = 30_000L
 
 data class DashboardStats(
     val userCount: Int = 0,
@@ -29,6 +34,10 @@ data class DashboardStats(
     val alarmCount: Int = 0,
     val callerIdCount: Int = 0,
     val smsSpamReportCount: Int = 0,
+    val pendingReports: Int = 0,
+    val activeDevices: Int = 0,
+    val verifiedReports: Int = 0,
+    val resolvedReports: Int = 0,
     val lastUpdated: Long = 0L
 )
 
@@ -70,18 +79,38 @@ class AdminDashboardViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private var pollingJob: Job? = null
+
     init {
         fetchStats()
+        startPolling()
     }
 
     fun refresh() {
         fetchStats()
     }
 
-    private fun fetchStats() {
+    private fun startPolling() {
+        pollingJob?.cancel()
+        pollingJob = viewModelScope.launch {
+            while (isActive) {
+                delay(REALTIME_POLL_INTERVAL_MS)
+                fetchStats(silent = true)
+            }
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        pollingJob?.cancel()
+    }
+
+    private fun fetchStats(silent: Boolean = false) {
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
+            if (!silent) {
+                _isLoading.value = true
+                _error.value = null
+            }
 
             try {
                 val result = ApiClient.getDashboardStats()
@@ -94,22 +123,25 @@ class AdminDashboardViewModel(
                         alarmCount = (data["alarmCount"] as? Number)?.toInt() ?: 0,
                         callerIdCount = (data["callerIdCount"] as? Number)?.toInt() ?: 0,
                         smsSpamReportCount = (data["smsSpamReportCount"] as? Number)?.toInt() ?: 0,
+                        pendingReports = (data["pendingReports"] as? Number)?.toInt() ?: 0,
+                        activeDevices = (data["activeDevices"] as? Number)?.toInt() ?: 0,
+                        verifiedReports = (data["verifiedReports"] as? Number)?.toInt() ?: 0,
+                        resolvedReports = (data["resolvedReports"] as? Number)?.toInt() ?: 0,
                         lastUpdated = System.currentTimeMillis()
                     )
                     _isLoading.value = false
                     return@launch
                 }
-                // API failed — fall back to local Room counts
                 Log.w(TAG, "API fetch failed: ${result.error}, falling back to local Room")
-                fallbackToLocal()
+                fallbackToLocal(silent)
             } catch (e: Exception) {
                 Log.e(TAG, "Failed to fetch dashboard stats from API", e)
-                fallbackToLocal()
+                fallbackToLocal(silent)
             }
         }
     }
 
-    private suspend fun fallbackToLocal() {
+    private suspend fun fallbackToLocal(silent: Boolean = false) {
         try {
             val users = userRepository.getUserCount().firstOrNull() ?: 0
             val devices = deviceRepository.getDeviceCount().firstOrNull() ?: 0
@@ -127,12 +159,18 @@ class AdminDashboardViewModel(
                 smsSpamReportCount = smsSpam,
                 lastUpdated = System.currentTimeMillis()
             )
-            _error.value = "Showing local data (offline)"
+            if (!silent) {
+                _error.value = "Showing local data (offline)"
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Local fallback also failed", e)
-            _error.value = "Unable to load dashboard stats"
+            if (!silent) {
+                _error.value = "Unable to load dashboard stats"
+            }
         } finally {
-            _isLoading.value = false
+            if (!silent) {
+                _isLoading.value = false
+            }
         }
     }
 }

@@ -31,7 +31,7 @@ data class OtpVerification(
 
 @Serializable
 data class AdminLoginRequest(
-    val email: String,
+    val phoneNumber: String,   // local (07XXXXXXXX) or E.164 (+256XXXXXXXXX)
     val password: String
 )
 

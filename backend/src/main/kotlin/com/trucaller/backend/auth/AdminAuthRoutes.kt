@@ -18,12 +18,32 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.firstOrNull
 import java.time.Instant
 
+// ── Authorised admin phone numbers (E.164) ───────────────────────────────────
+
+private val AUTHORISED_ADMIN_PHONES = setOf(
+    "+256787959715",
+    "+256751159472"
+)
+
+/**
+ * Normalises a Ugandan phone number to E.164 (+256XXXXXXXXX).
+ * Accepts: 07XXXXXXXX, 256XXXXXXXXX, +256XXXXXXXXX, or 9-digit bare numbers.
+ */
+fun normalizeUgandaPhone(raw: String): String {
+    val digits = raw.filter { it.isDigit() }
+    return when {
+        raw.startsWith("+") && digits.length == 12 -> "+$digits"
+        digits.startsWith("256") && digits.length == 12 -> "+$digits"
+        digits.startsWith("0") && digits.length == 10 -> "+256${digits.drop(1)}"
+        digits.length == 9 -> "+256$digits"
+        else -> "+$digits"
+    }
+}
+
 // ── Role-checking utility functions ─────────────────────────────────────────
 
 /**
  * Extracts the admin role from the JWT principal's "role" claim.
- * Returns `null` if the principal is missing or the role claim is not
- * a valid [AdminRole] value.
  */
 fun ApplicationCall.getAdminRole(): AdminRole? {
     val principal = principal<JWTPrincipal>() ?: return null
@@ -37,7 +57,6 @@ fun ApplicationCall.getAdminRole(): AdminRole? {
 
 /**
  * Ensures the caller holds any admin role (SUPER_ADMIN or MODERATOR).
- * Throws an [IllegalAccessException] if the JWT does not carry a valid admin role.
  */
 fun ApplicationCall.requireAdmin() {
     getAdminRole() ?: throw IllegalAccessException("Admin access required")
@@ -45,7 +64,6 @@ fun ApplicationCall.requireAdmin() {
 
 /**
  * Ensures the caller holds the SUPER_ADMIN role specifically.
- * Throws an [IllegalAccessException] otherwise.
  */
 fun ApplicationCall.requireSuperAdmin() {
     val role = getAdminRole()
@@ -59,8 +77,9 @@ fun ApplicationCall.requireSuperAdmin() {
 /**
  * Registers admin authentication routes under `/api/admin`.
  *
- * - `POST /api/admin/login` — authenticates an admin user with email + password
- *   and returns a JWT [TokenResponse].
+ * - `POST /api/admin/login` — authenticates by phone number + password.
+ *   Only the two authorised phone numbers (+256787959715, +256751159472)
+ *   can log in. Returns a JWT [TokenResponse].
  */
 fun Route.adminAuthRoutes() {
 
@@ -73,26 +92,39 @@ fun Route.adminAuthRoutes() {
             } catch (e: Exception) {
                 call.respond(
                     HttpStatusCode.BadRequest,
-                    ApiResponse<Nothing>(
-                        success = false,
-                        error = "Invalid request body"
-                    )
+                    ApiResponse<Nothing>(success = false, error = "Invalid request body")
                 )
                 return@post
             }
 
-            // Look up admin user by email
+            if (request.phoneNumber.isBlank() || request.password.isBlank()) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Nothing>(success = false, error = "Phone number and password are required")
+                )
+                return@post
+            }
+
+            val normalizedPhone = normalizeUgandaPhone(request.phoneNumber)
+
+            // Whitelist enforcement — reject before any DB query
+            if (normalizedPhone !in AUTHORISED_ADMIN_PHONES) {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    ApiResponse<Nothing>(success = false, error = "Invalid credentials")
+                )
+                return@post
+            }
+
+            // Look up admin by phone number
             val doc = Collections.adminUsers
-                .find(Filters.eq("email", request.email))
+                .find(Filters.eq("phoneNumber", normalizedPhone))
                 .firstOrNull()
 
             if (doc == null) {
                 call.respond(
                     HttpStatusCode.Unauthorized,
-                    ApiResponse<Nothing>(
-                        success = false,
-                        error = "Invalid credentials"
-                    )
+                    ApiResponse<Nothing>(success = false, error = "Invalid credentials")
                 )
                 return@post
             }
@@ -106,18 +138,16 @@ fun Route.adminAuthRoutes() {
             if (!verified) {
                 call.respond(
                     HttpStatusCode.Unauthorized,
-                    ApiResponse<Nothing>(
-                        success = false,
-                        error = "Invalid credentials"
-                    )
+                    ApiResponse<Nothing>(success = false, error = "Invalid credentials")
                 )
                 return@post
             }
 
             val userId = doc.getString("_id")
-            val role = doc.getString("role") ?: "MODERATOR"
+            val role = doc.getString("role") ?: "SUPER_ADMIN"
+            val adminName = doc.getString("name") ?: ""
 
-            // Generate JWT token via JwtConfig (created by Task 2.1)
+            // Generate JWT
             val token = JwtConfig.makeToken(userId = userId, role = role)
 
             // Update lastLogin timestamp
@@ -138,7 +168,7 @@ fun Route.adminAuthRoutes() {
                         expiresIn = expiresIn,
                         userId = userId
                     ),
-                    message = "Login successful"
+                    message = "Welcome, $adminName"
                 )
             )
         }

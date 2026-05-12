@@ -4,6 +4,7 @@ import com.trucaller.backend.auth.UnauthorizedException
 import com.trucaller.backend.auth.JwtConfig
 import com.trucaller.backend.auth.adminAuthRoutes
 import com.trucaller.backend.auth.authRoutes
+import com.trucaller.backend.data.AdminSeeder
 import com.trucaller.backend.data.MongoDB
 import com.trucaller.backend.plugins.RateLimiterPlugin
 import com.trucaller.backend.plugins.RequestSizeLimiterPlugin
@@ -145,6 +146,7 @@ fun Application.module() {
     environment.monitor.subscribe(ApplicationStarted) { app ->
         app.launch {
             MongoDB.connect(mongoUri)
+            AdminSeeder.seed()
         }
     }
     environment.monitor.subscribe(ApplicationStopped) {

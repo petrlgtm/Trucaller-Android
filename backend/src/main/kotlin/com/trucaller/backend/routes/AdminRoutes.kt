@@ -30,7 +30,11 @@ data class DashboardStats(
     val reportCount: Long,
     val alarmCount: Long,
     val callerIdCount: Long,
-    val smsSpamReportCount: Long
+    val smsSpamReportCount: Long,
+    val pendingReports: Long = 0,
+    val activeDevices: Long = 0,
+    val verifiedReports: Long = 0,
+    val resolvedReports: Long = 0
 )
 
 @Serializable
@@ -112,7 +116,19 @@ fun Route.adminRoutes() {
                     reportCount = Collections.stolenReports.countDocuments(),
                     alarmCount = Collections.alarmLogs.countDocuments(),
                     callerIdCount = Collections.callerIds.countDocuments(),
-                    smsSpamReportCount = Collections.smsSpamReports.countDocuments()
+                    smsSpamReportCount = Collections.smsSpamReports.countDocuments(),
+                    pendingReports = Collections.stolenReports.countDocuments(
+                        Filters.eq("status", "PENDING")
+                    ),
+                    activeDevices = Collections.devices.countDocuments(
+                        Filters.eq("status", "ACTIVE")
+                    ),
+                    verifiedReports = Collections.stolenReports.countDocuments(
+                        Filters.eq("status", "VERIFIED")
+                    ),
+                    resolvedReports = Collections.stolenReports.countDocuments(
+                        Filters.eq("status", "RESOLVED")
+                    )
                 )
 
                 call.respond(

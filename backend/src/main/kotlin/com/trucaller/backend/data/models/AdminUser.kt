@@ -14,7 +14,8 @@ data class AdminUser(
     @BsonId
     val id: String = ObjectId().toString(),
     val name: String,
-    val email: String,
+    val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
+    val email: String = "",        // optional, kept for profile display
     val passwordHash: String,
     val role: AdminRole,
     val lastLogin: String? = null, // ISO 8601

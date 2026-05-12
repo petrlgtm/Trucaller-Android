@@ -304,8 +304,8 @@ object ApiClient {
 
     // ── Admin Endpoints ──────────────────────────────────────────────────
 
-    suspend fun adminLogin(email: String, password: String): ApiResult<TokenResponse> =
-        post("/api/admin/login", mapOf("email" to email, "password" to password))
+    suspend fun adminLogin(phoneNumber: String, password: String): ApiResult<TokenResponse> =
+        post("/api/admin/login", mapOf("phoneNumber" to phoneNumber, "password" to password))
 
     suspend fun getDashboardStats(): ApiResult<Map<String, Any>> =
         get("/api/admin/dashboard")

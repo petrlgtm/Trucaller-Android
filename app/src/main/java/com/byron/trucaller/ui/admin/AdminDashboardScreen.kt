@@ -166,9 +166,10 @@ fun AdminDashboardScreen(
     }
 
     Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
+        val adminUser by authViewModel.adminUser.collectAsState()
         TruCallerHeader(
             title = "Admin Dashboard",
-            subtitle = "System overview & management"
+            subtitle = adminUser?.name?.let { "Logged in as $it" } ?: "System overview & management"
         )
 
         PullToRefreshBox(
@@ -182,21 +183,33 @@ fun AdminDashboardScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(Spacing.md)
             ) {
-                // Last updated timestamp & error
-                if (stats.lastUpdated > 0L) {
-                    val minutesAgo = ((System.currentTimeMillis() - stats.lastUpdated) / 60_000).toInt()
-                    val timeText = when {
-                        minutesAgo < 1 -> "just now"
-                        minutesAgo == 1 -> "1 min ago"
-                        minutesAgo < 60 -> "$minutesAgo min ago"
-                        else -> "${minutesAgo / 60}h ago"
-                    }
-                    Text(
-                        "Last updated: $timeText",
-                        fontSize = 12.sp,
-                        color = colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(bottom = 8.dp)
+                // Live-update status bar
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(bottom = 8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(8.dp)
+                            .background(Color(0xFF4CAF50), CircleShape)
                     )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    if (stats.lastUpdated > 0L) {
+                        val secondsAgo = ((System.currentTimeMillis() - stats.lastUpdated) / 1_000).toInt()
+                        val timeText = when {
+                            secondsAgo < 10 -> "Live"
+                            secondsAgo < 60 -> "${secondsAgo}s ago"
+                            secondsAgo < 3600 -> "${secondsAgo / 60}m ago"
+                            else -> "${secondsAgo / 3600}h ago"
+                        }
+                        Text(
+                            "Realtime · $timeText · auto-refresh every 30s",
+                            fontSize = 12.sp,
+                            color = colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        Text("Connecting...", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                    }
                 }
 
                 error?.let {
@@ -208,7 +221,7 @@ fun AdminDashboardScreen(
                     )
                 }
 
-                // Stats cards row 1: Users & Devices
+                // Stats row 1: Users & Active Devices
                 AnimatedVisibility(
                     visible = statsVisible,
                     enter = fadeIn(animationSpec = tween(400)) +
@@ -218,28 +231,22 @@ fun AdminDashboardScreen(
                             )
                 ) {
                     if (isLoading && stats.lastUpdated == 0L) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             ShimmerStatCard(modifier = Modifier.weight(1f))
                             ShimmerStatCard(modifier = Modifier.weight(1f))
                         }
                     } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             AnimatedStatCard(
                                 modifier = Modifier.weight(1f),
-                                title = "Users",
+                                title = "Total Users",
                                 targetValue = stats.userCount,
                                 accentColor = colorScheme.onSurface
                             )
                             AnimatedStatCard(
                                 modifier = Modifier.weight(1f),
-                                title = "Devices",
-                                targetValue = stats.deviceCount,
+                                title = "Active Devices",
+                                targetValue = stats.activeDevices,
                                 accentColor = Color(0xFF4CAF50)
                             )
                         }
@@ -248,7 +255,41 @@ fun AdminDashboardScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Stats cards row 2: Stolen Reports & Alarms
+                // Stats row 2: All devices & Pending reports
+                AnimatedVisibility(
+                    visible = statsVisible,
+                    enter = fadeIn(animationSpec = tween(400, delayMillis = 100)) +
+                            slideInVertically(
+                                animationSpec = tween(400, delayMillis = 100),
+                                initialOffsetY = { it / 4 }
+                            )
+                ) {
+                    if (isLoading && stats.lastUpdated == 0L) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                            ShimmerStatCard(modifier = Modifier.weight(1f))
+                        }
+                    } else {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "All Devices",
+                                targetValue = stats.deviceCount,
+                                accentColor = colorScheme.primary
+                            )
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Pending Reports",
+                                targetValue = stats.pendingReports,
+                                accentColor = colorScheme.error
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Stats row 3: Stolen Reports & Alarms
                 AnimatedVisibility(
                     visible = statsVisible,
                     enter = fadeIn(animationSpec = tween(400, delayMillis = 150)) +
@@ -258,27 +299,21 @@ fun AdminDashboardScreen(
                             )
                 ) {
                     if (isLoading && stats.lastUpdated == 0L) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             ShimmerStatCard(modifier = Modifier.weight(1f))
                             ShimmerStatCard(modifier = Modifier.weight(1f))
                         }
                     } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             AnimatedStatCard(
                                 modifier = Modifier.weight(1f),
-                                title = "Stolen",
+                                title = "Stolen Reports",
                                 targetValue = stats.reportCount,
                                 accentColor = colorScheme.error
                             )
                             AnimatedStatCard(
                                 modifier = Modifier.weight(1f),
-                                title = "Alarms",
+                                title = "Alarms Fired",
                                 targetValue = stats.alarmCount,
                                 accentColor = colorScheme.primary
                             )
@@ -288,7 +323,7 @@ fun AdminDashboardScreen(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Stats cards row 3: Caller IDs & SMS Spam Reports
+                // Stats row 4: Caller IDs & SMS Spam Reports
                 AnimatedVisibility(
                     visible = statsVisible,
                     enter = fadeIn(animationSpec = tween(400, delayMillis = 300)) +
@@ -298,18 +333,12 @@ fun AdminDashboardScreen(
                             )
                 ) {
                     if (isLoading && stats.lastUpdated == 0L) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             ShimmerStatCard(modifier = Modifier.weight(1f))
                             ShimmerStatCard(modifier = Modifier.weight(1f))
                         }
                     } else {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(12.dp)
-                        ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                             AnimatedStatCard(
                                 modifier = Modifier.weight(1f),
                                 title = "Caller IDs",
@@ -321,6 +350,34 @@ fun AdminDashboardScreen(
                                 title = "SMS Reports",
                                 targetValue = stats.smsSpamReportCount,
                                 accentColor = BrandGold
+                            )
+                        }
+                    }
+                }
+
+                // Stats row 5: Verified & Resolved stolen reports
+                if (stats.verifiedReports > 0 || stats.resolvedReports > 0) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    AnimatedVisibility(
+                        visible = statsVisible,
+                        enter = fadeIn(animationSpec = tween(400, delayMillis = 400)) +
+                                slideInVertically(
+                                    animationSpec = tween(400, delayMillis = 400),
+                                    initialOffsetY = { it / 4 }
+                                )
+                    ) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Verified Cases",
+                                targetValue = stats.verifiedReports,
+                                accentColor = Color(0xFFFFA000)
+                            )
+                            AnimatedStatCard(
+                                modifier = Modifier.weight(1f),
+                                title = "Resolved Cases",
+                                targetValue = stats.resolvedReports,
+                                accentColor = Color(0xFF4CAF50)
                             )
                         }
                     }
@@ -403,7 +460,7 @@ fun AdminDashboardScreen(
                             AdminMenuItem(
                                 Icons.Default.PhoneAndroid,
                                 "Devices",
-                                "${stats.deviceCount} registered",
+                                "${stats.activeDevices} active · ${stats.deviceCount} total",
                                 colorScheme.onSurface
                             ) {
                                 navController.navigate("admin_devices")
@@ -411,7 +468,7 @@ fun AdminDashboardScreen(
                             AdminMenuItem(
                                 Icons.Default.People,
                                 "Users",
-                                "${stats.userCount} users",
+                                "${stats.userCount} registered",
                                 Color(0xFF4CAF50)
                             ) {
                                 navController.navigate("admin_users")
@@ -419,7 +476,7 @@ fun AdminDashboardScreen(
                             AdminMenuItem(
                                 Icons.Default.Warning,
                                 "Stolen Reports",
-                                "${stats.reportCount} reports",
+                                if (stats.pendingReports > 0) "${stats.pendingReports} pending · ${stats.reportCount} total" else "${stats.reportCount} total",
                                 colorScheme.error
                             ) {
                                 navController.navigate("admin_stolen_reports")
