@@ -121,7 +121,7 @@ fun Application.module() {
             )
             call.respond(
                 HttpStatusCode.Unauthorized,
-                mapOf("success" to false, "error" to (cause.message ?: "Authentication required"))
+                com.trucaller.backend.data.models.ApiResponse<Unit>(success = false, error = cause.message ?: "Authentication required")
             )
         }
         exception<IllegalAccessException> { call, cause ->
@@ -131,13 +131,13 @@ fun Application.module() {
             )
             call.respond(
                 HttpStatusCode.Forbidden,
-                mapOf("success" to false, "error" to (cause.message ?: "Access denied"))
+                com.trucaller.backend.data.models.ApiResponse<Unit>(success = false, error = cause.message ?: "Access denied")
             )
         }
         exception<io.ktor.server.plugins.BadRequestException> { call, cause ->
             call.respond(
                 HttpStatusCode.BadRequest,
-                mapOf("success" to false, "error" to (cause.message ?: "Bad request"))
+                com.trucaller.backend.data.models.ApiResponse<Unit>(success = false, error = cause.message ?: "Bad request")
             )
         }
         exception<Throwable> { call, cause ->
@@ -145,7 +145,7 @@ fun Application.module() {
             Sentry.captureException(cause)
             call.respond(
                 HttpStatusCode.InternalServerError,
-                mapOf("success" to false, "error" to "Internal server error")
+                com.trucaller.backend.data.models.ApiResponse<Unit>(success = false, error = "Internal server error")
             )
         }
     }

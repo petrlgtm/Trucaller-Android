@@ -43,6 +43,19 @@ data class EmailOtpVerification(
 )
 
 @Serializable
+data class OtpSentResponse(
+    val otpSent: Boolean,
+    val expiresInMinutes: Long
+)
+
+@Serializable
+data class TrustResponse(
+    val userId: String,
+    val trustScore: Int,
+    val trustLevel: String
+)
+
+@Serializable
 data class AdminLoginRequest(
     val phoneNumber: String,   // local (07XXXXXXXX) or E.164 (+256XXXXXXXXX)
     val password: String

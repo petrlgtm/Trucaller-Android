@@ -23,7 +23,7 @@ val RequestSizeLimiterPlugin = createApplicationPlugin(
         if (contentLength != null && contentLength > maxBytes) {
             call.respond(
                 HttpStatusCode.PayloadTooLarge,
-                mapOf("success" to false, "error" to "Request body too large. Maximum size is ${maxBytes / 1024}KB.")
+                com.trucaller.backend.data.models.ApiResponse<Unit>(success = false, error = "Request body too large. Maximum size is ${maxBytes / 1024}KB.")
             )
             return@onCall
         }

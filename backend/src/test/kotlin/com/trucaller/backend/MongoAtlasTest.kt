@@ -45,10 +45,10 @@ class MongoAtlasTest {
     @BeforeTest
     fun setup() {
         val env = loadEnv()
-        val uri = env["MONGO_URI"]
-            ?: System.getenv("MONGO_URI")
-            ?: fail("MONGO_URI not found in backend/.env or environment")
-        client = MongoClient.create(uri)
+        val uri = env["MONGO_URI"] ?: System.getenv("MONGO_URI")
+        // Skip all Atlas tests in CI environments where MONGO_URI is not configured.
+        org.junit.Assume.assumeNotNull(uri)
+        client = MongoClient.create(uri!!)
     }
 
     @AfterTest

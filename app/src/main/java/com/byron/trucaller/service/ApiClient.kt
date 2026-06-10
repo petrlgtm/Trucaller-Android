@@ -100,6 +100,9 @@ object ApiClient {
 
                 authToken = newTokens.token
                 refreshToken = newTokens.refreshToken
+                // The backend rotates refresh tokens (the old one is deleted server-side),
+                // so the new pair must be persisted or the session dies on process restart.
+                onTokensRefreshed?.invoke(newTokens.token, newTokens.refreshToken)
 
                 response.request.newBuilder()
                     .header("Authorization", "Bearer ${newTokens.token}")
@@ -136,11 +139,14 @@ object ApiClient {
             .build()
     }
 
-    private var authToken: String? = null
+    @Volatile private var authToken: String? = null
     @Volatile private var refreshToken: String? = null
     private val refreshLock = Any()
 
     var sessionExpiredBroadcastAction: String? = null
+
+    /** Invoked after a successful automatic token refresh so callers can persist the rotated pair. */
+    var onTokensRefreshed: ((accessToken: String, refreshToken: String?) -> Unit)? = null
 
     fun setBaseUrl(url: String) {
         baseUrl = url.trimEnd('/')
@@ -258,8 +264,15 @@ object ApiClient {
     suspend fun uploadCallerIds(entries: List<Map<String, Any>>): ApiResult<Unit> =
         post("/api/caller-id/upload", mapOf("entries" to entries))
 
-    suspend fun getLatestSpamSignatures(): ApiResult<List<Map<String, Any>>> =
-        get("/api/caller-id/spam-sync")
+    /**
+     * Fetches one page of spam signatures. The backend responds with
+     * `{ entries: [...], nextCursor: String?, hasMore: Boolean }`.
+     */
+    suspend fun getLatestSpamSignatures(cursor: String? = null, limit: Int = 500): ApiResult<Map<String, Any>> =
+        get(buildString {
+            append("/api/caller-id/spam-sync?limit=$limit")
+            if (cursor != null) append("&cursor=$cursor")
+        })
 
     suspend fun reportSpamCall(phoneNumber: String, reason: String? = null): ApiResult<Unit> =
         post("/api/caller-id/report", mapOf("phoneNumber" to phoneNumber, "reason" to (reason ?: "")))
@@ -272,6 +285,11 @@ object ApiClient {
 
     // ── Trust Endpoints ──────────────────────────────────────────────────
 
+    /** Fetches the logged-in user's own trust score/level (non-admin endpoint). */
+    suspend fun getMyTrust(): ApiResult<Map<String, Any>> =
+        get("/api/auth/me/trust")
+
+    /** Admin-only: fetches any user's trust score/level. */
     suspend fun getUserTrust(userId: String): ApiResult<Map<String, Any>> =
         get("/api/admin/users/$userId/trust")
 

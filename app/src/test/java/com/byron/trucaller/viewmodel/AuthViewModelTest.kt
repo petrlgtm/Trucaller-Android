@@ -81,6 +81,7 @@ class AuthViewModelTest {
         coEvery { ApiClient.verifyEmailOtp(any(), any()) } returns ApiResult(success = false)
         coEvery { ApiClient.logout(any()) } returns ApiResult(success = true)
         coEvery { ApiClient.getUserTrust(any()) } returns ApiResult(success = false)
+        coEvery { ApiClient.getMyTrust() } returns ApiResult(success = false)
         every { ApiClient.getAuthToken() } returns null
         every { ApiClient.setAuthToken(any()) } returns Unit
         every { ApiClient.setRefreshToken(any()) } returns Unit

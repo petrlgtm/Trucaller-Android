@@ -47,6 +47,23 @@ data class VerificationStatus(
     val userVote: String?
 )
 
+@Serializable
+data class SpamSyncEntry(
+    val phoneNumber: String,
+    val name: String,
+    val spamScore: Int,
+    val reportCount: Int,
+    val category: String,
+    val lastUpdated: String
+)
+
+@Serializable
+data class SpamSyncPage(
+    val entries: List<SpamSyncEntry>,
+    val nextCursor: String?,
+    val hasMore: Boolean
+)
+
 private val cacheJson = Json { ignoreUnknownKeys = true }
 
 fun Route.callerIdRoutes() {
@@ -425,7 +442,7 @@ fun Route.callerIdRoutes() {
                         baseFilter
                     }
 
-                    val entries = mutableListOf<Map<String, Any?>>()
+                    val entries = mutableListOf<SpamSyncEntry>()
                     var lastId: String? = null
 
                     Collections.callerIds
@@ -439,13 +456,13 @@ fun Route.callerIdRoutes() {
                                 is ObjectId -> rawId.toHexString()
                                 else -> rawId?.toString()
                             }
-                            entries.add(mapOf(
-                                "phoneNumber" to (doc.getString("phoneNumber") ?: ""),
-                                "name" to (doc.getString("bestName") ?: doc.getString("name") ?: ""),
-                                "spamScore" to (doc.getInteger("spamScore") ?: 0),
-                                "reportCount" to (doc.getInteger("reportCount") ?: 0),
-                                "category" to (doc.getString("category") ?: "SAFE"),
-                                "lastUpdated" to (doc.getString("lastUpdated") ?: "")
+                            entries.add(SpamSyncEntry(
+                                phoneNumber = doc.getString("phoneNumber") ?: "",
+                                name = doc.getString("bestName") ?: doc.getString("name") ?: "",
+                                spamScore = doc.getInteger("spamScore") ?: 0,
+                                reportCount = doc.getInteger("reportCount") ?: 0,
+                                category = doc.getString("category") ?: "SAFE",
+                                lastUpdated = doc.getString("lastUpdated") ?: ""
                             ))
                         }
 
@@ -453,10 +470,10 @@ fun Route.callerIdRoutes() {
                         HttpStatusCode.OK,
                         ApiResponse(
                             success = true,
-                            data = mapOf(
-                                "entries" to entries,
-                                "nextCursor" to lastId,
-                                "hasMore" to (entries.size == limit)
+                            data = SpamSyncPage(
+                                entries = entries,
+                                nextCursor = lastId,
+                                hasMore = entries.size == limit
                             )
                         )
                     )

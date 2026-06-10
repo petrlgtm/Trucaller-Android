@@ -36,6 +36,7 @@ fun Routing.authRoutes() {
         logoutRoute()
         revokeAllSessionsRoute()
         updateProfileRoute()
+        myTrustRoute()
     }
 }
 
@@ -79,8 +80,17 @@ private suspend fun storeOtp(phoneNumber: String, code: String, purpose: String)
 /**
  * Validates an OTP from MongoDB. Returns true if valid, false otherwise.
  * Increments attempt counter and deletes OTP on success or max attempts.
+ *
+ * [consume] controls whether a valid OTP is deleted. Password-reset OTPs are
+ * validated twice (once at /verify-otp, once at /reset-password), so the first
+ * check must not consume the code or the final reset would always fail.
  */
-private suspend fun validateOtp(phoneNumber: String, code: String, purpose: String): OtpValidationResult {
+private suspend fun validateOtp(
+    phoneNumber: String,
+    code: String,
+    purpose: String,
+    consume: Boolean = true
+): OtpValidationResult {
     val filter = Filters.and(
         Filters.eq("phoneNumber", phoneNumber),
         Filters.eq("purpose", purpose)
@@ -108,8 +118,10 @@ private suspend fun validateOtp(phoneNumber: String, code: String, purpose: Stri
         return OtpValidationResult.INVALID
     }
 
-    // Valid OTP — delete it (one-time use)
-    Collections.otpCodes.deleteOne(filter)
+    if (consume) {
+        // Valid OTP — delete it (one-time use)
+        Collections.otpCodes.deleteOne(filter)
+    }
     return OtpValidationResult.VALID
 }
 
@@ -185,11 +197,13 @@ private fun Route.sendOtpRoute() {
             return@post
         }
 
-        // Validate purpose
-        if (request.purpose !in listOf("registration", "password_reset")) {
+        // Validate purpose. Registration OTPs are delivered by email via
+        // /send-email-otp (an unregistered phone number has no stored email
+        // to deliver to), so this endpoint only supports password resets.
+        if (request.purpose != "password_reset") {
             call.respond(
                 HttpStatusCode.BadRequest,
-                ApiResponse<Unit>(success = false, error = "Invalid purpose. Must be 'registration' or 'password_reset'.")
+                ApiResponse<Unit>(success = false, error = "Invalid purpose. This endpoint only supports 'password_reset'; use /send-email-otp for registration.")
             )
             return@post
         }
@@ -203,43 +217,20 @@ private fun Route.sendOtpRoute() {
             return@post
         }
 
-        // For registration: check if user already exists
-        if (request.purpose == "registration") {
-            val existing = Collections.users
-                .find(Filters.eq("phoneNumber", request.phoneNumber))
-                .firstOrNull()
-            if (existing != null) {
-                call.respond(
-                    HttpStatusCode.Conflict,
-                    ApiResponse<Unit>(success = false, error = "A user with this phone number already exists.")
-                )
-                return@post
-            }
+        // Look up the account and its stored email — the OTP is delivered there
+        val existing = Collections.users
+            .find(Filters.eq("phoneNumber", request.phoneNumber))
+            .firstOrNull()
+        if (existing == null) {
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiResponse<Unit>(success = false, error = "No account found with this phone number.")
+            )
+            return@post
         }
 
-        // For password reset: check if user exists
-        if (request.purpose == "password_reset") {
-            val existing = Collections.users
-                .find(Filters.eq("phoneNumber", request.phoneNumber))
-                .firstOrNull()
-            if (existing == null) {
-                call.respond(
-                    HttpStatusCode.NotFound,
-                    ApiResponse<Unit>(success = false, error = "No account found with this phone number.")
-                )
-                return@post
-            }
-        }
-
-        // For password reset: look up the user's stored email and deliver OTP there
-        val userEmail: String? = if (request.purpose == "password_reset") {
-            Collections.users
-                .find(Filters.eq("phoneNumber", request.phoneNumber))
-                .firstOrNull()
-                ?.getString("email")
-        } else null
-
-        if (request.purpose == "password_reset" && userEmail.isNullOrBlank()) {
+        val userEmail = existing.getString("email")
+        if (userEmail.isNullOrBlank()) {
             call.respond(
                 HttpStatusCode.UnprocessableEntity,
                 ApiResponse<Unit>(success = false, error = "No email address linked to this account. Contact support.")
@@ -252,7 +243,7 @@ private fun Route.sendOtpRoute() {
         storeOtp(request.phoneNumber, otp, request.purpose)
 
         // Deliver OTP via email
-        val delivered = EmailService.sendOtp(userEmail!!, otp)
+        val delivered = EmailService.sendOtp(userEmail, otp)
         if (!delivered) {
             runCatching {
                 Collections.otpCodes.deleteMany(
@@ -273,7 +264,7 @@ private fun Route.sendOtpRoute() {
             HttpStatusCode.OK,
             ApiResponse(
                 success = true,
-                data = mapOf("otpSent" to true, "expiresInMinutes" to OTP_TTL_MINUTES),
+                data = OtpSentResponse(otpSent = true, expiresInMinutes = OTP_TTL_MINUTES),
                 message = "Verification code sent to your email."
             )
         )
@@ -299,6 +290,14 @@ private fun Route.sendEmailOtpRoute() {
             call.respond(
                 HttpStatusCode.BadRequest,
                 ApiResponse<Unit>(success = false, error = "Invalid email address.")
+            )
+            return@post
+        }
+
+        if (request.purpose !in listOf("registration", "password_reset")) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid purpose. Must be 'registration' or 'password_reset'.")
             )
             return@post
         }
@@ -346,7 +345,7 @@ private fun Route.sendEmailOtpRoute() {
             HttpStatusCode.OK,
             ApiResponse(
                 success = true,
-                data = mapOf("otpSent" to true, "expiresInMinutes" to OTP_TTL_MINUTES),
+                data = OtpSentResponse(otpSent = true, expiresInMinutes = OTP_TTL_MINUTES),
                 message = "Verification code sent to $email."
             )
         )
@@ -384,7 +383,7 @@ private fun Route.verifyEmailOtpRoute() {
             return@post
         }
 
-        val result = validateOtp(email, request.code, purpose)
+        val result = validateOtp(email, request.code, purpose, consume = purpose != "password_reset")
         if (result == OtpValidationResult.VALID) {
             call.respond(HttpStatusCode.OK, ApiResponse<Unit>(success = true, message = "OTP verified successfully."))
             return@post
@@ -434,7 +433,12 @@ private fun Route.verifyOtpRoute() {
             return@post
         }
 
-        val result = validateOtp(request.phoneNumber, request.code, purpose)
+        // Don't consume password-reset OTPs here — /reset-password validates
+        // (and consumes) the same code as the final step of the flow.
+        val result = validateOtp(
+            request.phoneNumber, request.code, purpose,
+            consume = purpose != "password_reset"
+        )
         if (result == OtpValidationResult.VALID) {
             call.respond(
                 HttpStatusCode.OK,
@@ -727,6 +731,10 @@ private fun Route.resetPasswordRoute() {
             Document("\$set", Document("passwordHash", newPasswordHash))
         )
 
+        // Revoke every existing session — anyone holding the old credentials
+        // (including whoever prompted the reset) must log in again.
+        Collections.refreshTokens.deleteMany(Filters.eq("userId", userId))
+
         call.respond(
             HttpStatusCode.OK,
             ApiResponse<Unit>(
@@ -802,6 +810,10 @@ private fun Route.deleteAccountRoute() {
                 Collections.otpCodes.deleteMany(Filters.eq("phoneNumber", phoneNumber))
                 Collections.otpRateLimits.deleteMany(Filters.eq("phoneNumber", phoneNumber))
             }
+
+            // Revoke all sessions — otherwise refresh tokens would keep minting
+            // valid access tokens for the deleted account until they expire.
+            Collections.refreshTokens.deleteMany(Filters.eq("userId", userId))
 
             // Finally, delete the user document
             Collections.users.deleteOne(Filters.eq("_id", userId))
@@ -939,6 +951,45 @@ private fun Route.updateProfileRoute() {
             call.respond(
                 HttpStatusCode.OK,
                 ApiResponse<Unit>(success = true, message = "Profile updated successfully.")
+            )
+        }
+    }
+}
+
+// ── GET /api/auth/me/trust ──────────────────────────────────────────────
+
+/**
+ * Returns the authenticated user's own trust score and level. The admin
+ * variant (`/api/admin/users/{id}/trust`) requires an admin role, so regular
+ * clients use this endpoint to sync their trust state after login.
+ */
+private fun Route.myTrustRoute() {
+    authenticate("auth-jwt") {
+        get("/me/trust") {
+            val userId = call.userId()
+
+            val userDoc = Collections.users
+                .find(Filters.eq("_id", userId))
+                .firstOrNull()
+
+            if (userDoc == null) {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiResponse<Unit>(success = false, error = "User not found.")
+                )
+                return@get
+            }
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse(
+                    success = true,
+                    data = TrustResponse(
+                        userId = userId,
+                        trustScore = userDoc.getInteger("trustScore", 0),
+                        trustLevel = userDoc.getString("trustLevel") ?: "NEW"
+                    )
+                )
             )
         }
     }

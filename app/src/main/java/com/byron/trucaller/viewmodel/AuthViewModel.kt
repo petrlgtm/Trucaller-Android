@@ -198,7 +198,7 @@ class AuthViewModel(
                     admin = updated
                 }
                 preferences.setAdminId(admin.id)
-                preferences.setAdminProfile(admin.name, admin.phoneNumber)
+                preferences.setAdminProfile(admin.name, admin.email)
                 _adminUser.value = admin
                 return true
             }
@@ -207,7 +207,7 @@ class AuthViewModel(
         // Fallback: local Room login by phone
         val admin = userRepository.getAdminByPhoneCredentials(phoneNumber, password) ?: return false
         preferences.setAdminId(admin.id)
-        preferences.setAdminProfile(admin.name, admin.phoneNumber)
+        preferences.setAdminProfile(admin.name, admin.email)
         _adminUser.value = admin
         return true
     }
@@ -527,7 +527,9 @@ class AuthViewModel(
     /** Syncs trust score/level from the backend and updates local state. */
     private suspend fun syncTrustFromBackend(userId: String) {
         try {
-            val result = ApiClient.getUserTrust(userId)
+            // The per-user admin endpoint requires an admin role; regular
+            // sessions must use the self-service /api/auth/me/trust route.
+            val result = ApiClient.getMyTrust()
             if (result.success && result.data != null) {
                 val trustScore = (result.data["trustScore"] as? Number)?.toInt() ?: return
                 val trustLevelStr = result.data["trustLevel"]?.toString() ?: return

@@ -58,7 +58,7 @@ android {
     }
     buildTypes {
         debug {
-            buildConfigField("String", "API_BASE_URL", "\"https://trucaller-backend.onrender.com\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://trucaller-backend-sh3t.onrender.com\"")
             buildConfigField("Boolean", "ENABLE_CALL_RECORDING", "true")
             buildConfigField("Boolean", "ENABLE_ANTI_THEFT", "true")
             buildConfigField("Boolean", "ENABLE_FAMILY_GROUPS", "true")
@@ -68,7 +68,7 @@ android {
             signingConfig = signingConfigs.getByName("release")
         }
         release {
-            buildConfigField("String", "API_BASE_URL", "\"https://trucaller-backend.onrender.com\"")
+            buildConfigField("String", "API_BASE_URL", "\"https://trucaller-backend-sh3t.onrender.com\"")
             buildConfigField("Boolean", "ENABLE_CALL_RECORDING", "true")
             buildConfigField("Boolean", "ENABLE_ANTI_THEFT", "true")
             buildConfigField("Boolean", "ENABLE_FAMILY_GROUPS", "true")

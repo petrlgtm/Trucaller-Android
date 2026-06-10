@@ -9,6 +9,7 @@ import com.byron.trucaller.service.SpamSyncWorker
 import com.byron.trucaller.util.SecurityUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import com.byron.trucaller.BuildConfig
 
@@ -25,12 +26,35 @@ class TruCallerApplication : Application() {
 
         // Ensure the HTTP client talks to the environment we built for.
         ApiClient.setBaseUrl(BuildConfig.API_BASE_URL)
+        ApiClient.init(this)
+
+        // Persist rotated tokens — the backend deletes the old refresh token on every
+        // refresh, so losing the new pair on process death would force a re-login.
+        ApiClient.onTokensRefreshed = { accessToken, refreshToken ->
+            CoroutineScope(Dispatchers.IO).launch {
+                try {
+                    container.userPreferences.setAuthToken(accessToken)
+                    refreshToken?.let { container.userPreferences.setRefreshToken(it) }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to persist refreshed tokens", e)
+                }
+            }
+        }
 
         // Root detection disabled to ensure app accessibility
         isDeviceRooted = false
 
         // Defer non-critical initializations off the main thread
         CoroutineScope(Dispatchers.IO).launch {
+            // Restore persisted tokens so background work (spam sync, SMS receiver,
+            // FCM handlers) is authenticated even before any UI is opened.
+            try {
+                val prefs = container.userPreferences
+                prefs.authToken.first()?.let { ApiClient.setAuthToken(it) }
+                prefs.refreshToken.first()?.let { ApiClient.setRefreshToken(it) }
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to restore persisted session tokens", e)
+            }
             container.seedDatabaseIfEmpty()
             SpamSyncWorker.schedule(this@TruCallerApplication)
         }

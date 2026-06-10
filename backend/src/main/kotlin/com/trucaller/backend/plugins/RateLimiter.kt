@@ -63,7 +63,7 @@ val RateLimiterPlugin = createApplicationPlugin(name = "RateLimiter", createConf
             logger.warn("Rate limit exceeded for key=$key (limit=$limit/min)")
             call.respond(
                 HttpStatusCode.TooManyRequests,
-                mapOf("success" to false, "error" to "Rate limit exceeded. Try again later.")
+                com.trucaller.backend.data.models.ApiResponse<Unit>(success = false, error = "Rate limit exceeded. Try again later.")
             )
         }
     }

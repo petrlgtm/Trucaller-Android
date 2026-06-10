@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withTimeoutOrNull
 
 private const val TAG = "CallerIdRepository"
+private const val MAX_SPAM_SYNC_PAGES = 50
 
 class CallerIdRepository(
     private val callerIdDao: CallerIdDao,
@@ -41,18 +42,33 @@ class CallerIdRepository(
      */
     suspend fun syncSpamDatabase() {
         try {
-            val apiResult = withTimeoutOrNull(30_000L) {
-                ApiClient.getLatestSpamSignatures()
-            }
-            if (apiResult != null && apiResult.success && apiResult.data != null) {
-                val entries = (apiResult.data as? List<*>)?.mapNotNull { item ->
+            // The backend pages results as { entries, nextCursor, hasMore } —
+            // follow the cursor until exhausted (bounded to avoid runaway loops).
+            var cursor: String? = null
+            var pages = 0
+            while (pages < MAX_SPAM_SYNC_PAGES) {
+                val apiResult = withTimeoutOrNull(30_000L) {
+                    ApiClient.getLatestSpamSignatures(cursor)
+                } ?: break
+                val page = apiResult.takeIf { it.success }?.data ?: break
+
+                val entries = (page["entries"] as? List<*>)?.mapNotNull { item ->
                     @Suppress("UNCHECKED_CAST")
                     val map = item as? Map<String, Any> ?: return@mapNotNull null
-                    BackendMappers.mapLookupToCallerIdEntry(map)
+                    // Deterministic id keyed on the phone number so repeated syncs
+                    // upsert (REPLACE) instead of accumulating duplicate rows.
+                    BackendMappers.mapLookupToCallerIdEntry(map)?.let { entry ->
+                        entry.copy(id = "sync-${PhoneUtils.normalizePhone(entry.phoneNumber)}")
+                    }
                 }
                 if (!entries.isNullOrEmpty()) {
                     callerIdDao.insertAll(entries)
                 }
+
+                val hasMore = page["hasMore"] as? Boolean ?: false
+                cursor = page["nextCursor"] as? String
+                pages++
+                if (!hasMore || cursor == null) break
             }
         } catch (e: Exception) {
             Log.e(TAG, "syncSpamDatabase failed", e)

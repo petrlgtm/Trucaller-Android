@@ -63,6 +63,18 @@ data class FamilyGroupResponse(
 )
 
 @Serializable
+data class FamilyGroupDetailResponse(
+    val id: String,
+    val name: String,
+    val description: String,
+    val ownerId: String,
+    val inviteCode: String,
+    val memberCount: Int,
+    val createdAt: String,
+    val members: List<FamilyMemberResponse>
+)
+
+@Serializable
 data class FamilyMemberResponse(
     val id: String,
     val groupId: String,
@@ -308,15 +320,17 @@ private fun Route.getGroupDetail() {
             )
         }
 
-        val groupResponse = mapOf(
-            "id" to groupDoc.getString("_id"),
-            "name" to groupDoc.getString("name"),
-            "description" to (groupDoc.getString("description") ?: ""),
-            "ownerId" to groupDoc.getString("ownerId"),
-            "inviteCode" to groupDoc.getString("inviteCode"),
-            "memberCount" to members.size,
-            "createdAt" to groupDoc.getString("createdAt"),
-            "members" to members
+        // A heterogeneous Map<String, Any> cannot be serialized by kotlinx —
+        // this must stay a typed DTO or the route 500s at response time.
+        val groupResponse = FamilyGroupDetailResponse(
+            id = groupDoc.getString("_id"),
+            name = groupDoc.getString("name"),
+            description = groupDoc.getString("description") ?: "",
+            ownerId = groupDoc.getString("ownerId"),
+            inviteCode = groupDoc.getString("inviteCode"),
+            memberCount = members.size,
+            createdAt = groupDoc.getString("createdAt"),
+            members = members
         )
 
         call.respond(

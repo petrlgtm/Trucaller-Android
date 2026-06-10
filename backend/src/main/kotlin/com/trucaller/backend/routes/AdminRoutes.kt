@@ -72,6 +72,21 @@ data class UserWithDevices(
     val devices: List<String> // JSON strings of device documents
 )
 
+@Serializable
+data class LoginAuditEntry(
+    val phone: String,
+    val ip: String,
+    val success: Boolean,
+    val reason: String,
+    val timestamp: String
+)
+
+@Serializable
+data class LoginAuditPage(
+    val logs: List<LoginAuditEntry>,
+    val count: Int
+)
+
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 /**
@@ -831,7 +846,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = mapOf("userId" to userId, "trustScore" to trustScore, "trustLevel" to trustLevel),
+                        data = com.trucaller.backend.data.models.TrustResponse(userId = userId, trustScore = trustScore, trustLevel = trustLevel),
                         message = "Trust info retrieved"
                     )
                 )
@@ -976,12 +991,12 @@ fun Route.adminRoutes() {
                     .limit(limit)
                     .toList()
                     .map { doc ->
-                        mapOf(
-                            "phone" to doc.getString("phone"),
-                            "ip" to doc.getString("ip"),
-                            "success" to doc.getBoolean("success", false),
-                            "reason" to doc.getString("reason"),
-                            "timestamp" to doc["timestamp"]?.toString()
+                        LoginAuditEntry(
+                            phone = doc.getString("phone") ?: "",
+                            ip = doc.getString("ip") ?: "",
+                            success = doc.getBoolean("success", false),
+                            reason = doc.getString("reason") ?: "",
+                            timestamp = doc["timestamp"]?.toString() ?: ""
                         )
                     }
 
@@ -989,7 +1004,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = mapOf("logs" to logs, "count" to logs.size)
+                        data = LoginAuditPage(logs = logs, count = logs.size)
                     )
                 )
             }
