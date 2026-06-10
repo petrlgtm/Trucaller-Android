@@ -34,6 +34,7 @@ import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.SpamCategory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -119,6 +120,7 @@ class CallerIdOverlayService : Service() {
         }
 
         val callerIdRepo = app.container.callerIdRepository
+        val userPrefs = app.container.userPreferences
 
         // Check the cache first — the call screening service may have already
         // looked up this number, so we can avoid a redundant query.
@@ -129,8 +131,9 @@ class CallerIdOverlayService : Service() {
         } else {
             // Perform lookup asynchronously to avoid blocking the main thread (ANR)
             CoroutineScope(Dispatchers.IO).launch {
+                val userId = try { userPrefs.loggedInUserId.firstOrNull() } catch (_: Exception) { null }
                 val lookupResult = try {
-                    callerIdRepo.lookupNumber(phoneNumber)
+                    callerIdRepo.lookupNumber(phoneNumber, userId)
                 } catch (e: Exception) {
                     Log.e(TAG, "Error looking up number: $phoneNumber", e)
                     null

@@ -78,7 +78,8 @@ class CallerIdViewModel(
             _notFound.value = false
             _lookupResult.value = null
             try {
-                val result = callerIdRepository.lookupNumber(query)
+                val userId = preferences.loggedInUserId.first()
+                val result = callerIdRepository.lookupNumber(query, userId)
                 if (result.callerIdEntry != null) {
                     _lookupResult.value = result
                     _notFound.value = false
