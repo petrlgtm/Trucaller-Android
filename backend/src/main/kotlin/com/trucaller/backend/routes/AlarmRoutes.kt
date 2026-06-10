@@ -38,12 +38,14 @@ data class AlarmLogResultRequest(
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
+private val VALID_ALARM_TYPES = setOf("REMOTE_ALARM", "LOCATION_REQUEST", "LOCK_DEVICE")
+
 /**
  * Registers alarm routes:
  *
- * - `POST /api/alarms/trigger`          — trigger an alarm on a device (authenticated)
- * - `GET  /api/alarms/logs/{deviceId}`  — get alarm logs for a device (authenticated)
- * - `GET  /api/admin/alarm-logs`        — get ALL alarm logs (admin only)
+ * - `POST /api/alarms/trigger`              — trigger an alarm on a device (authenticated)
+ * - `GET  /api/alarms/logs/{deviceId}`      — get alarm logs for a device (authenticated)
+ * - `PUT  /api/alarms/logs/{logId}/result`  — report execution result from target device
  */
 fun Route.alarmRoutes() {
 
@@ -57,9 +59,18 @@ fun Route.alarmRoutes() {
             } catch (e: Exception) {
                 call.respond(
                     HttpStatusCode.BadRequest,
+                    ApiResponse<Nothing>(success = false, error = "Invalid request body")
+                )
+                return@post
+            }
+
+            // Validate alarm type
+            if (request.type !in VALID_ALARM_TYPES) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
                     ApiResponse<Nothing>(
                         success = false,
-                        error = "Invalid request body"
+                        error = "Invalid type. Must be one of: ${VALID_ALARM_TYPES.joinToString()}"
                     )
                 )
                 return@post
@@ -68,24 +79,33 @@ fun Route.alarmRoutes() {
             val userId = call.userId()
             val role = call.userRole()
 
-            // Look up user name from users collection
-            val userDoc = Collections.users
-                .find(Filters.eq("_id", userId))
-                .firstOrNull()
-            val userName = userDoc?.getString("fullName") ?: "Unknown"
-
-            // ── Device ownership check (must happen BEFORE any DB writes) ────
+            // Device must exist
             val deviceDoc = Collections.devices
                 .find(Filters.eq("deviceId", request.deviceId))
                 .firstOrNull()
 
-            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+            if (deviceDoc == null) {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiResponse<Nothing>(success = false, error = "Device not found")
+                )
+                return@post
+            }
+
+            // Ownership check — only device owner or admin may trigger
+            if (deviceDoc.getString("userId") != userId && role != "SUPER_ADMIN" && role != "MODERATOR") {
                 call.respond(
                     HttpStatusCode.Forbidden,
                     ApiResponse<Nothing>(success = false, error = "Not authorized for this device")
                 )
                 return@post
             }
+
+            // Look up user name
+            val userDoc = Collections.users
+                .find(Filters.eq("_id", userId))
+                .firstOrNull()
+            val userName = userDoc?.getString("fullName") ?: "Unknown"
 
             val logId = ObjectId().toString()
             val now = Instant.now().toString()
@@ -104,46 +124,44 @@ fun Route.alarmRoutes() {
             Collections.alarmLogs.insertOne(alarmDoc)
 
             // ── Send FCM push to the target device ──────────────────────
-            val fcmToken = deviceDoc?.getString("fcmToken")
+            val fcmToken = deviceDoc.getString("fcmToken")
 
             if (fcmToken.isNullOrBlank()) {
-                // No token available — mark alarm as FAILED
                 Collections.alarmLogs.updateOne(
                     Filters.eq("_id", logId),
                     Document("\$set", Document("result", "FAILED"))
                 )
                 call.respond(
                     HttpStatusCode.Created,
-                    ApiResponse<Nothing>(
+                    ApiResponse(
                         success = true,
+                        data = mapOf("logId" to logId),
                         message = "Alarm logged but push failed: no FCM token for device"
                     )
                 )
                 return@post
             }
 
+            // Include logId in FCM payload so the device can report execution result back
             val pushSent = FcmService.sendPush(
                 fcmToken,
-                mapOf("action" to request.type)
+                mapOf("action" to request.type, "logId" to logId)
             )
 
             if (!pushSent) {
-                // Push delivery failed — mark alarm as FAILED
                 Collections.alarmLogs.updateOne(
                     Filters.eq("_id", logId),
                     Document("\$set", Document("result", "FAILED"))
                 )
             }
-            // If push succeeded, result stays "PENDING" (device will confirm)
 
             call.respond(
                 HttpStatusCode.Created,
-                ApiResponse<Nothing>(
+                ApiResponse(
                     success = true,
-                    message = if (pushSent)
-                        "Alarm triggered successfully"
-                    else
-                        "Alarm logged but push delivery failed"
+                    data = mapOf("logId" to logId),
+                    message = if (pushSent) "Alarm triggered successfully"
+                               else "Alarm logged but push delivery failed"
                 )
             )
         }
@@ -217,7 +235,7 @@ fun Route.alarmRoutes() {
                 return@put
             }
 
-            val validResults = listOf("SUCCESS", "FAILED", "PARTIAL")
+            val validResults = listOf("SUCCESS", "FAILED")
             if (request.result !in validResults) {
                 call.respond(
                     HttpStatusCode.BadRequest,
@@ -277,33 +295,5 @@ fun Route.alarmRoutes() {
             )
         }
 
-        // GET /api/admin/alarm-logs  (admin only)
-        get("/api/admin/alarm-logs") {
-            try {
-                call.requireAdmin()
-            } catch (e: IllegalAccessException) {
-                call.respond(
-                    HttpStatusCode.Forbidden,
-                    ApiResponse<Nothing>(
-                        success = false,
-                        error = e.message ?: "Admin access required"
-                    )
-                )
-                return@get
-            }
-
-            val logs = Collections.alarmLogs
-                .find()
-                .toList()
-
-            call.respond(
-                HttpStatusCode.OK,
-                ApiResponse(
-                    success = true,
-                    data = logs.map { it.toJson() },
-                    message = "All alarm logs retrieved"
-                )
-            )
-        }
     }
 }

@@ -279,8 +279,16 @@ object ApiClient {
 
     // ── Alarms ──────────────────────────────────────────────────────────
 
-    suspend fun triggerAlarm(alarmData: Map<String, Any>): ApiResult<Unit> =
-        post("/api/alarms/trigger", alarmData)
+    suspend fun triggerAlarm(
+        deviceId: String,
+        type: String,
+        notes: String? = null
+    ): ApiResult<Map<String, Any>> =
+        post("/api/alarms/trigger", buildMap {
+            put("deviceId", deviceId)
+            put("type", type)
+            if (notes != null) put("notes", notes)
+        })
 
     suspend fun getAlarmLogs(deviceId: String): ApiResult<List<Map<String, Any>>> =
         get("/api/alarms/logs/$deviceId")

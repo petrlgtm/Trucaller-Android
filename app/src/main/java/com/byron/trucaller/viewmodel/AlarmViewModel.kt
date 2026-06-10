@@ -60,18 +60,19 @@ class AlarmViewModel(
     val pendingCount: Flow<Int> = alarmRepository.getPendingCount()
     val logCount: Flow<Int> = alarmRepository.getLogCount()
 
-    fun getLogsByDevice(deviceId: String): Flow<List<AlarmLog>> = alarmRepository.getLogsByDevice(deviceId)
+    fun getLogsByDevice(deviceId: String): Flow<List<AlarmLog>> =
+        alarmRepository.getLogsByDevice(deviceId)
 
-    /**
-     * Returns true if the given device record's hardware ID matches this physical device.
-     */
+    private fun nowIso(): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
+
     private suspend fun isCurrentDevice(deviceId: String): Boolean {
         val device = deviceRepository.getDeviceById(deviceId) ?: return false
-        val currentAndroidId = Settings.Secure.getString(
+        val androidId = Settings.Secure.getString(
             getApplication<TruCallerApplication>().contentResolver,
             Settings.Secure.ANDROID_ID
         )
-        return device.deviceId == currentAndroidId
+        return device.deviceId == androidId
     }
 
     // ── Trigger Alarm ────────────────────────────────────────────────────
@@ -85,56 +86,61 @@ class AlarmViewModel(
         notes: String? = null
     ) {
         viewModelScope.launch {
-            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
-            val logId = "alm-${System.currentTimeMillis()}"
+            // Use a stable local ID for the Room log entry
+            val localLogId = "alm-${System.currentTimeMillis()}"
             val log = AlarmLog(
-                id = logId,
+                id = localLogId,
                 deviceId = deviceId,
                 triggeredBy = triggeredBy,
                 triggeredByName = triggeredByName,
                 triggeredByRole = triggeredByRole,
-                triggeredAt = now,
+                triggeredAt = nowIso(),
                 type = type,
                 result = AlarmResult.PENDING,
-                notes = notes ?: "Remote alarm requested, awaiting delivery..."
+                notes = notes ?: "Awaiting device response…"
             )
             alarmRepository.insertLog(log)
 
             if (isCurrentDevice(deviceId)) {
-                // Target is this physical device — execute locally
-                executeLocalAlarm(logId)
-            } else {
-                // Target is a remote device — send via backend API + FCM
-                try {
-                    val result = ApiClient.triggerAlarm(mapOf(
-                        "deviceId" to deviceId,
-                        "action" to "REMOTE_ALARM",
-                        "triggeredBy" to triggeredBy,
-                        "triggeredByName" to triggeredByName,
-                        "triggeredByRole" to triggeredByRole,
-                        "notes" to (notes ?: "Remote alarm triggered"),
-                        "logId" to logId
-                    ))
-                    if (result.success) {
-                        alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Alarm command sent to device via FCM")
-                        _actionMessage.value = "Alarm command sent to device"
-                    } else {
-                        alarmRepository.updateResult(logId, AlarmResult.FAILED, "Backend rejected alarm: ${result.error}")
-                        _actionMessage.value = "Alarm request failed: ${result.error}"
+                executeLocalAlarm(localLogId)
+                return@launch
+            }
+
+            // Remote device — send via backend (which sends FCM)
+            try {
+                val result = ApiClient.triggerAlarm(
+                    deviceId = deviceId,
+                    type = type.name,
+                    notes = notes
+                )
+                if (result.success) {
+                    // PENDING: command reached backend and FCM was queued.
+                    // The device will report SUCCESS/FAILED via PUT result callback.
+                    // We keep the local log as PENDING — it reflects "command sent".
+                    _actionMessage.value = when (type) {
+                        AlarmType.REMOTE_ALARM    -> "Alarm command sent to device"
+                        AlarmType.LOCATION_REQUEST -> "Location request sent to device"
+                        AlarmType.LOCK_DEVICE      -> "Lock command sent to device"
                     }
-                } catch (e: Exception) {
-                    Log.e(TAG, "triggerAlarm API call failed", e)
-                    alarmRepository.updateResult(logId, AlarmResult.FAILED, "Network error: ${e.message}")
-                    _actionMessage.value = "Alarm request failed: network error"
+                } else {
+                    alarmRepository.updateResult(
+                        localLogId, AlarmResult.FAILED,
+                        "Backend rejected command: ${result.error}"
+                    )
+                    _actionMessage.value = "Command failed: ${result.error}"
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "triggerAlarm API call failed", e)
+                alarmRepository.updateResult(
+                    localLogId, AlarmResult.FAILED, "Network error: ${e.message}"
+                )
+                _actionMessage.value = "Command failed: network error"
             }
         }
     }
 
-    /**
-     * Executes alarm sound locally on this device.
-     * Called directly when target is the current device, or from TruCallerMessagingService via FCM.
-     */
+    // ── Local execution (this device is the target) ──────────────────────
+
     private var alarmTimeoutJob: Job? = null
 
     fun executeLocalAlarm(logId: String) {
@@ -142,12 +148,12 @@ class AlarmViewModel(
             try {
                 AlarmSoundManager.triggerAlarm(getApplication())
                 _alarmPlaying.value = true
-                alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Alarm sounded for 30 seconds")
+                alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Alarm sounded on device")
 
                 alarmTimeoutJob?.cancel()
                 alarmTimeoutJob = viewModelScope.launch {
                     delay(30_000)
-                    _alarmPlaying.value = false
+                    stopAlarm()
                 }
             } catch (e: Exception) {
                 alarmRepository.updateResult(logId, AlarmResult.FAILED, "Alarm failed: ${e.message}")
@@ -172,68 +178,60 @@ class AlarmViewModel(
         triggeredByRole: String
     ) {
         viewModelScope.launch {
-            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
-            val logId = "alm-loc-${System.currentTimeMillis()}"
-            val log = AlarmLog(
-                id = logId,
-                deviceId = deviceId,
-                triggeredBy = triggeredBy,
-                triggeredByName = triggeredByName,
-                triggeredByRole = triggeredByRole,
-                triggeredAt = now,
-                type = AlarmType.LOCATION_REQUEST,
-                result = AlarmResult.PENDING,
-                notes = "Location request initiated"
+            val localLogId = "alm-loc-${System.currentTimeMillis()}"
+            alarmRepository.insertLog(
+                AlarmLog(
+                    id = localLogId,
+                    deviceId = deviceId,
+                    triggeredBy = triggeredBy,
+                    triggeredByName = triggeredByName,
+                    triggeredByRole = triggeredByRole,
+                    triggeredAt = nowIso(),
+                    type = AlarmType.LOCATION_REQUEST,
+                    result = AlarmResult.PENDING,
+                    notes = "Location request initiated"
+                )
             )
-            alarmRepository.insertLog(log)
 
             if (isCurrentDevice(deviceId)) {
-                // Target is this physical device — execute locally
-                executeLocalLocationRequest(logId, triggeredBy)
-            } else {
-                // Target is a remote device — send via backend API + FCM
-                try {
-                    val result = ApiClient.triggerAlarm(mapOf(
-                        "deviceId" to deviceId,
-                        "action" to "LOCATION_REQUEST",
-                        "triggeredBy" to triggeredBy,
-                        "triggeredByName" to triggeredByName,
-                        "triggeredByRole" to triggeredByRole,
-                        "notes" to "Location request via FCM",
-                        "logId" to logId
-                    ))
-                    if (result.success) {
-                        alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Location request sent to device via FCM")
-                        _actionMessage.value = "Location request sent to device"
-                    } else {
-                        alarmRepository.updateResult(logId, AlarmResult.FAILED, "Backend rejected location request: ${result.error}")
-                        _actionMessage.value = "Location request failed: ${result.error}"
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "requestLocation API call failed", e)
-                    alarmRepository.updateResult(logId, AlarmResult.FAILED, "Network error: ${e.message}")
-                    _actionMessage.value = "Location request failed: network error"
+                executeLocalLocationRequest(localLogId, triggeredBy)
+                return@launch
+            }
+
+            try {
+                val result = ApiClient.triggerAlarm(
+                    deviceId = deviceId,
+                    type = AlarmType.LOCATION_REQUEST.name,
+                    notes = "Location request"
+                )
+                if (result.success) {
+                    _actionMessage.value = "Location request sent to device"
+                } else {
+                    alarmRepository.updateResult(
+                        localLogId, AlarmResult.FAILED,
+                        "Backend rejected: ${result.error}"
+                    )
+                    _actionMessage.value = "Location request failed: ${result.error}"
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "requestLocation API call failed", e)
+                alarmRepository.updateResult(localLogId, AlarmResult.FAILED, "Network error: ${e.message}")
+                _actionMessage.value = "Location request failed: network error"
             }
         }
     }
 
-    /**
-     * Executes location refresh locally on this device.
-     * Called directly when target is the current device, or from TruCallerMessagingService via FCM.
-     */
     fun executeLocalLocationRequest(logId: String, triggeredBy: String) {
         viewModelScope.launch {
             try {
                 val app = getApplication<TruCallerApplication>()
-                val regService = DeviceRegistrationService(app, deviceRepository)
-                // Use the device owner's userId (from preferences), not the requestor
                 val ownerId = app.container.userPreferences.loggedInUserId.first() ?: triggeredBy
-                regService.registerOrUpdateDevice(ownerId)
-                alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Location updated via IP geolocation")
+                DeviceRegistrationService(app, app.container.deviceRepository)
+                    .registerOrUpdateDevice(ownerId)
+                alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Location updated")
                 _actionMessage.value = "Location updated successfully"
             } catch (e: Exception) {
-                alarmRepository.updateResult(logId, AlarmResult.FAILED, "Location request failed: ${e.message}")
+                alarmRepository.updateResult(logId, AlarmResult.FAILED, "Location failed: ${e.message}")
                 _actionMessage.value = "Location request failed"
             }
         }
@@ -248,71 +246,60 @@ class AlarmViewModel(
         triggeredByRole: String
     ) {
         viewModelScope.launch {
-            val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
-            val logId = "alm-lock-${System.currentTimeMillis()}"
-            val log = AlarmLog(
-                id = logId,
-                deviceId = deviceId,
-                triggeredBy = triggeredBy,
-                triggeredByName = triggeredByName,
-                triggeredByRole = triggeredByRole,
-                triggeredAt = now,
-                type = AlarmType.LOCK_DEVICE,
-                result = AlarmResult.PENDING,
-                notes = "Device lock initiated"
+            val localLogId = "alm-lock-${System.currentTimeMillis()}"
+            alarmRepository.insertLog(
+                AlarmLog(
+                    id = localLogId,
+                    deviceId = deviceId,
+                    triggeredBy = triggeredBy,
+                    triggeredByName = triggeredByName,
+                    triggeredByRole = triggeredByRole,
+                    triggeredAt = nowIso(),
+                    type = AlarmType.LOCK_DEVICE,
+                    result = AlarmResult.PENDING,
+                    notes = "Device lock initiated"
+                )
             )
-            alarmRepository.insertLog(log)
 
             if (isCurrentDevice(deviceId)) {
-                // Target is this physical device — execute locally
-                executeLocalLockDevice(logId)
-            } else {
-                // Target is a remote device — send via backend API + FCM
-                try {
-                    val result = ApiClient.triggerAlarm(mapOf(
-                        "deviceId" to deviceId,
-                        "action" to "LOCK_DEVICE",
-                        "triggeredBy" to triggeredBy,
-                        "triggeredByName" to triggeredByName,
-                        "triggeredByRole" to triggeredByRole,
-                        "notes" to "Lock device via FCM",
-                        "logId" to logId
-                    ))
-                    if (result.success) {
-                        alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Lock command sent to device via FCM")
-                        _actionMessage.value = "Lock command sent to device"
-                    } else {
-                        alarmRepository.updateResult(logId, AlarmResult.FAILED, "Backend rejected lock: ${result.error}")
-                        _actionMessage.value = "Lock request failed: ${result.error}"
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "lockDevice API call failed", e)
-                    alarmRepository.updateResult(logId, AlarmResult.FAILED, "Network error: ${e.message}")
-                    _actionMessage.value = "Lock request failed: network error"
+                executeLocalLockDevice(localLogId)
+                return@launch
+            }
+
+            try {
+                val result = ApiClient.triggerAlarm(
+                    deviceId = deviceId,
+                    type = AlarmType.LOCK_DEVICE.name,
+                    notes = "Lock device"
+                )
+                if (result.success) {
+                    _actionMessage.value = "Lock command sent to device"
+                } else {
+                    alarmRepository.updateResult(
+                        localLogId, AlarmResult.FAILED,
+                        "Backend rejected: ${result.error}"
+                    )
+                    _actionMessage.value = "Lock request failed: ${result.error}"
                 }
+            } catch (e: Exception) {
+                Log.e(TAG, "lockDevice API call failed", e)
+                alarmRepository.updateResult(localLogId, AlarmResult.FAILED, "Network error: ${e.message}")
+                _actionMessage.value = "Lock request failed: network error"
             }
         }
-    }
-
-    /**
-     * Executes device lock locally on this device.
-     * Called directly when target is the current device, or from TruCallerMessagingService via FCM.
-     */
-    override fun onCleared() {
-        super.onCleared()
-        stopAlarm()
     }
 
     fun executeLocalLockDevice(logId: String) {
         viewModelScope.launch {
             try {
-                val app = getApplication<TruCallerApplication>()
-                val locked = DeviceAdminHelper.lockDevice(app)
+                val locked = DeviceAdminHelper.lockDevice(getApplication())
                 if (locked) {
-                    alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Device locked successfully")
+                    alarmRepository.updateResult(logId, AlarmResult.SUCCESS, "Device locked")
                     _actionMessage.value = "Device locked successfully"
                 } else {
-                    alarmRepository.updateResult(logId, AlarmResult.FAILED, "Device admin not active - cannot lock")
+                    alarmRepository.updateResult(
+                        logId, AlarmResult.FAILED, "Device admin not active"
+                    )
                     _actionMessage.value = "Cannot lock: Device admin permission required"
                 }
             } catch (e: Exception) {
@@ -320,5 +307,10 @@ class AlarmViewModel(
                 _actionMessage.value = "Device lock failed"
             }
         }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopAlarm()
     }
 }
