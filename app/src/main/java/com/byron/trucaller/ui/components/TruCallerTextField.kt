@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.byron.trucaller.ui.theme.BorderRadius
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.GlassBorder
 
 /**
@@ -173,7 +174,7 @@ fun TruCallerTextField(
         ),
         textStyle = TextStyle(
             fontSize = 14.sp,
-            color = colorScheme.onSurface
+            color = BrandGold
         ),
         shape = RoundedCornerShape(14.dp),
         colors = OutlinedTextFieldDefaults.colors(
@@ -182,8 +183,8 @@ fun TruCallerTextField(
             focusedContainerColor = colorScheme.surfaceVariant,
             unfocusedContainerColor = colorScheme.surface,
             cursorColor = colorScheme.primary,
-            focusedTextColor = colorScheme.onSurface,
-            unfocusedTextColor = colorScheme.onSurface,
+            focusedTextColor = BrandGold,
+            unfocusedTextColor = BrandGold,
             errorBorderColor = colorScheme.error,
             errorCursorColor = colorScheme.error,
             disabledBorderColor = colorScheme.outline.copy(alpha = 0.38f),

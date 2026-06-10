@@ -52,6 +52,7 @@ import androidx.navigation.NavController
 import com.byron.trucaller.ui.theme.Accent
 import com.byron.trucaller.ui.theme.Background
 import com.byron.trucaller.ui.theme.Brand
+import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Danger
 import com.byron.trucaller.ui.theme.SurfaceLight
 import com.byron.trucaller.ui.theme.TextPrimary
@@ -124,7 +125,9 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
                 focusedBorderColor = Brand,
                 unfocusedBorderColor = colorScheme.outline,
                 focusedContainerColor = SurfaceLight,
-                unfocusedContainerColor = SurfaceLight
+                unfocusedContainerColor = SurfaceLight,
+                focusedTextColor = BrandGold,
+                unfocusedTextColor = BrandGold
             )
         )
 
@@ -153,7 +156,9 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
                 focusedBorderColor = Brand,
                 unfocusedBorderColor = colorScheme.outline,
                 focusedContainerColor = SurfaceLight,
-                unfocusedContainerColor = SurfaceLight
+                unfocusedContainerColor = SurfaceLight,
+                focusedTextColor = BrandGold,
+                unfocusedTextColor = BrandGold
             )
         )
 
