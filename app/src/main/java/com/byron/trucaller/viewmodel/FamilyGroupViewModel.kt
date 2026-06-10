@@ -423,14 +423,11 @@ class FamilyGroupViewModel : ViewModel() {
     fun ringFamilyDevice(deviceId: String, triggeredBy: String, triggeredByName: String) {
         viewModelScope.launch {
             try {
-                val result = ApiClient.triggerAlarm(mapOf(
-                    "deviceId" to deviceId,
-                    "action" to "REMOTE_ALARM",
-                    "triggeredBy" to triggeredBy,
-                    "triggeredByName" to triggeredByName,
-                    "triggeredByRole" to "family_member",
-                    "notes" to "Family ring via device map"
-                ))
+                val result = ApiClient.triggerAlarm(
+                    deviceId = deviceId,
+                    type = "REMOTE_ALARM",
+                    notes = "Family ring via device map"
+                )
                 _uiState.value = _uiState.value.copy(
                     successMessage = if (result.success) "Ring command sent" else "Ring failed: ${result.error}"
                 )
@@ -449,14 +446,11 @@ class FamilyGroupViewModel : ViewModel() {
     fun lockFamilyDevice(deviceId: String, triggeredBy: String, triggeredByName: String) {
         viewModelScope.launch {
             try {
-                val result = ApiClient.triggerAlarm(mapOf(
-                    "deviceId" to deviceId,
-                    "action" to "LOCK_DEVICE",
-                    "triggeredBy" to triggeredBy,
-                    "triggeredByName" to triggeredByName,
-                    "triggeredByRole" to "family_member",
-                    "notes" to "Family lock via device map"
-                ))
+                val result = ApiClient.triggerAlarm(
+                    deviceId = deviceId,
+                    type = "LOCK_DEVICE",
+                    notes = "Family lock via device map"
+                )
                 _uiState.value = _uiState.value.copy(
                     successMessage = if (result.success) "Lock command sent" else "Lock failed: ${result.error}"
                 )
@@ -475,14 +469,11 @@ class FamilyGroupViewModel : ViewModel() {
     fun requestFamilyDeviceLocation(deviceId: String, triggeredBy: String, triggeredByName: String) {
         viewModelScope.launch {
             try {
-                val result = ApiClient.triggerAlarm(mapOf(
-                    "deviceId" to deviceId,
-                    "action" to "LOCATION_REQUEST",
-                    "triggeredBy" to triggeredBy,
-                    "triggeredByName" to triggeredByName,
-                    "triggeredByRole" to "family_member",
-                    "notes" to "Family location request via device map"
-                ))
+                val result = ApiClient.triggerAlarm(
+                    deviceId = deviceId,
+                    type = "LOCATION_REQUEST",
+                    notes = "Family location request via device map"
+                )
                 _uiState.value = _uiState.value.copy(
                     successMessage = if (result.success) "Location request sent" else "Location request failed: ${result.error}"
                 )
