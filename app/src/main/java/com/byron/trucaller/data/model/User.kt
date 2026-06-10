@@ -35,6 +35,7 @@ data class AuthState(
     val isLoading: Boolean = false,
     val token: String? = null,
     val pendingPhone: String? = null,
+    val pendingEmail: String? = null,
     val pendingFullName: String? = null,
     val pendingPasswordHash: String? = null,
     val pendingPassword: String? = null,

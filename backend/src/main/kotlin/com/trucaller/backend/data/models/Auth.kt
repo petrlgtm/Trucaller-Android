@@ -14,7 +14,8 @@ data class LoginRequest(
 data class RegisterRequest(
     val fullName: String,
     val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
-    val password: String
+    val password: String,
+    val email: String = ""
 )
 
 @Serializable
@@ -26,6 +27,18 @@ data class SendOtpRequest(
 @Serializable
 data class OtpVerification(
     val phoneNumber: String,       // E.164 format: "+256XXXXXXXXX"
+    val code: String
+)
+
+@Serializable
+data class SendEmailOtpRequest(
+    val email: String,
+    val purpose: String = "registration" // "registration"
+)
+
+@Serializable
+data class EmailOtpVerification(
+    val email: String,
     val code: String
 )
 

@@ -212,12 +212,12 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
         composable("register") {
             RegisterScreen(navController = navController, authViewModel = authViewModel)
         }
-        composable("otp/{phone}") { backStackEntry ->
-            val phone = backStackEntry.arguments?.getString("phone") ?: ""
+        composable("otp_email/{email}") { backStackEntry ->
+            val email = backStackEntry.arguments?.getString("email") ?: ""
             OtpVerificationScreen(
                 navController = navController,
                 authViewModel = authViewModel,
-                phone = phone
+                email = email
             )
         }
         composable("forgot_password") {

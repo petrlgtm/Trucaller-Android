@@ -156,7 +156,6 @@ dependencies {
     implementation(libs.google.api.services.drive)
     implementation(libs.gson)
     implementation(platform(libs.firebase.bom))
-    implementation(libs.firebase.auth)
     implementation(libs.firebase.analytics)
     implementation(libs.firebase.messaging)
     implementation(libs.osmdroid.android)

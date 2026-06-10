@@ -5,8 +5,8 @@ import com.mongodb.client.model.Filters
 import com.mongodb.client.model.Updates
 import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.*
+import com.trucaller.backend.service.EmailService
 import com.trucaller.backend.service.RedisCache
-import com.trucaller.backend.service.SmsService
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -26,6 +26,8 @@ fun Routing.authRoutes() {
     route("/api/auth") {
         sendOtpRoute()
         verifyOtpRoute()
+        sendEmailOtpRoute()
+        verifyEmailOtpRoute()
         registerRoute()
         loginRoute()
         resetPasswordRoute()
@@ -229,15 +231,29 @@ private fun Route.sendOtpRoute() {
             }
         }
 
-        // Record rate-limit entry and generate OTP
+        // For password reset: look up the user's stored email and deliver OTP there
+        val userEmail: String? = if (request.purpose == "password_reset") {
+            Collections.users
+                .find(Filters.eq("phoneNumber", request.phoneNumber))
+                .firstOrNull()
+                ?.getString("email")
+        } else null
+
+        if (request.purpose == "password_reset" && userEmail.isNullOrBlank()) {
+            call.respond(
+                HttpStatusCode.UnprocessableEntity,
+                ApiResponse<Unit>(success = false, error = "No email address linked to this account. Contact support.")
+            )
+            return@post
+        }
+
         recordOtpRequest(request.phoneNumber)
         val otp = generateOtp()
         storeOtp(request.phoneNumber, otp, request.purpose)
 
-        // Send OTP via Africa's Talking SMS gateway (falls back to log in dev mode)
-        val smsSent = SmsService.sendOtp(request.phoneNumber, otp)
-        if (!smsSent) {
-            // Gateway failure — best-effort cleanup so user can retry immediately
+        // Deliver OTP via email
+        val delivered = EmailService.sendOtp(userEmail!!, otp)
+        if (!delivered) {
             runCatching {
                 Collections.otpCodes.deleteMany(
                     Filters.and(
@@ -248,7 +264,7 @@ private fun Route.sendOtpRoute() {
             }
             call.respond(
                 HttpStatusCode.ServiceUnavailable,
-                ApiResponse<Unit>(success = false, error = "Could not send verification SMS. Please try again.")
+                ApiResponse<Unit>(success = false, error = "Could not send verification email. Please try again.")
             )
             return@post
         }
@@ -258,9 +274,129 @@ private fun Route.sendOtpRoute() {
             ApiResponse(
                 success = true,
                 data = mapOf("otpSent" to true, "expiresInMinutes" to OTP_TTL_MINUTES),
-                message = "Verification code sent to ${request.phoneNumber}."
+                message = "Verification code sent to your email."
             )
         )
+    }
+}
+
+// ── POST /api/auth/send-email-otp ──────────────────────────────────────
+
+private fun Route.sendEmailOtpRoute() {
+    post("/send-email-otp") {
+        val request = try {
+            call.receive<SendEmailOtpRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body. Required: email")
+            )
+            return@post
+        }
+
+        val email = request.email.trim().lowercase()
+        if (!email.matches(Regex("^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$"))) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid email address.")
+            )
+            return@post
+        }
+
+        // Check if email already registered (registration only)
+        if (request.purpose == "registration") {
+            val existing = Collections.users.find(Filters.eq("email", email)).firstOrNull()
+            if (existing != null) {
+                call.respond(
+                    HttpStatusCode.Conflict,
+                    ApiResponse<Unit>(success = false, error = "An account with this email already exists.")
+                )
+                return@post
+            }
+        }
+
+        // Rate-limit by email address (reuse same rate-limit collection)
+        if (isRateLimited(email)) {
+            call.respond(
+                HttpStatusCode.TooManyRequests,
+                ApiResponse<Unit>(success = false, error = "Too many OTP requests. Please try again later.")
+            )
+            return@post
+        }
+
+        recordOtpRequest(email)
+        val otp = generateOtp()
+        storeOtp(email, otp, request.purpose)
+
+        val delivered = EmailService.sendOtp(email, otp)
+        if (!delivered) {
+            runCatching {
+                Collections.otpCodes.deleteMany(
+                    Filters.and(Filters.eq("phoneNumber", email), Filters.eq("purpose", request.purpose))
+                )
+            }
+            call.respond(
+                HttpStatusCode.ServiceUnavailable,
+                ApiResponse<Unit>(success = false, error = "Could not send verification email. Please try again.")
+            )
+            return@post
+        }
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse(
+                success = true,
+                data = mapOf("otpSent" to true, "expiresInMinutes" to OTP_TTL_MINUTES),
+                message = "Verification code sent to $email."
+            )
+        )
+    }
+}
+
+// ── POST /api/auth/verify-email-otp ────────────────────────────────────
+
+private fun Route.verifyEmailOtpRoute() {
+    post("/verify-email-otp") {
+        val request = try {
+            call.receive<EmailOtpVerification>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body. Required: email, code")
+            )
+            return@post
+        }
+
+        val email = request.email.trim().lowercase()
+        if (request.code.length != OTP_LENGTH || !request.code.all { it.isDigit() }) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "OTP must be $OTP_LENGTH digits.")
+            )
+            return@post
+        }
+
+        val purpose = findOtpPurpose(email) ?: run {
+            call.respond(
+                HttpStatusCode.Unauthorized,
+                ApiResponse<Unit>(success = false, error = "Invalid or expired OTP.")
+            )
+            return@post
+        }
+
+        val result = validateOtp(email, request.code, purpose)
+        if (result == OtpValidationResult.VALID) {
+            call.respond(HttpStatusCode.OK, ApiResponse<Unit>(success = true, message = "OTP verified successfully."))
+            return@post
+        }
+
+        val errorMessage = when (result) {
+            OtpValidationResult.EXPIRED -> "OTP has expired. Please request a new one."
+            OtpValidationResult.MAX_ATTEMPTS -> "Too many failed attempts. Please request a new OTP."
+            OtpValidationResult.INVALID -> "Invalid OTP code."
+            else -> "Invalid or expired OTP."
+        }
+        call.respond(HttpStatusCode.Unauthorized, ApiResponse<Unit>(success = false, error = errorMessage))
     }
 }
 
@@ -382,6 +518,7 @@ private fun Route.registerRoute() {
             .append("_id", userId)
             .append("fullName", request.fullName)
             .append("phoneNumber", request.phoneNumber)
+            .append("email", request.email.trim().lowercase().ifBlank { null })
             .append("passwordHash", passwordHash)
             .append("createdAt", now)
             .append("isActive", true)

@@ -186,18 +186,25 @@ object ApiClient {
         return result
     }
 
-    suspend fun register(fullName: String, phoneNumber: String, password: String): ApiResult<TokenResponse> =
-        post("/api/auth/register", mapOf(
-            "fullName" to fullName,
-            "phoneNumber" to phoneNumber,
-            "password" to password
-        ))
+    suspend fun register(fullName: String, phoneNumber: String, password: String, email: String = ""): ApiResult<TokenResponse> =
+        post("/api/auth/register", buildMap {
+            put("fullName", fullName)
+            put("phoneNumber", phoneNumber)
+            put("password", password)
+            if (email.isNotBlank()) put("email", email)
+        })
 
     suspend fun sendOtp(phoneNumber: String, purpose: String = "registration"): ApiResult<Map<String, Any>> =
         post("/api/auth/send-otp", mapOf("phoneNumber" to phoneNumber, "purpose" to purpose))
 
     suspend fun verifyOtp(phoneNumber: String, code: String): ApiResult<Unit> =
         post("/api/auth/verify-otp", mapOf("phoneNumber" to phoneNumber, "code" to code))
+
+    suspend fun sendEmailOtp(email: String, purpose: String = "registration"): ApiResult<Map<String, Any>> =
+        post("/api/auth/send-email-otp", mapOf("email" to email, "purpose" to purpose))
+
+    suspend fun verifyEmailOtp(email: String, code: String): ApiResult<Unit> =
+        post("/api/auth/verify-email-otp", mapOf("email" to email, "code" to code))
 
     suspend fun resetPassword(phoneNumber: String, code: String, newPassword: String): ApiResult<Unit> =
         post("/api/auth/reset-password", mapOf(

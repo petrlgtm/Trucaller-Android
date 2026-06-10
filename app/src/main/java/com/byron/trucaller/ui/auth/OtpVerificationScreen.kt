@@ -1,6 +1,5 @@
 package com.byron.trucaller.ui.auth
 
-import android.app.Activity
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
@@ -42,7 +41,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -54,7 +52,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
@@ -62,11 +59,9 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.service.PhoneAuthState
 import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.util.DeviceAdminHelper
-import com.byron.trucaller.util.maskPhoneNumber
 import com.byron.trucaller.viewmodel.AuthViewModel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -77,7 +72,7 @@ import kotlin.math.roundToInt
 fun OtpVerificationScreen(
     navController: NavController,
     authViewModel: AuthViewModel,
-    phone: String
+    email: String
 ) {
     var otp by remember { mutableStateOf("") }
     var error by remember { mutableStateOf<String?>(null) }
@@ -86,131 +81,61 @@ fun OtpVerificationScreen(
     var verificationSuccess by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
-    val context = LocalContext.current
-    val activity = context as? Activity
-    val phoneAuthState by authViewModel.phoneAuthManager.state.collectAsState()
 
     val colorScheme = MaterialTheme.colorScheme
 
-    // Shake animation for error feedback
     val shakeOffset = remember { Animatable(0f) }
 
-    // Success checkmark scale animation
     val successScale by animateFloatAsState(
         targetValue = if (verificationSuccess) 1f else 0f,
-        animationSpec = tween(
-            durationMillis = 500,
-            easing = FastOutSlowInEasing
-        ),
+        animationSpec = tween(durationMillis = 500, easing = FastOutSlowInEasing),
         label = "success_scale"
     )
 
-    LaunchedEffect(Unit) {
-        focusRequester.requestFocus()
-    }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     LaunchedEffect(countdown) {
-        if (countdown > 0) {
-            delay(1000)
-            countdown--
-        }
+        if (countdown > 0) { delay(1000); countdown-- }
     }
 
-    // Trigger shake animation on error
     LaunchedEffect(error) {
         if (error != null) {
             shakeOffset.animateTo(
                 targetValue = 0f,
                 animationSpec = keyframes {
                     durationMillis = 400
-                    0f at 0
-                    -12f at 50
-                    12f at 100
-                    -10f at 150
-                    10f at 200
-                    -6f at 250
-                    6f at 300
-                    -2f at 350
-                    0f at 400
+                    0f at 0; -12f at 50; 12f at 100; -10f at 150
+                    10f at 200; -6f at 250; 6f at 300; -2f at 350; 0f at 400
                 }
             )
         }
     }
 
-    fun onVerificationSuccess() {
-        // Show success animation first, then navigate
-        verificationSuccess = true
-    }
+    fun onVerificationSuccess() { verificationSuccess = true }
 
-    // Navigate after success animation completes
     LaunchedEffect(verificationSuccess) {
         if (verificationSuccess) {
-            delay(1200) // Let the animation play
-            // Navigate to device protection prompt for first-time setup
+            delay(1200)
             navController.navigate("device_protection_prompt") {
                 popUpTo("splash") { inclusive = true }
             }
         }
     }
 
-    // Handle Firebase state changes
-    LaunchedEffect(phoneAuthState) {
-        when (phoneAuthState) {
-            is PhoneAuthState.Verified -> {
-                // Firebase verified the code — now create the user account
-                isLoading = true
-                val success = authViewModel.verifyOtp(otp, firebaseVerified = true)
-                isLoading = false
-                if (success) {
-                    onVerificationSuccess()
-                } else {
-                    error = "Failed to create account"
-                }
-            }
-
-            is PhoneAuthState.Error -> {
-                isLoading = false
-                error = (phoneAuthState as PhoneAuthState.Error).message
-            }
-
-            is PhoneAuthState.Verifying -> {
-                isLoading = true
-                error = null
-            }
-
-            else -> {}
-        }
-    }
-
     fun verifyOtp() {
-        if (otp.length != 6) {
-            error = "Enter all 6 digits"
-            return
-        }
+        if (otp.length != 6) { error = "Enter all 6 digits"; return }
         error = null
-
-        if (authViewModel.isFirebaseAvailable()) {
-            // Firebase mode: send code to Firebase for verification
-            // The LaunchedEffect above handles the Verified/Error states
-            isLoading = true
-            authViewModel.phoneAuthManager.verifyCode(otp)
-        } else {
-            // AT SMS mode: verify code against backend, then create account
-            isLoading = true
-            scope.launch {
-                val codeValid = authViewModel.verifyOtpViaBackend(phone, otp)
-                if (codeValid) {
-                    val success = authViewModel.verifyOtp(otp, backendVerified = true)
-                    isLoading = false
-                    if (success) {
-                        onVerificationSuccess()
-                    } else {
-                        error = "Failed to create account. Please try again."
-                    }
-                } else {
-                    isLoading = false
-                    error = "Invalid or expired OTP code."
-                }
+        isLoading = true
+        scope.launch {
+            val codeValid = authViewModel.verifyEmailOtpViaBackend(email, otp)
+            if (codeValid) {
+                val success = authViewModel.verifyOtp(otp, backendVerified = true)
+                isLoading = false
+                if (success) onVerificationSuccess()
+                else error = "Failed to create account. Please try again."
+            } else {
+                isLoading = false
+                error = "Invalid or expired OTP code."
             }
         }
     }
@@ -223,24 +148,14 @@ fun OtpVerificationScreen(
     ) {
         TopAppBar(
             title = {
-                Text(
-                    "Verify Phone",
-                    fontWeight = FontWeight.Bold,
-                    color = colorScheme.onBackground
-                )
+                Text("Verify Email", fontWeight = FontWeight.Bold, color = colorScheme.onBackground)
             },
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        "Back",
-                        tint = colorScheme.onBackground
-                    )
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
                 }
             },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = colorScheme.background
-            )
+            colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
         )
 
         Column(
@@ -252,7 +167,6 @@ fun OtpVerificationScreen(
         ) {
             Spacer(modifier = Modifier.height(32.dp))
 
-            // Success animation overlay
             if (verificationSuccess) {
                 Box(
                     modifier = Modifier
@@ -268,20 +182,12 @@ fun OtpVerificationScreen(
                         modifier = Modifier.size(48.dp)
                     )
                 }
-
                 Spacer(modifier = Modifier.height(16.dp))
-
                 AnimatedVisibility(
                     visible = verificationSuccess,
-                    enter = fadeIn(tween(300, delayMillis = 300)) +
-                            scaleIn(tween(300, delayMillis = 300))
+                    enter = fadeIn(tween(300, delayMillis = 300)) + scaleIn(tween(300, delayMillis = 300))
                 ) {
-                    Text(
-                        text = "Verified!",
-                        fontSize = 24.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = colorScheme.primary
-                    )
+                    Text("Verified!", fontSize = 24.sp, fontWeight = FontWeight.Bold, color = colorScheme.primary)
                 }
             } else {
                 Text(
@@ -290,16 +196,10 @@ fun OtpVerificationScreen(
                     fontWeight = FontWeight.Bold,
                     color = colorScheme.onBackground
                 )
-
                 Spacer(modifier = Modifier.height(8.dp))
-
+                Text(text = "We sent a 6-digit code to", color = colorScheme.onSurfaceVariant, fontSize = 14.sp)
                 Text(
-                    text = "We sent a 6-digit code to",
-                    color = colorScheme.onSurfaceVariant,
-                    fontSize = 14.sp
-                )
-                Text(
-                    text = maskPhoneNumber("+256$phone"),
+                    text = email,
                     color = colorScheme.onBackground,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold
@@ -307,7 +207,6 @@ fun OtpVerificationScreen(
 
                 Spacer(modifier = Modifier.height(40.dp))
 
-                // OTP boxes with shake animation
                 BasicTextField(
                     value = otp,
                     onValueChange = {
@@ -320,9 +219,7 @@ fun OtpVerificationScreen(
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     modifier = Modifier
                         .focusRequester(focusRequester)
-                        .offset {
-                            IntOffset(shakeOffset.value.roundToInt(), 0)
-                        },
+                        .offset { IntOffset(shakeOffset.value.roundToInt(), 0) },
                     decorationBox = {
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -345,10 +242,7 @@ fun OtpVerificationScreen(
                                             },
                                             shape = RoundedCornerShape(14.dp)
                                         )
-                                        .background(
-                                            colorScheme.surface,
-                                            RoundedCornerShape(14.dp)
-                                        ),
+                                        .background(colorScheme.surface, RoundedCornerShape(14.dp)),
                                     contentAlignment = Alignment.Center
                                 ) {
                                     Text(
@@ -364,32 +258,23 @@ fun OtpVerificationScreen(
                     }
                 )
 
-                // Error
                 if (error != null) {
                     Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = error!!,
-                        color = colorScheme.error,
-                        fontSize = 14.sp
-                    )
+                    Text(text = error!!, color = colorScheme.error, fontSize = 14.sp)
                 }
 
                 Spacer(modifier = Modifier.height(32.dp))
 
-                // Verify button using TruCallerButton
                 TruCallerButton(
                     text = "Verify",
                     onClick = { verifyOtp() },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(52.dp),
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
                     isLoading = isLoading,
                     enabled = !isLoading && otp.length == 6
                 )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                // Resend
                 if (countdown > 0) {
                     Text(
                         text = "Resend code in ${countdown}s",
@@ -401,19 +286,9 @@ fun OtpVerificationScreen(
                         countdown = 60
                         otp = ""
                         error = null
-                        if (authViewModel.isFirebaseAvailable() && activity != null) {
-                            authViewModel.phoneAuthManager.resendCode(phone, activity)
-                        } else {
-                            scope.launch {
-                                authViewModel.sendOtpViaSms(phone, "registration")
-                            }
-                        }
+                        scope.launch { authViewModel.sendEmailOtp(email, "registration") }
                     }) {
-                        Text(
-                            "Resend Code",
-                            color = colorScheme.primary,
-                            fontWeight = FontWeight.SemiBold
-                        )
+                        Text("Resend Code", color = colorScheme.primary, fontWeight = FontWeight.SemiBold)
                     }
                 }
 
@@ -422,14 +297,11 @@ fun OtpVerificationScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(
-                            colorScheme.surfaceVariant,
-                            RoundedCornerShape(8.dp)
-                        )
+                        .background(colorScheme.surfaceVariant, RoundedCornerShape(8.dp))
                         .padding(12.dp)
                 ) {
                     Text(
-                        text = "A verification code has been sent to your phone via SMS",
+                        text = "A verification code has been sent to your email address",
                         color = colorScheme.onSurfaceVariant,
                         fontSize = 13.sp,
                         textAlign = TextAlign.Center,

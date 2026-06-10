@@ -1,6 +1,5 @@
 package com.byron.trucaller.ui.auth
 
-import android.app.Activity
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.keyframes
 import androidx.compose.foundation.background
@@ -44,7 +43,6 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -60,6 +58,7 @@ import com.byron.trucaller.util.getPasswordStrength
 import com.byron.trucaller.util.isValidPassword
 import com.byron.trucaller.util.isValidPhoneInput
 import com.byron.trucaller.viewmodel.AuthViewModel
+import android.util.Patterns
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -68,6 +67,7 @@ import kotlin.math.roundToInt
 fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
     var fullName by remember { mutableStateOf("") }
     var phone by remember { mutableStateOf("") }
+    var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
@@ -77,8 +77,6 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
     val scope = rememberCoroutineScope()
     val strength = getPasswordStrength(password)
     val snackbarHostState = remember { SnackbarHostState() }
-    val context = LocalContext.current
-    val activity = context as? Activity
 
     val colorScheme = MaterialTheme.colorScheme
 
@@ -181,6 +179,22 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                     .offset {
                         IntOffset(shakeOffset.value.roundToInt(), 0)
                     }
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            // Email
+            TruCallerTextField(
+                value = email,
+                onValueChange = { email = it; error = null },
+                label = "Email Address",
+                placeholder = "you@example.com",
+                keyboardType = KeyboardType.Email,
+                isError = error != null && error!!.contains("email", ignoreCase = true),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("register_email_input")
+                    .offset { IntOffset(shakeOffset.value.roundToInt(), 0) }
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -324,6 +338,7 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                     when {
                         fullName.isBlank() -> error = "Full name is required"
                         !isValidPhoneInput(phone) -> error = "Enter a valid 9-digit phone number"
+                        !Patterns.EMAIL_ADDRESS.matcher(email.trim()).matches() -> error = "Enter a valid email address"
                         !isValidPassword(password) -> error = "Password must be at least 6 characters"
                         password != confirmPassword -> error = "Passwords do not match"
                         !consentChecked -> error = "You must agree to the terms to continue"
@@ -331,27 +346,13 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                             isLoading = true
                             error = null
                             scope.launch {
-                                val success = authViewModel.register(fullName, phone, password)
+                                authViewModel.register(fullName, phone, email.trim(), password)
+                                val sent = authViewModel.sendEmailOtp(email.trim(), "registration")
                                 isLoading = false
-                                if (success) {
-                                    if (authViewModel.isFirebaseAvailable() && activity != null) {
-                                        authViewModel.phoneAuthManager.sendVerificationCode(
-                                            phone,
-                                            activity
-                                        )
-                                        navController.navigate("otp/$phone")
-                                    } else {
-                                        isLoading = true
-                                        val smsSent = authViewModel.sendOtpViaSms(phone, "registration")
-                                        isLoading = false
-                                        if (smsSent) {
-                                            navController.navigate("otp/$phone")
-                                        } else {
-                                            error = "Failed to send verification SMS. Please check your number and try again."
-                                        }
-                                    }
+                                if (sent) {
+                                    navController.navigate("otp_email/${email.trim()}")
                                 } else {
-                                    error = "Registration failed. Please try again."
+                                    error = "Failed to send verification email. Please check the address and try again."
                                 }
                             }
                         }

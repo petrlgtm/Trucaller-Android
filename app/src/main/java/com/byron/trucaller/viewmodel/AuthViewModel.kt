@@ -19,7 +19,6 @@ import com.byron.trucaller.data.repository.DeviceRepository
 import com.byron.trucaller.data.repository.UserRepository
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.service.DeviceRegistrationService
-import com.byron.trucaller.service.FirebasePhoneAuthManager
 import android.net.Uri
 import com.byron.trucaller.util.copyImageToInternal
 import com.byron.trucaller.util.hashPassword
@@ -40,8 +39,6 @@ class AuthViewModel(
     private val contactRepository: ContactRepository,
     private val deviceRegistrationService: DeviceRegistrationService
 ) : AndroidViewModel(application) {
-
-    val phoneAuthManager = FirebasePhoneAuthManager()
 
     private val _authState = MutableStateFlow(AuthState())
     val authState: StateFlow<AuthState> = _authState.asStateFlow()
@@ -217,49 +214,34 @@ class AuthViewModel(
         }
     }
 
-    fun register(fullName: String, phone: String, password: String): Boolean {
-        val otp = (100000..999999).random().toString()
+    fun register(fullName: String, phone: String, email: String, password: String): Boolean {
         _authState.value = _authState.value.copy(
             pendingPhone = phone,
+            pendingEmail = email.trim().lowercase(),
             pendingFullName = fullName,
             pendingPasswordHash = hashPassword(password),
             pendingPassword = password,
-            generatedOtp = otp
+            generatedOtp = null
         )
         return true
     }
 
     fun getGeneratedOtp(): String? = _authState.value.generatedOtp
 
-    fun isFirebaseAvailable(): Boolean = phoneAuthManager.isFirebaseAvailable()
-
     /**
-     * Debug-only: configures Firebase to auto-complete OTP verification for [phoneNumber]
-     * using [smsCode] without sending a real SMS. No-op in release builds.
-     * The number must be whitelisted in the Firebase Console first.
-     * Call this before triggering OTP send.
-     */
-    fun configureFirebaseTestAutoRetrieval(phoneNumber: String, smsCode: String) {
-        phoneAuthManager.configureTestAutoRetrieval(phoneNumber, smsCode)
-    }
-
-    /**
-     * Sends an OTP to [phone] via the backend's Africa's Talking SMS gateway.
-     * [purpose] must be "registration" or "password_reset".
+     * Sends an OTP to [email] via the backend's Gmail SMTP gateway.
      * Returns true if the backend accepted the request.
      */
-    suspend fun sendOtpViaSms(phone: String, purpose: String = "registration"): Boolean {
-        val fullPhone = if (phone.startsWith("+")) phone else "+256$phone"
+    suspend fun sendEmailOtp(email: String, purpose: String = "registration"): Boolean {
         return try {
-            ApiClient.sendOtp(fullPhone, purpose).success
+            ApiClient.sendEmailOtp(email.trim().lowercase(), purpose).success
         } catch (_: Exception) { false }
     }
 
-    /** Verifies [code] against the backend OTP store. Does NOT create the account. */
-    suspend fun verifyOtpViaBackend(phone: String, code: String): Boolean {
-        val fullPhone = if (phone.startsWith("+")) phone else "+256$phone"
+    /** Verifies [code] against the backend email OTP store. Does NOT create the account. */
+    suspend fun verifyEmailOtpViaBackend(email: String, code: String): Boolean {
         return try {
-            ApiClient.verifyOtp(fullPhone, code).success
+            ApiClient.verifyEmailOtp(email.trim().lowercase(), code).success
         } catch (_: Exception) { false }
     }
 
@@ -280,10 +262,12 @@ class AuthViewModel(
         var userId = "usr-${System.currentTimeMillis()}"
         var token = UUID.randomUUID().toString()
 
+        val pendingEmail = state.pendingEmail ?: ""
+
         // Try backend registration
         try {
             val rawPassword = state.pendingPassword ?: pendingPhone
-            val apiResult = ApiClient.register(fullName, fullPhoneNumber, rawPassword)
+            val apiResult = ApiClient.register(fullName, fullPhoneNumber, rawPassword, pendingEmail)
             if (apiResult.success && apiResult.data != null) {
                 userId = apiResult.data.userId
                 token = apiResult.data.token
@@ -299,6 +283,7 @@ class AuthViewModel(
             id = userId,
             fullName = fullName,
             phoneNumber = fullPhoneNumber,
+            email = pendingEmail.ifBlank { null },
             passwordHash = passwordHash,
             createdAt = now,
             lastLogin = now,
@@ -325,6 +310,7 @@ class AuthViewModel(
             token = token,
             generatedOtp = null,
             pendingPhone = null,
+            pendingEmail = null,
             pendingFullName = null,
             pendingPasswordHash = null,
             pendingPassword = null
@@ -482,7 +468,6 @@ class AuthViewModel(
             preferences.setRefreshToken(null)
             ApiClient.setAuthToken(null)
             ApiClient.setRefreshToken(null)
-            phoneAuthManager.signOut()
             _authState.value = AuthState()
         }
     }
@@ -511,7 +496,6 @@ class AuthViewModel(
         // Clear local data
         userRepository.deleteUser(user)
         preferences.setLoggedInUserId(null)
-        phoneAuthManager.signOut()
         _authState.value = AuthState()
         return true
     }
