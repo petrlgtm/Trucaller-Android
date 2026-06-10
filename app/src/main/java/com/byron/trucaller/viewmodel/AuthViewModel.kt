@@ -232,6 +232,16 @@ class AuthViewModel(
 
     fun isFirebaseAvailable(): Boolean = phoneAuthManager.isFirebaseAvailable()
 
+    /**
+     * Debug-only: configures Firebase to auto-complete OTP verification for [phoneNumber]
+     * using [smsCode] without sending a real SMS. No-op in release builds.
+     * The number must be whitelisted in the Firebase Console first.
+     * Call this before triggering OTP send.
+     */
+    fun configureFirebaseTestAutoRetrieval(phoneNumber: String, smsCode: String) {
+        phoneAuthManager.configureTestAutoRetrieval(phoneNumber, smsCode)
+    }
+
     suspend fun verifyOtp(code: String, firebaseVerified: Boolean = false): Boolean {
         val state = _authState.value
 

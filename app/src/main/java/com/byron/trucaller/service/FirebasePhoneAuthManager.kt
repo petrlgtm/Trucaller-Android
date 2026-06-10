@@ -1,6 +1,7 @@
 package com.byron.trucaller.service
 
 import android.app.Activity
+import com.byron.trucaller.BuildConfig
 import com.google.firebase.FirebaseApp
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
@@ -128,6 +129,27 @@ class FirebasePhoneAuthManager {
         resendToken?.let { optionsBuilder.setForceResendingToken(it) }
 
         PhoneAuthProvider.verifyPhoneNumber(optionsBuilder.build())
+    }
+
+    /**
+     * Registers a fictional phone number + SMS code pair for instant OTP auto-retrieval.
+     *
+     * Call this BEFORE [sendVerificationCode] in a test scenario. When
+     * [PhoneAuthProvider.verifyPhoneNumber] is called for the registered number,
+     * Firebase fires [PhoneAuthProvider.OnVerificationStateChangedCallbacks.onVerificationCompleted]
+     * immediately with a [PhoneAuthCredential] — no real SMS is sent.
+     *
+     * Requirements:
+     *  - The phone number must be whitelisted in the Firebase Console
+     *    (Authentication → Phone → Test phone numbers).
+     *  - This method is a no-op in release builds ([BuildConfig.DEBUG] == false).
+     *  - NEVER ship hardcoded fictional numbers or calls to this function in production.
+     */
+    fun configureTestAutoRetrieval(phoneNumber: String, smsCode: String) {
+        if (!BuildConfig.DEBUG) return
+        if (!isFirebaseAvailable()) return
+        val auth = FirebaseAuth.getInstance()
+        auth.firebaseAuthSettings.setAutoRetrievedSmsCodeForPhoneNumber(phoneNumber, smsCode)
     }
 
     fun signOut() {
