@@ -4,6 +4,7 @@ import com.trucaller.backend.auth.UnauthorizedException
 import com.trucaller.backend.auth.JwtConfig
 import com.trucaller.backend.auth.adminAuthRoutes
 import com.trucaller.backend.auth.authRoutes
+import com.trucaller.backend.auth.clientIp
 import com.trucaller.backend.data.AdminSeeder
 import com.trucaller.backend.data.MongoDB
 import com.trucaller.backend.plugins.RateLimiterPlugin
@@ -115,7 +116,7 @@ fun Application.module() {
         exception<UnauthorizedException> { call, cause ->
             SecurityLogger.logAuthFailure(
                 phoneNumber = "unknown",
-                ip = call.request.local.remoteAddress,
+                ip = call.clientIp(),
                 reason = cause.message ?: "Unauthorized"
             )
             call.respond(
@@ -125,7 +126,7 @@ fun Application.module() {
         }
         exception<IllegalAccessException> { call, cause ->
             SecurityLogger.logSuspiciousActivity(
-                ip = call.request.local.remoteAddress,
+                ip = call.clientIp(),
                 detail = "Forbidden: ${cause.message}"
             )
             call.respond(

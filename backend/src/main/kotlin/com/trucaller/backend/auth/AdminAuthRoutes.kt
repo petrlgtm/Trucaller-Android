@@ -107,7 +107,7 @@ fun Route.adminAuthRoutes() {
             }
 
             val normalizedPhone = normalizeUgandaPhone(request.phoneNumber)
-            val ip = call.request.local.remoteAddress
+            val ip = call.clientIp()
 
             // Brute-force protection: same thresholds as regular user login
             if (RedisCache.isLoginLocked(normalizedPhone)) {

@@ -7,6 +7,7 @@ import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
 import io.ktor.http.*
 import io.ktor.server.application.*
+import com.trucaller.backend.auth.clientIp
 import com.trucaller.backend.auth.userId
 import io.ktor.server.auth.*
 import io.ktor.server.auth.jwt.*
@@ -128,12 +129,8 @@ private fun Route.registerDevice() {
             return@post
         }
 
-        val headerIp = call.request.header("X-Forwarded-For")
-            ?.split(",")?.firstOrNull()?.trim()
-            ?: call.request.local.remoteHost
-
-        // Use client-provided IP if available, fall back to X-Forwarded-For header
-        val deviceIp = request.lastIp ?: headerIp
+        // Use client-provided IP if available, fall back to the real client IP from headers
+        val deviceIp = request.lastIp ?: call.clientIp()
 
         val now = Instant.now().toString()
 

@@ -391,7 +391,7 @@ private fun Route.registerRoute() {
 
         val token = JwtConfig.makeToken(userId, role = "user")
         val refreshTokenStr = JwtConfig.makeRefreshToken(userId)
-        val ip = call.request.local.remoteAddress
+        val ip = call.clientIp()
 
         Collections.refreshTokens.insertOne(
             Document()
@@ -433,7 +433,7 @@ private fun Route.loginRoute() {
         }
 
         val phone = request.phoneNumber
-        val ip = call.request.local.remoteAddress
+        val ip = call.clientIp()
 
         // Brute-force protection: 5 failed attempts locks account for 15 min
         if (RedisCache.isLoginLocked(phone)) {
@@ -731,7 +731,7 @@ private fun Route.refreshTokenRoute() {
 
         val newAccess = JwtConfig.makeToken(userId, role = "user")
         val newRefresh = JwtConfig.makeRefreshToken(userId)
-        val ip = call.request.local.remoteAddress
+        val ip = call.clientIp()
 
         Collections.refreshTokens.insertOne(
             Document()

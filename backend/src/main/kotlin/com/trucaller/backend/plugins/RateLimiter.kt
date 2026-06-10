@@ -1,5 +1,6 @@
 package com.trucaller.backend.plugins
 
+import com.trucaller.backend.auth.clientIp
 import com.trucaller.backend.service.RedisCache
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -35,7 +36,7 @@ val RateLimiterPlugin = createApplicationPlugin(name = "RateLimiter", createConf
     val memoryLog = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
 
     onCall { call ->
-        val ip = call.request.local.remoteAddress
+        val ip = call.clientIp()
         val principal = call.principal<JWTPrincipal>()
         val key = if (principal != null) {
             "rl:auth:${principal.payload.getClaim("userId").asString() ?: ip}"
