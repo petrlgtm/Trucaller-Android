@@ -91,7 +91,7 @@ class JwtConfigTest {
     }
 
     @Test
-    fun `makeToken expiration is approximately 24 hours from now`() {
+    fun `makeToken expiration is approximately 15 minutes from now`() {
         initJwtConfig()
 
         val beforeMs = System.currentTimeMillis()
@@ -100,13 +100,13 @@ class JwtConfigTest {
 
         val decoded = JWT.decode(token)
         val expiresMs = decoded.expiresAt.time
-        val twentyFourHoursMs = 24L * 60 * 60 * 1000
+        val fifteenMinutesMs = 15L * 60 * 1000
 
-        // Expiry should be within [before + 24h, after + 24h]
+        // Expiry should be within [before + 15min, after + 15min]
         assertTrue(
-            expiresMs >= beforeMs + twentyFourHoursMs - 1000 &&
-                expiresMs <= afterMs + twentyFourHoursMs + 1000,
-            "Token expiry should be ~24 hours from now"
+            expiresMs >= beforeMs + fifteenMinutesMs - 1000 &&
+                expiresMs <= afterMs + fifteenMinutesMs + 1000,
+            "Token expiry should be ~15 minutes from now (access tokens are short-lived)"
         )
     }
 
@@ -144,10 +144,10 @@ class JwtConfigTest {
     // ── expiresInSeconds ────────────────────────────────────────────────────
 
     @Test
-    fun `expiresInSeconds returns 86400 for 24-hour token`() {
+    fun `expiresInSeconds returns 900 for 15-minute token`() {
         initJwtConfig()
 
-        assertEquals(86400L, JwtConfig.expiresInSeconds(), "24h = 86400 seconds")
+        assertEquals(900L, JwtConfig.expiresInSeconds(), "15min = 900 seconds")
     }
 
     // ── Different userId values ─────────────────────────────────────────────

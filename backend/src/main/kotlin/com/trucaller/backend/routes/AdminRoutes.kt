@@ -919,8 +919,50 @@ fun Route.adminRoutes() {
                 )
             }
 
+            // ── GET /api/admin/alarm-logs ──────────────────────────────────
+            get("/alarm-logs") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@get
+                }
+
+                val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
+
+                val logs = Collections.alarmLogs
+                    .find()
+                    .sort(org.bson.Document("triggeredAt", -1))
+                    .skip(skip)
+                    .limit(limit)
+                    .toList()
+
+                call.respond(
+                    HttpStatusCode.OK,
+                    ApiResponse(
+                        success = true,
+                        data = logs.map { it.toJson() },
+                        message = "Retrieved ${logs.size} alarm log(s)"
+                    )
+                )
+            }
+
             // ── GET /api/admin/audit/logins ────────────────────────────────
             get("/audit/logins") {
+                try {
+                    call.requireAdmin()
+                } catch (e: IllegalAccessException) {
+                    call.respond(
+                        HttpStatusCode.Forbidden,
+                        ApiResponse<Nothing>(success = false, error = "Admin access required")
+                    )
+                    return@get
+                }
+
                 val phone = call.request.queryParameters["phone"]
                 val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 50).coerceIn(1, 500)
                 val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0

@@ -153,6 +153,13 @@ object Collections {
         database.getCollection<Document>("smsSpamReports")
             .createIndex(Indexes.ascending("userId"))
 
+        // Unique compound index preventing a user from reporting the same SMS sender twice
+        database.getCollection<Document>("smsSpamReports")
+            .createIndex(
+                Indexes.compoundIndex(Indexes.ascending("userId"), Indexes.ascending("senderNumber")),
+                IndexOptions().unique(true)
+            )
+
         // Index on deviceId for geofences
         database.getCollection<Document>("geofences")
             .createIndex(Indexes.ascending("deviceId"))

@@ -74,19 +74,28 @@ class StolenReportRoutesTest : RouteTestBase() {
     }
 
     @Test
-    fun `valid status values are accepted`() {
-        val validStatuses = listOf("PENDING", "VERIFIED", "ESCALATED", "RESOLVED")
-        validStatuses.forEach { status ->
-            assertTrue(status in validStatuses, "$status should be in valid statuses list")
+    fun `user-allowed status values are PENDING and RESOLVED`() {
+        val userAllowedStatuses = listOf("PENDING", "RESOLVED")
+        userAllowedStatuses.forEach { status ->
+            assertTrue(status in userAllowedStatuses, "$status should be a user-allowed status")
+        }
+    }
+
+    @Test
+    fun `VERIFIED and ESCALATED are admin-only and not user-settable`() {
+        val userAllowedStatuses = listOf("PENDING", "RESOLVED")
+        val adminOnlyStatuses = listOf("VERIFIED", "ESCALATED")
+        adminOnlyStatuses.forEach { status ->
+            assertFalse(status in userAllowedStatuses, "$status should NOT be user-settable")
         }
     }
 
     @Test
     fun `invalid status values are rejected`() {
-        val validStatuses = listOf("PENDING", "VERIFIED", "ESCALATED", "RESOLVED")
-        val invalidStatuses = listOf("ACTIVE", "CLOSED", "OPEN", "", "pending")
+        val userAllowedStatuses = listOf("PENDING", "RESOLVED")
+        val invalidStatuses = listOf("ACTIVE", "CLOSED", "OPEN", "", "pending", "VERIFIED", "ESCALATED")
         invalidStatuses.forEach { status ->
-            assertFalse(status in validStatuses, "$status should not be in valid statuses list")
+            assertFalse(status in userAllowedStatuses, "$status should not be in user-allowed statuses list")
         }
     }
 

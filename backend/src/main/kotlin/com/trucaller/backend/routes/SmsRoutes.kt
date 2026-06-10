@@ -7,6 +7,7 @@ import com.trucaller.backend.auth.userId
 import com.trucaller.backend.data.Collections
 import com.trucaller.backend.data.models.ApiResponse
 import com.trucaller.backend.data.models.SpamCategory
+import com.trucaller.backend.service.PhoneNormalizer
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -82,8 +83,23 @@ fun Route.smsRoutes() {
                     return@post
                 }
 
-                val phoneNumber = normalizePhone(request.senderNumber)
+                val phoneNumber = PhoneNormalizer.normalize(request.senderNumber)
                 val now = Instant.now().toString()
+
+                // Dedup: one report per user per sender number
+                val alreadyReported = Collections.smsSpamReports
+                    .find(Filters.and(
+                        Filters.eq("userId", userId),
+                        Filters.eq("senderNumber", phoneNumber)
+                    ))
+                    .firstOrNull()
+                if (alreadyReported != null) {
+                    call.respond(
+                        HttpStatusCode.Conflict,
+                        ApiResponse<Unit>(success = false, error = "You have already reported this number.")
+                    )
+                    return@post
+                }
 
                 // Save the spam report
                 val reportDoc = Document()
@@ -130,7 +146,7 @@ fun Route.smsRoutes() {
                 var count = 0
 
                 for (report in request.reports) {
-                    val phoneNumber = normalizePhone(report.senderNumber)
+                    val phoneNumber = PhoneNormalizer.normalize(report.senderNumber)
 
                     val reportDoc = Document()
                         .append("_id", ObjectId().toString())
@@ -162,7 +178,7 @@ fun Route.smsRoutes() {
                     return@get
                 }
 
-                val phoneNumber = normalizePhone(rawNumber)
+                val phoneNumber = PhoneNormalizer.normalize(rawNumber)
 
                 // Check caller ID database
                 val callerIdDoc = Collections.callerIds
@@ -284,16 +300,6 @@ private suspend fun updateCallerIdSpamScore(phoneNumber: String, now: String) {
             .append("lastUpdated", now)
 
         Collections.callerIds.insertOne(newDoc)
-    }
-}
-
-private fun normalizePhone(phone: String): String {
-    val digits = phone.replace(Regex("[^+\\d]"), "")
-    return when {
-        digits.startsWith("+") -> digits
-        digits.startsWith("256") -> "+$digits"
-        digits.startsWith("0") -> "+256${digits.substring(1)}"
-        else -> "+$digits"
     }
 }
 

@@ -154,6 +154,16 @@ object ApiClient {
         refreshToken = token
     }
 
+    fun getAuthToken(): String? = authToken
+
+    fun buildWsUrl(path: String): String {
+        val wsBase = baseUrl
+            .replace("https://", "wss://")
+            .replace("http://", "ws://")
+        val token = authToken
+        return if (token != null) "$wsBase$path?token=$token" else "$wsBase$path"
+    }
+
     // ── Session helpers ─────────────────────────────────────────────────
 
     private var appContext: android.content.Context? = null

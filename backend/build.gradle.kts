@@ -31,6 +31,7 @@ dependencies {
     implementation("io.ktor:ktor-server-auth-jwt:$ktorVersion")
     implementation("io.ktor:ktor-server-cors:$ktorVersion")
     implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
+    implementation("io.ktor:ktor-server-websockets:$ktorVersion")
 
     // MongoDB Kotlin Coroutine Driver
     implementation("org.mongodb:mongodb-driver-kotlin-coroutine:$mongodbVersion")

@@ -390,6 +390,17 @@ private fun Route.registerRoute() {
         Collections.users.insertOne(userDoc)
 
         val token = JwtConfig.makeToken(userId, role = "user")
+        val refreshTokenStr = JwtConfig.makeRefreshToken(userId)
+        val ip = call.request.local.remoteAddress
+
+        Collections.refreshTokens.insertOne(
+            Document()
+                .append("token", refreshTokenStr)
+                .append("userId", userId)
+                .append("createdAt", Date.from(Instant.now()))
+                .append("expiresAt", Date.from(Instant.now().plusMillis(JwtConfig.REFRESH_TOKEN_EXPIRATION_MS)))
+                .append("ip", ip)
+        )
 
         call.respond(
             HttpStatusCode.Created,
@@ -397,6 +408,7 @@ private fun Route.registerRoute() {
                 success = true,
                 data = TokenResponse(
                     token = token,
+                    refreshToken = refreshTokenStr,
                     expiresIn = JwtConfig.expiresInSeconds(),
                     userId = userId
                 ),

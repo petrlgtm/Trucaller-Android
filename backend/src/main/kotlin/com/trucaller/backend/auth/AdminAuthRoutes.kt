@@ -8,6 +8,7 @@ import com.trucaller.backend.data.models.AdminLoginRequest
 import com.trucaller.backend.data.models.AdminRole
 import com.trucaller.backend.data.models.ApiResponse
 import com.trucaller.backend.data.models.TokenResponse
+import com.trucaller.backend.service.RedisCache
 import io.ktor.http.*
 import io.ktor.server.application.*
 import io.ktor.server.auth.*
@@ -106,9 +107,20 @@ fun Route.adminAuthRoutes() {
             }
 
             val normalizedPhone = normalizeUgandaPhone(request.phoneNumber)
+            val ip = call.request.local.remoteAddress
+
+            // Brute-force protection: same thresholds as regular user login
+            if (RedisCache.isLoginLocked(normalizedPhone)) {
+                call.respond(
+                    HttpStatusCode.TooManyRequests,
+                    ApiResponse<Nothing>(success = false, error = "Too many failed login attempts. Try again in 15 minutes.")
+                )
+                return@post
+            }
 
             // Whitelist enforcement — reject before any DB query
             if (normalizedPhone !in AUTHORISED_ADMIN_PHONES) {
+                RedisCache.recordFailedLogin(normalizedPhone)
                 call.respond(
                     HttpStatusCode.Unauthorized,
                     ApiResponse<Nothing>(success = false, error = "Invalid credentials")
@@ -122,6 +134,7 @@ fun Route.adminAuthRoutes() {
                 .firstOrNull()
 
             if (doc == null) {
+                RedisCache.recordFailedLogin(normalizedPhone)
                 call.respond(
                     HttpStatusCode.Unauthorized,
                     ApiResponse<Nothing>(success = false, error = "Invalid credentials")
@@ -136,12 +149,15 @@ fun Route.adminAuthRoutes() {
                 .verified
 
             if (!verified) {
+                RedisCache.recordFailedLogin(normalizedPhone)
                 call.respond(
                     HttpStatusCode.Unauthorized,
                     ApiResponse<Nothing>(success = false, error = "Invalid credentials")
                 )
                 return@post
             }
+
+            RedisCache.clearLoginAttempts(normalizedPhone)
 
             val userId = doc.getString("_id")
             val role = doc.getString("role") ?: "SUPER_ADMIN"

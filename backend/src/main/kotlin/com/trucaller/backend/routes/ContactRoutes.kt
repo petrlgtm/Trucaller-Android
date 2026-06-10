@@ -14,7 +14,6 @@ import io.ktor.server.auth.*
 import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
@@ -119,7 +118,7 @@ private fun Route.uploadContacts() {
             .map { Triple(PhoneNormalizer.normalize(it.phoneNumber), it.name, userId) }
 
         if (aliasEntries.isNotEmpty()) {
-            GlobalScope.launch {
+            call.application.launch {
                 runCatching { CallerIdService.contributeAliasBatch(aliasEntries) }
             }
         }

@@ -173,14 +173,15 @@ fun Route.stolenReportRoutes() {
                 return@put
             }
 
-            // Validate status value
-            val validStatuses = listOf("PENDING", "VERIFIED", "ESCALATED", "RESOLVED")
-            if (request.status !in validStatuses) {
+            // Users can only transition to RESOLVED (device recovered) or back to PENDING.
+            // VERIFIED and ESCALATED are admin-only status transitions.
+            val userAllowedStatuses = listOf("PENDING", "RESOLVED")
+            if (request.status !in userAllowedStatuses) {
                 call.respond(
-                    HttpStatusCode.BadRequest,
+                    HttpStatusCode.Forbidden,
                     ApiResponse<Nothing>(
                         success = false,
-                        error = "Invalid status. Must be one of: ${validStatuses.joinToString()}"
+                        error = "Invalid status. Users may only set: ${userAllowedStatuses.joinToString()}. Admin transitions (VERIFIED, ESCALATED) require admin access."
                     )
                 )
                 return@put

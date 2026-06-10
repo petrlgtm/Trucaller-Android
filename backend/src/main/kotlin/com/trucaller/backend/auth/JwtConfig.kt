@@ -77,6 +77,22 @@ object JwtConfig {
     fun expiresInSeconds(): Long = TOKEN_EXPIRATION_MS / 1000
 
     /**
+     * Verifies a raw access token string and returns the decoded JWT, or null
+     * if the token is invalid, expired, or revoked. Used for WebSocket auth
+     * where the standard Ktor JWT auth plugin is unavailable.
+     */
+    fun verifyAccessToken(token: String): com.auth0.jwt.interfaces.DecodedJWT? = try {
+        val decoded = JWT.require(Algorithm.HMAC256(secret))
+            .withIssuer(issuer)
+            .withAudience(audience)
+            .build()
+            .verify(token)
+        val jti = decoded.id
+        if (jti != null && com.trucaller.backend.service.RedisCache.isRevoked(jti)) null
+        else decoded
+    } catch (_: Exception) { null }
+
+    /**
      * Decodes a refresh token and returns the userId claim, or null if invalid.
      */
     fun decodeRefreshToken(token: String): String? = try {

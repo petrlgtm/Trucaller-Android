@@ -74,6 +74,19 @@ fun Route.alarmRoutes() {
                 .firstOrNull()
             val userName = userDoc?.getString("fullName") ?: "Unknown"
 
+            // ── Device ownership check (must happen BEFORE any DB writes) ────
+            val deviceDoc = Collections.devices
+                .find(Filters.eq("deviceId", request.deviceId))
+                .firstOrNull()
+
+            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiResponse<Nothing>(success = false, error = "Not authorized for this device")
+                )
+                return@post
+            }
+
             val logId = ObjectId().toString()
             val now = Instant.now().toString()
 
@@ -89,19 +102,6 @@ fun Route.alarmRoutes() {
                 .append("notes", request.notes)
 
             Collections.alarmLogs.insertOne(alarmDoc)
-
-            // ── Device ownership check ────────────────────────────────────
-            val deviceDoc = Collections.devices
-                .find(Filters.eq("deviceId", request.deviceId))
-                .firstOrNull()
-
-            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
-                call.respond(
-                    HttpStatusCode.Forbidden,
-                    ApiResponse<Nothing>(success = false, error = "Not authorized for this device")
-                )
-                return@post
-            }
 
             // ── Send FCM push to the target device ──────────────────────
             val fcmToken = deviceDoc?.getString("fcmToken")
@@ -191,6 +191,7 @@ fun Route.alarmRoutes() {
 
         // PUT /api/alarms/logs/{logId}/result
         put("/api/alarms/logs/{logId}/result") {
+            val currentUserId = call.userId()
             val logId = call.parameters["logId"]
             if (logId == null) {
                 call.respond(
@@ -226,6 +227,22 @@ fun Route.alarmRoutes() {
                     )
                 )
                 return@put
+            }
+
+            // Ownership check: caller must own the device the alarm log belongs to
+            val alarmLog = Collections.alarmLogs.find(Filters.eq("_id", logId)).firstOrNull()
+            if (alarmLog != null) {
+                val alarmDeviceId = alarmLog.getString("deviceId")
+                if (alarmDeviceId != null) {
+                    val alarmDevice = Collections.devices.find(Filters.eq("deviceId", alarmDeviceId)).firstOrNull()
+                    if (alarmDevice != null && alarmDevice.getString("userId") != currentUserId) {
+                        call.respond(
+                            HttpStatusCode.Forbidden,
+                            ApiResponse<Nothing>(success = false, error = "Not authorized to update this alarm log")
+                        )
+                        return@put
+                    }
+                }
             }
 
             val updateDoc = Document()

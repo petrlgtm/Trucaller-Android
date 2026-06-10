@@ -87,7 +87,7 @@ fun Route.analyticsRoutes() {
                 val callsBlocked = Collections.blockedNumbers
                     .countDocuments(Filters.eq("userId", userId))
 
-                val spamReported = Collections.spamVerifications
+                val spamReported = Collections.spamReports
                     .countDocuments(Filters.eq("userId", userId))
 
                 val smsSpamDetected = Collections.smsSpamReports

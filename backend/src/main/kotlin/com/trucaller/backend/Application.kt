@@ -12,6 +12,7 @@ import com.trucaller.backend.plugins.SecurityLogger
 import com.trucaller.backend.service.BackgroundJobs
 import com.trucaller.backend.service.RedisCache
 import com.trucaller.backend.service.FcmService
+import com.trucaller.backend.routes.adminDashboardWebSocket
 import com.trucaller.backend.routes.adminRoutes
 import com.trucaller.backend.routes.alarmRoutes
 import com.trucaller.backend.routes.callerIdRoutes
@@ -33,11 +34,13 @@ import io.ktor.server.plugins.statuspages.*
 import io.ktor.server.http.content.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import io.ktor.server.websocket.*
 import kotlinx.coroutines.launch
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import io.sentry.Sentry
 import org.slf4j.LoggerFactory
+import java.time.Duration
 
 @Serializable
 data class HealthResponse(
@@ -81,6 +84,14 @@ fun Application.module() {
         allowMethod(HttpMethod.Put)
         allowMethod(HttpMethod.Delete)
         allowMethod(HttpMethod.Patch)
+    }
+
+    // ── WebSockets ───────────────────────────────────────────────────────
+    install(WebSockets) {
+        pingPeriod = Duration.ofSeconds(30)
+        timeout = Duration.ofSeconds(60)
+        maxFrameSize = Long.MAX_VALUE
+        masking = false
     }
 
     // ── Rate Limiter (in-memory sliding window) ──────────────────────────
@@ -234,5 +245,6 @@ fun Application.module() {
         familyGroupRoutes()
         analyticsRoutes()
         adminRoutes()
+        adminDashboardWebSocket()
     }
 }
