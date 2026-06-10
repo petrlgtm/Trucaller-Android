@@ -1,7 +1,6 @@
 package com.byron.trucaller.viewmodel
 
 import android.app.Application
-import android.content.Intent
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
@@ -17,7 +16,6 @@ import com.byron.trucaller.data.repository.BlockedNumberRepository
 import com.byron.trucaller.data.repository.CallerIdRepository
 import com.byron.trucaller.data.repository.ContactRepository
 import com.byron.trucaller.service.ApiClient
-import com.byron.trucaller.service.DriveSyncService
 import android.net.Uri
 import com.byron.trucaller.util.copyImageToInternal
 import com.byron.trucaller.util.readPhoneContacts
@@ -44,7 +42,6 @@ class ContactsViewModel(
 ) : AndroidViewModel(application) {
 
     val autoBackup: Flow<Boolean> = preferences.autoBackup
-    private val driveSyncService = DriveSyncService(application)
 
     private val _isSyncing = MutableStateFlow(false)
     val isSyncing: StateFlow<Boolean> = _isSyncing.asStateFlow()
@@ -356,41 +353,16 @@ class ContactsViewModel(
                 if (downloadedSpam > 0) "$downloadedSpam spam entries" else null
             ).joinToString(", ")
             val downloadPart = if (downloadSummary.isNotEmpty()) " Downloaded $downloadSummary." else ""
-
-            // Step 4: Sync to Google Drive if signed in
             val failNote = if (uploadFailed) " (some uploads failed — will retry)" else ""
-            if (driveSyncService.isSignedIn()) {
-                try { driveSyncService.fullSync() } catch (_: Exception) { }
-            }
             _isSyncing.value = false
 
-            // Only show popup when there's something new to report
             val hasNewContent = importedCount > 0 || downloadSummary.isNotEmpty() || uploadFailed
             if (hasNewContent) {
-                val syncType = if (driveSyncService.isSignedIn()) "synced" else "backed up"
                 _syncMessage.value = "Imported $importedCount new contacts. " +
-                        "${list.size} contacts & $callerIdCount caller IDs $syncType.$downloadPart$failNote"
+                        "${list.size} contacts & $callerIdCount caller IDs backed up.$downloadPart$failNote"
             }
         }
     }
-
-    fun syncToGoogleDrive() {
-        viewModelScope.launch {
-            _isSyncing.value = true
-            if (driveSyncService.isSignedIn()) {
-                val result = driveSyncService.fullSync()
-                _isSyncing.value = false
-                _syncMessage.value = "Cloud sync complete. Downloaded ${result.newContactsDownloaded} new contacts, " +
-                        "${result.newCallerIdDownloaded} new caller IDs."
-            } else {
-                _isSyncing.value = false
-                _syncMessage.value = "Please sign in to Google first."
-            }
-        }
-    }
-
-    fun isDriveSignedIn(): Boolean = driveSyncService.isSignedIn()
-    fun getDriveSignInIntent(): Intent = driveSyncService.getSignInIntent()
 
     fun clearSyncMessage() {
         _syncMessage.value = null

@@ -347,12 +347,12 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                             error = null
                             scope.launch {
                                 authViewModel.register(fullName, phone, email.trim(), password)
-                                val sent = authViewModel.sendEmailOtp(email.trim(), "registration")
+                                val sendError = authViewModel.sendEmailOtp(email.trim(), "registration")
                                 isLoading = false
-                                if (sent) {
+                                if (sendError == null) {
                                     navController.navigate("otp_email/${email.trim()}")
                                 } else {
-                                    error = "Failed to send verification email. Please check the address and try again."
+                                    error = sendError
                                 }
                             }
                         }

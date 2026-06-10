@@ -10,10 +10,14 @@ import com.byron.trucaller.data.repository.ContactRepository
 import com.byron.trucaller.data.repository.UserRepository
 import com.byron.trucaller.service.DeviceRegistrationService
 import com.byron.trucaller.util.hashPassword
+import com.byron.trucaller.service.ApiClient
+import com.byron.trucaller.service.ApiResult
+import com.byron.trucaller.service.TokenResponse
 import io.mockk.coEvery
 import io.mockk.coVerify
 import io.mockk.every
 import io.mockk.mockk
+import io.mockk.mockkObject
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -67,9 +71,24 @@ class AuthViewModelTest {
         contactRepository = mockk(relaxed = true)
         deviceRegistrationService = mockk(relaxed = true)
 
+        // Prevent real network calls from ApiClient singleton
+        mockkObject(ApiClient)
+        coEvery { ApiClient.login(any(), any()) } returns ApiResult(success = false)
+        coEvery { ApiClient.register(any(), any(), any(), any()) } returns ApiResult(success = false)
+        coEvery { ApiClient.sendOtp(any(), any()) } returns ApiResult(success = false)
+        coEvery { ApiClient.verifyOtp(any(), any()) } returns ApiResult(success = false)
+        coEvery { ApiClient.sendEmailOtp(any(), any()) } returns ApiResult(success = false)
+        coEvery { ApiClient.verifyEmailOtp(any(), any()) } returns ApiResult(success = false)
+        coEvery { ApiClient.logout(any()) } returns ApiResult(success = true)
+        coEvery { ApiClient.getUserTrust(any()) } returns ApiResult(success = false)
+        every { ApiClient.getAuthToken() } returns null
+        every { ApiClient.setAuthToken(any()) } returns Unit
+        every { ApiClient.setRefreshToken(any()) } returns Unit
+
         // Stubs for init block
         every { preferences.loggedInUserId } returns flowOf(null)
         every { preferences.adminId } returns flowOf(null)
+        every { preferences.refreshToken } returns flowOf(null)
 
         viewModel = AuthViewModel(
             application,
@@ -186,7 +205,7 @@ class AuthViewModelTest {
 
     @Test
     fun `register stores pending data and generates OTP`() {
-        val result = viewModel.register("New User", "712345678", "securepass")
+        val result = viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
         assertTrue(result)
 
@@ -198,31 +217,27 @@ class AuthViewModelTest {
     }
 
     @Test
-    fun `register generates 6-digit OTP`() {
-        viewModel.register("New User", "712345678", "securepass")
+    fun `register stores email in pending state`() {
+        viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
-        val otp = viewModel.getGeneratedOtp()
-        assertNotNull(otp)
-        assertEquals(6, otp!!.length)
-        assertTrue(otp.all { it.isDigit() })
+        val state = viewModel.authState.value
+        assertEquals("test@example.com", state.pendingEmail)
     }
 
     @Test
-    fun `getGeneratedOtp returns OTP from register`() {
-        viewModel.register("User", "712345678", "pass123")
+    fun `getGeneratedOtp returns null after register (OTP now sent via backend email)`() {
+        viewModel.register("User", "712345678", "test@example.com", "pass123")
 
-        val otp = viewModel.getGeneratedOtp()
-        assertNotNull(otp)
+        assertNull(viewModel.getGeneratedOtp())
     }
 
     // ── OTP Verification ────────────────────────────────────────────────
 
     @Test
-    fun `verifyOtp succeeds with correct OTP code`() = runTest {
-        viewModel.register("New User", "712345678", "securepass")
-        val otp = viewModel.getGeneratedOtp()!!
+    fun `verifyOtp succeeds when backend-verified`() = runTest {
+        viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
-        val result = viewModel.verifyOtp(otp)
+        val result = viewModel.verifyOtp("ignored", backendVerified = true)
 
         assertTrue(result)
         assertTrue(viewModel.authState.value.isAuthenticated)
@@ -231,7 +246,7 @@ class AuthViewModelTest {
 
     @Test
     fun `verifyOtp fails with wrong OTP code`() = runTest {
-        viewModel.register("New User", "712345678", "securepass")
+        viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
         val result = viewModel.verifyOtp("000000")
 
@@ -248,10 +263,9 @@ class AuthViewModelTest {
 
     @Test
     fun `verifyOtp creates user in repository`() = runTest {
-        viewModel.register("New User", "712345678", "securepass")
-        val otp = viewModel.getGeneratedOtp()!!
+        viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
-        viewModel.verifyOtp(otp)
+        viewModel.verifyOtp("ignored", backendVerified = true)
 
         coVerify { userRepository.insertUser(match {
             it.fullName == "New User" &&
@@ -262,10 +276,9 @@ class AuthViewModelTest {
 
     @Test
     fun `verifyOtp creates self-contact for new user`() = runTest {
-        viewModel.register("New User", "712345678", "securepass")
-        val otp = viewModel.getGeneratedOtp()!!
+        viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
-        viewModel.verifyOtp(otp)
+        viewModel.verifyOtp("ignored", backendVerified = true)
 
         coVerify { contactRepository.insertContact(match {
             it.name == "New User" &&
@@ -276,10 +289,9 @@ class AuthViewModelTest {
 
     @Test
     fun `verifyOtp clears pending state after success`() = runTest {
-        viewModel.register("New User", "712345678", "securepass")
-        val otp = viewModel.getGeneratedOtp()!!
+        viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
-        viewModel.verifyOtp(otp)
+        viewModel.verifyOtp("ignored", backendVerified = true)
 
         val state = viewModel.authState.value
         assertNull(state.pendingPhone)
@@ -290,7 +302,7 @@ class AuthViewModelTest {
 
     @Test
     fun `verifyOtp with firebaseVerified bypasses OTP check`() = runTest {
-        viewModel.register("New User", "712345678", "securepass")
+        viewModel.register("New User", "712345678", "test@example.com", "securepass")
 
         val result = viewModel.verifyOtp("any-code", firebaseVerified = true)
 
@@ -464,10 +476,12 @@ class AuthViewModelTest {
     @Test
     fun `verifyResetOtp succeeds with correct OTP`() = runTest {
         coEvery { userRepository.getUserByPhone("+256712345678") } returns testUser
+        // Simulate network down so offline OTP fallback activates
+        coEvery { ApiClient.verifyOtp(any(), any()) } throws Exception("Network offline")
         viewModel.requestPasswordReset("712345678")
 
         val otp = viewModel.getResetOtp()!!
-        assertTrue(viewModel.verifyResetOtp(otp))
+        assertTrue(viewModel.verifyResetOtp("712345678", otp))
     }
 
     @Test
@@ -475,12 +489,12 @@ class AuthViewModelTest {
         coEvery { userRepository.getUserByPhone("+256712345678") } returns testUser
         viewModel.requestPasswordReset("712345678")
 
-        assertFalse(viewModel.verifyResetOtp("000000"))
+        assertFalse(viewModel.verifyResetOtp("712345678", "000000"))
     }
 
     @Test
-    fun `verifyResetOtp fails when no reset was requested`() {
-        assertFalse(viewModel.verifyResetOtp("123456"))
+    fun `verifyResetOtp fails when no reset was requested`() = runTest {
+        assertFalse(viewModel.verifyResetOtp("712345678", "123456"))
     }
 
     // ── Logout ──────────────────────────────────────────────────────────

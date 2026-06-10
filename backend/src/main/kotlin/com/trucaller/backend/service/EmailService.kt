@@ -38,6 +38,9 @@ object EmailService {
             put("mail.smtp.host", smtpHost)
             put("mail.smtp.port", smtpPort)
             put("mail.smtp.ssl.trust", smtpHost)
+            put("mail.smtp.connectiontimeout", "10000")
+            put("mail.smtp.timeout", "10000")
+            put("mail.smtp.writetimeout", "10000")
         }
         return Session.getInstance(props, object : Authenticator() {
             override fun getPasswordAuthentication() =

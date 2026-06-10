@@ -1,7 +1,6 @@
 package com.byron.trucaller.ui.main
 
 import android.Manifest
-import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -128,7 +127,6 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
     val autoBackup by contactsViewModel.autoBackup.collectAsState(initial = true)
     val syncMessage by contactsViewModel.syncMessage.collectAsState()
     val isSyncing by contactsViewModel.isSyncing.collectAsState()
-    var isDriveConnected by remember { mutableStateOf(contactsViewModel.isDriveSignedIn()) }
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
@@ -161,15 +159,6 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
         if (granted) contactsViewModel.syncContacts(user.id)
-    }
-
-    val driveSignInLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.StartActivityForResult()
-    ) { result ->
-        if (result.resultCode == Activity.RESULT_OK) {
-            isDriveConnected = true
-            contactsViewModel.syncToGoogleDrive()
-        }
     }
 
     // Auto-sync contacts on first load
@@ -419,51 +408,6 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                 }
             }
 
-            // Google Drive card — only show when NOT connected (hides after sign-in)
-            if (!isDriveConnected) {
-                Spacer(modifier = Modifier.height(8.dp))
-
-                TruCallerCard(
-                    elevation = 0.dp
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.CloudUpload,
-                            contentDescription = "Google Drive",
-                            tint = colorScheme.onSurface.copy(alpha = 0.5f),
-                            modifier = Modifier.size(24.dp)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Google Drive Backup",
-                                fontWeight = FontWeight.SemiBold,
-                                fontSize = 14.sp,
-                                color = colorScheme.onSurface
-                            )
-                            Text(
-                                "Sign in to enable cloud backup",
-                                fontSize = 12.sp,
-                                color = colorScheme.onSurface.copy(alpha = 0.6f)
-                            )
-                        }
-                        Button(
-                            onClick = {
-                                driveSignInLauncher.launch(contactsViewModel.getDriveSignInIntent())
-                            },
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = colorScheme.primary,
-                                contentColor = colorScheme.onPrimary
-                            )
-                        ) {
-                            Text("Connect", fontSize = 12.sp)
-                        }
-                    }
-                }
-            }
         }
 
         // Contact list

@@ -100,6 +100,7 @@ class CallerIdViewModelTest {
 
         // Default stubs for init block
         every { preferences.recentLookups } returns flowOf(emptyList())
+        every { preferences.loggedInUserId } returns flowOf(null)
         every { callerIdRepository.getAllEntries() } returns flowOf(emptyList())
 
         viewModel = CallerIdViewModel(
@@ -115,7 +116,7 @@ class CallerIdViewModelTest {
     @Test
     fun `lookup with found entry updates lookupResult and clears notFound`() = runTest {
         val lookupResult = LookupResult(callerIdEntry = safeEntry, contactMatch = null, source = "caller_id_db")
-        coEvery { callerIdRepository.lookupNumber("+256712345678") } returns lookupResult
+        coEvery { callerIdRepository.lookupNumber("+256712345678", null) } returns lookupResult
         coEvery { callerIdRepository.getById("cid-001") } returns safeEntry
 
         viewModel.lookup("+256712345678")
@@ -146,7 +147,7 @@ class CallerIdViewModelTest {
 
         assertNull(viewModel.lookupResult.value)
         assertFalse(viewModel.notFound.value)
-        coVerify(exactly = 0) { callerIdRepository.lookupNumber(any()) }
+        coVerify(exactly = 0) { callerIdRepository.lookupNumber(any(), null) }
     }
 
     @Test
@@ -154,13 +155,13 @@ class CallerIdViewModelTest {
         viewModel.lookup("   ")
         advanceUntilIdle()
 
-        coVerify(exactly = 0) { callerIdRepository.lookupNumber(any()) }
+        coVerify(exactly = 0) { callerIdRepository.lookupNumber(any(), null) }
     }
 
     @Test
     fun `lookup adds entry to recent lookups`() = runTest {
         val lookupResult = LookupResult(callerIdEntry = safeEntry, contactMatch = null, source = "caller_id_db")
-        coEvery { callerIdRepository.lookupNumber("+256712345678") } returns lookupResult
+        coEvery { callerIdRepository.lookupNumber("+256712345678", null) } returns lookupResult
         coEvery { callerIdRepository.getById("cid-001") } returns safeEntry
 
         viewModel.lookup("+256712345678")
@@ -324,7 +325,7 @@ class CallerIdViewModelTest {
     fun `clearLookup resets lookupResult and notFound`() = runTest {
         // First do a lookup
         val lookupResult = LookupResult(callerIdEntry = safeEntry, contactMatch = null, source = "caller_id_db")
-        coEvery { callerIdRepository.lookupNumber("+256712345678") } returns lookupResult
+        coEvery { callerIdRepository.lookupNumber("+256712345678", null) } returns lookupResult
         coEvery { callerIdRepository.getById("cid-001") } returns safeEntry
 
         viewModel.lookup("+256712345678")

@@ -230,12 +230,15 @@ class AuthViewModel(
 
     /**
      * Sends an OTP to [email] via the backend's Gmail SMTP gateway.
-     * Returns true if the backend accepted the request.
+     * Returns null on success, or an error message string on failure.
      */
-    suspend fun sendEmailOtp(email: String, purpose: String = "registration"): Boolean {
+    suspend fun sendEmailOtp(email: String, purpose: String = "registration"): String? {
         return try {
-            ApiClient.sendEmailOtp(email.trim().lowercase(), purpose).success
-        } catch (_: Exception) { false }
+            val result = ApiClient.sendEmailOtp(email.trim().lowercase(), purpose)
+            if (result.success) null else (result.error ?: "Failed to send verification email")
+        } catch (e: Exception) {
+            e.message ?: "Network error"
+        }
     }
 
     /** Verifies [code] against the backend email OTP store. Does NOT create the account. */

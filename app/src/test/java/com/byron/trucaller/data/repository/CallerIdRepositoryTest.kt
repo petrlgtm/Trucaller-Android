@@ -73,7 +73,8 @@ class CallerIdRepositoryTest {
         phoneNumber = "+256700000003",
         name = "Alias Name",
         source = "user",
-        addedAt = "2026-02-01T00:00:00Z"
+        addedAt = "2026-02-01T00:00:00Z",
+        userId = "user-001"
     )
 
     @Before
@@ -140,14 +141,14 @@ class CallerIdRepositoryTest {
     // ── lookupNumber: Tier 3 — Central Contacts ─────────────────────────
 
     @Test
-    fun `lookupNumber returns central_drive source when contact exists in ContactDao`() = runTest {
+    fun `lookupNumber returns contacts source when contact exists in ContactDao`() = runTest {
         coEvery { callerIdDao.getByPhone("+256700000002") } returns null
         coEvery { userDao.getByPhone("+256700000002") } returns null
-        coEvery { contactDao.getByPhone("+256700000002") } returns contact
+        coEvery { contactDao.getByPhoneAndUser("+256700000002", "user-001") } returns contact
 
-        val result = repository.lookupNumber("+256700000002")
+        val result = repository.lookupNumber("+256700000002", "user-001")
 
-        assertEquals("central_drive", result.source)
+        assertEquals("contacts", result.source)
         assertNotNull(result.callerIdEntry)
         assertEquals("Contact Person", result.callerIdEntry!!.name)
         assertNotNull(result.contactMatch)
@@ -160,10 +161,10 @@ class CallerIdRepositoryTest {
     fun `lookupNumber returns alias source when aliases exist`() = runTest {
         coEvery { callerIdDao.getByPhone("+256700000003") } returns null
         coEvery { userDao.getByPhone("+256700000003") } returns null
-        coEvery { contactDao.getByPhone("+256700000003") } returns null
+        coEvery { contactDao.getByPhoneAndUser("+256700000003", "user-001") } returns null
         coEvery { contactAliasDao.getAliasesByPhoneOnce("+256700000003") } returns listOf(alias)
 
-        val result = repository.lookupNumber("+256700000003")
+        val result = repository.lookupNumber("+256700000003", "user-001")
 
         assertEquals("alias", result.source)
         assertNotNull(result.callerIdEntry)
@@ -172,17 +173,17 @@ class CallerIdRepositoryTest {
 
     @Test
     fun `lookupNumber alias tier selects best alias by source priority`() = runTest {
-        val aliasUser = alias.copy(id = "alias-u", source = "user", name = "User Alias")
-        val aliasWa = alias.copy(id = "alias-w", source = "whatsapp", name = "WhatsApp Alias")
-        val aliasCb = alias.copy(id = "alias-c", source = "contact_book", name = "Contact Book Alias")
+        val aliasUser = alias.copy(id = "alias-u", source = "user", name = "User Alias", userId = "user-001")
+        val aliasWa = alias.copy(id = "alias-w", source = "whatsapp", name = "WhatsApp Alias", userId = "user-001")
+        val aliasCb = alias.copy(id = "alias-c", source = "contact_book", name = "Contact Book Alias", userId = "user-001")
 
         coEvery { callerIdDao.getByPhone("+256700000003") } returns null
         coEvery { userDao.getByPhone("+256700000003") } returns null
-        coEvery { contactDao.getByPhone("+256700000003") } returns null
+        coEvery { contactDao.getByPhoneAndUser("+256700000003", "user-001") } returns null
         coEvery { contactAliasDao.getAliasesByPhoneOnce("+256700000003") } returns
                 listOf(aliasWa, aliasCb, aliasUser)
 
-        val result = repository.lookupNumber("+256700000003")
+        val result = repository.lookupNumber("+256700000003", "user-001")
 
         // "user" source has highest priority
         assertEquals("User Alias", result.callerIdEntry!!.name)
