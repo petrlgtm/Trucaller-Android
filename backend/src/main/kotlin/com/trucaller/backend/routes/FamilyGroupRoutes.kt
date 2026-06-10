@@ -100,6 +100,7 @@ fun Route.familyGroupRoutes() {
             joinGroup()
             updateMemberRole()
             removeMember()
+            deleteGroup()
             getGroupDevices()
             sendGroupAlert()
         }
@@ -765,6 +766,48 @@ private fun Route.removeMember() {
                 success = true,
                 message = "Member removed from group"
             )
+        )
+    }
+}
+
+// ── DELETE /api/family/{groupId} ────────────────────────────────────────
+
+private fun Route.deleteGroup() {
+    delete("/{groupId}") {
+        val currentUserId = call.userId()
+        val groupId = call.parameters["groupId"]
+
+        if (groupId.isNullOrBlank()) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Missing groupId")
+            )
+            return@delete
+        }
+
+        val groupDoc = Collections.familyGroups.find(Filters.eq("_id", groupId)).firstOrNull()
+        if (groupDoc == null) {
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiResponse<Unit>(success = false, error = "Group not found")
+            )
+            return@delete
+        }
+
+        if (groupDoc.getString("ownerId") != currentUserId) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                ApiResponse<Unit>(success = false, error = "Only the group OWNER can delete the group")
+            )
+            return@delete
+        }
+
+        Collections.familyMembers.deleteMany(Filters.eq("groupId", groupId))
+        Collections.familyGroups.deleteOne(Filters.eq("_id", groupId))
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse<Nothing>(success = true, message = "Group deleted successfully")
         )
     }
 }

@@ -64,6 +64,11 @@ data class LogoutRequest(
     val refreshToken: String? = null
 )
 
+@Serializable
+data class UserProfileUpdateRequest(
+    val fullName: String
+)
+
 // ── Response DTOs ──
 
 @Serializable

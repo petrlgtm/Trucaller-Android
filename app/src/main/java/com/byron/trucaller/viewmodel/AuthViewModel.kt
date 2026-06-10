@@ -380,7 +380,7 @@ class AuthViewModel(
             
             // Sync to backend
             try {
-                ApiClient.updateProfile(mapOf("fullName" to newName))
+                ApiClient.updateProfile(newName)
             } catch (_: Exception) {}
         }
     }

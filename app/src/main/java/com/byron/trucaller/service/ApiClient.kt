@@ -209,8 +209,14 @@ object ApiClient {
     suspend fun deleteAccount(): ApiResult<Unit> =
         delete("/api/auth/delete-account")
 
-    suspend fun updateProfile(data: Map<String, Any>): ApiResult<Unit> =
-        put("/api/auth/profile", data)
+    suspend fun updateProfile(fullName: String): ApiResult<Unit> =
+        put("/api/auth/profile", mapOf("fullName" to fullName))
+
+    suspend fun logout(refreshToken: String? = null): ApiResult<Unit> =
+        post("/api/auth/logout", if (refreshToken != null) mapOf("refreshToken" to refreshToken) else emptyMap<String, Any>())
+
+    suspend fun revokeAllSessions(): ApiResult<Unit> =
+        delete("/api/auth/sessions")
 
     // ── Device Endpoints ────────────────────────────────────────────────
 
@@ -503,8 +509,8 @@ object ApiClient {
 
     // ── Family Group Endpoints ──────────────────────────────────────────
 
-    suspend fun createFamilyGroup(name: String, createdBy: String): ApiResult<Map<String, Any>> =
-        post("/api/family/create", mapOf("name" to name, "createdBy" to createdBy))
+    suspend fun createFamilyGroup(name: String, createdBy: String = ""): ApiResult<Map<String, Any>> =
+        post("/api/family/create", mapOf("name" to name))
 
     suspend fun getMyFamilyGroups(): ApiResult<List<Map<String, Any>>> =
         get("/api/family/my-groups")
@@ -523,8 +529,8 @@ object ApiClient {
     suspend fun inviteFamilyMember(groupId: String, phoneNumber: String, role: String = "MEMBER"): ApiResult<Map<String, Any>> =
         post("/api/family/$groupId/invite", mapOf("phoneNumber" to phoneNumber, "role" to role))
 
-    suspend fun joinFamilyGroup(inviteCode: String, userId: String): ApiResult<Map<String, Any>> =
-        post("/api/family/join", mapOf("inviteCode" to inviteCode, "userId" to userId))
+    suspend fun joinFamilyGroup(inviteCode: String, userId: String = ""): ApiResult<Map<String, Any>> =
+        post("/api/family/join", mapOf("inviteCode" to inviteCode))
 
     suspend fun updateFamilyMemberRole(groupId: String, userId: String, role: String): ApiResult<Unit> =
         put("/api/family/$groupId/members/$userId/role", mapOf("role" to role))

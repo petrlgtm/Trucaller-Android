@@ -33,6 +33,7 @@ fun Routing.authRoutes() {
         refreshTokenRoute()
         logoutRoute()
         revokeAllSessionsRoute()
+        updateProfileRoute()
     }
 }
 
@@ -754,6 +755,51 @@ private fun Route.refreshTokenRoute() {
                 )
             )
         )
+    }
+}
+
+// ── PUT /api/auth/profile ───────────────────────────────────────────────
+
+private fun Route.updateProfileRoute() {
+    authenticate("auth-jwt") {
+        put("/profile") {
+            val userId = call.userId()
+            val request = try {
+                call.receive<UserProfileUpdateRequest>()
+            } catch (e: Exception) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Unit>(success = false, error = "Invalid request. 'fullName' is required.")
+                )
+                return@put
+            }
+
+            if (request.fullName.isBlank()) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Unit>(success = false, error = "'fullName' must not be blank.")
+                )
+                return@put
+            }
+
+            val result = Collections.users.updateOne(
+                Filters.eq("_id", userId),
+                Updates.set("fullName", request.fullName.trim())
+            )
+
+            if (result.matchedCount == 0L) {
+                call.respond(
+                    HttpStatusCode.NotFound,
+                    ApiResponse<Unit>(success = false, error = "User not found.")
+                )
+                return@put
+            }
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Unit>(success = true, message = "Profile updated successfully.")
+            )
+        }
     }
 }
 
