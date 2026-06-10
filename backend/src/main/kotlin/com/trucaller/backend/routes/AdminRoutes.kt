@@ -23,12 +23,23 @@ import kotlinx.serialization.json.JsonElement
 import org.bson.Document
 import org.bson.types.ObjectId
 
-private fun Document.toJsonElement(): JsonElement = Json.parseToJsonElement(toJson())
-private fun Document.toJsonElementStripped(vararg fields: String): JsonElement {
-    val copy = Document(this)
-    fields.forEach { copy.remove(it) }
-    return Json.parseToJsonElement(copy.toJson())
+private fun idFilter(id: String) = try {
+    Filters.eq("_id", ObjectId(id))
+} catch (_: Exception) {
+    Filters.eq("_id", id)
 }
+
+private fun Document.normalizedCopy(vararg stripFields: String): Document {
+    val copy = Document(this)
+    stripFields.forEach { copy.remove(it) }
+    // Flatten ObjectId _id to a plain hex string so Android can use it directly
+    val rawId = copy["_id"]
+    if (rawId is ObjectId) copy["_id"] = rawId.toHexString()
+    return copy
+}
+private fun Document.toJsonElement(): JsonElement = Json.parseToJsonElement(normalizedCopy().toJson())
+private fun Document.toJsonElementStripped(vararg fields: String): JsonElement =
+    Json.parseToJsonElement(normalizedCopy(*fields).toJson())
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -234,7 +245,7 @@ fun Route.adminRoutes() {
                 }
 
                 val userDoc = Collections.users
-                    .find(Filters.eq("_id", userId))
+                    .find(idFilter(userId))
                     .toList()
                     .firstOrNull()
 
@@ -520,7 +531,7 @@ fun Route.adminRoutes() {
                 }
 
                 val result = Collections.callerIds.updateOne(
-                    Filters.eq("_id", entryId),
+                    idFilter(entryId),
                     Updates.combine(updates)
                 )
 
@@ -594,7 +605,7 @@ fun Route.adminRoutes() {
                 }
 
                 val result = Collections.callerIds.deleteOne(
-                    Filters.eq("_id", entryId)
+                    idFilter(entryId)
                 )
 
                 if (result.deletedCount == 0L) {
@@ -663,7 +674,7 @@ fun Route.adminRoutes() {
                     .append("updatedAt", java.time.Instant.now().toString())
 
                 val result = Collections.stolenReports.updateOne(
-                    Filters.eq("_id", reportId),
+                    idFilter(reportId),
                     Document("\$set", updateFields)
                 )
 
@@ -678,7 +689,7 @@ fun Route.adminRoutes() {
                 // When resolving, optionally update device status back to ACTIVE
                 if (request.status == "RESOLVED") {
                     val reportDoc = Collections.stolenReports
-                        .find(Filters.eq("_id", reportId))
+                        .find(idFilter(reportId))
                         .toList()
                         .firstOrNull()
                     val deviceId = reportDoc?.getString("deviceId")
@@ -724,7 +735,7 @@ fun Route.adminRoutes() {
                 }
 
                 val result = Collections.users.updateOne(
-                    Filters.eq("_id", targetId),
+                    idFilter(targetId),
                     Updates.combine(
                         Updates.set("status", request.status),
                         Updates.set("updatedAt", java.time.Instant.now().toString())
@@ -752,7 +763,7 @@ fun Route.adminRoutes() {
                     return@delete
                 }
 
-                val userResult = Collections.users.deleteOne(Filters.eq("_id", targetId))
+                val userResult = Collections.users.deleteOne(idFilter(targetId))
                 if (userResult.deletedCount == 0L) {
                     call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(success = false, error = "User not found"))
                     return@delete
@@ -835,7 +846,7 @@ fun Route.adminRoutes() {
                 }
 
                 val result = Collections.smsSpamReports.updateOne(
-                    Filters.eq("_id", reportId),
+                    idFilter(reportId),
                     Updates.combine(
                         Updates.set("status", request.status),
                         Updates.set("updatedAt", java.time.Instant.now().toString())
@@ -863,7 +874,7 @@ fun Route.adminRoutes() {
                     return@post
                 }
 
-                val reportDoc = Collections.smsSpamReports.find(Filters.eq("_id", reportId)).toList().firstOrNull()
+                val reportDoc = Collections.smsSpamReports.find(idFilter(reportId)).toList().firstOrNull()
                 if (reportDoc == null) {
                     call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(success = false, error = "SMS spam report not found"))
                     return@post
@@ -902,7 +913,7 @@ fun Route.adminRoutes() {
                 }
 
                 Collections.smsSpamReports.updateOne(
-                    Filters.eq("_id", reportId),
+                    idFilter(reportId),
                     Updates.combine(Updates.set("status", "REVIEWED"), Updates.set("updatedAt", now))
                 )
 
@@ -963,7 +974,7 @@ fun Route.adminRoutes() {
                 }
 
                 val result = Collections.adminUsers.updateOne(
-                    Filters.eq("_id", adminId),
+                    idFilter(adminId),
                     Updates.combine(
                         Updates.set("name", request.name),
                         Updates.set("email", request.email)
@@ -1029,7 +1040,7 @@ fun Route.adminRoutes() {
 
                 // Fetch admin user document
                 val adminDoc = Collections.adminUsers
-                    .find(Filters.eq("_id", adminId))
+                    .find(idFilter(adminId))
                     .firstOrNull()
 
                 if (adminDoc == null) {
@@ -1059,7 +1070,7 @@ fun Route.adminRoutes() {
                     .hashToString(12, request.newPassword.toCharArray())
 
                 Collections.adminUsers.updateOne(
-                    Filters.eq("_id", adminId),
+                    idFilter(adminId),
                     Updates.set("passwordHash", newHash)
                 )
 
@@ -1094,7 +1105,7 @@ fun Route.adminRoutes() {
                 }
 
                 val userDoc = Collections.users
-                    .find(Filters.eq("_id", userId))
+                    .find(idFilter(userId))
                     .toList()
                     .firstOrNull()
 
@@ -1180,7 +1191,7 @@ fun Route.adminRoutes() {
                 }
 
                 val result = Collections.users.updateOne(
-                    Filters.eq("_id", userId),
+                    idFilter(userId),
                     Updates.combine(updates)
                 )
 
