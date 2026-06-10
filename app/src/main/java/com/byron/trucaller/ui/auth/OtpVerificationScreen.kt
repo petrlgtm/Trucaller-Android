@@ -195,16 +195,21 @@ fun OtpVerificationScreen(
             isLoading = true
             authViewModel.phoneAuthManager.verifyCode(otp)
         } else {
-            // Demo mode: local OTP check
+            // AT SMS mode: verify code against backend, then create account
             isLoading = true
             scope.launch {
-                delay(500)
-                val success = authViewModel.verifyOtp(otp)
-                isLoading = false
-                if (success) {
-                    onVerificationSuccess()
+                val codeValid = authViewModel.verifyOtpViaBackend(phone, otp)
+                if (codeValid) {
+                    val success = authViewModel.verifyOtp(otp, backendVerified = true)
+                    isLoading = false
+                    if (success) {
+                        onVerificationSuccess()
+                    } else {
+                        error = "Failed to create account. Please try again."
+                    }
                 } else {
-                    error = "Invalid OTP code. Check the hint below."
+                    isLoading = false
+                    error = "Invalid or expired OTP code."
                 }
             }
         }
@@ -398,6 +403,10 @@ fun OtpVerificationScreen(
                         error = null
                         if (authViewModel.isFirebaseAvailable() && activity != null) {
                             authViewModel.phoneAuthManager.resendCode(phone, activity)
+                        } else {
+                            scope.launch {
+                                authViewModel.sendOtpViaSms(phone, "registration")
+                            }
                         }
                     }) {
                         Text(
@@ -410,42 +419,22 @@ fun OtpVerificationScreen(
 
                 Spacer(modifier = Modifier.height(24.dp))
 
-                if (!authViewModel.isFirebaseAvailable()) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                colorScheme.surfaceVariant,
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(12.dp)
-                    ) {
-                        Text(
-                            text = "Demo Mode: Your OTP is ${authViewModel.getGeneratedOtp() ?: "------"}",
-                            color = colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(
+                            colorScheme.surfaceVariant,
+                            RoundedCornerShape(8.dp)
                         )
-                    }
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                colorScheme.surfaceVariant,
-                                RoundedCornerShape(8.dp)
-                            )
-                            .padding(12.dp)
-                    ) {
-                        Text(
-                            text = "A verification code has been sent to your phone via SMS",
-                            color = colorScheme.onSurfaceVariant,
-                            fontSize = 13.sp,
-                            textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                    }
+                        .padding(12.dp)
+                ) {
+                    Text(
+                        text = "A verification code has been sent to your phone via SMS",
+                        color = colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
                 }
             }
         }

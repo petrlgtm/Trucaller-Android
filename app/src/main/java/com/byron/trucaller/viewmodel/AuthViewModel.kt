@@ -50,6 +50,7 @@ class AuthViewModel(
     val adminUser: StateFlow<AdminUser?> = _adminUser.asStateFlow()
 
     private val _resetOtp = MutableStateFlow<String?>(null)
+    private val _verifiedResetCode = MutableStateFlow<String?>(null)
 
     init {
         viewModelScope.launch {
@@ -242,10 +243,30 @@ class AuthViewModel(
         phoneAuthManager.configureTestAutoRetrieval(phoneNumber, smsCode)
     }
 
-    suspend fun verifyOtp(code: String, firebaseVerified: Boolean = false): Boolean {
+    /**
+     * Sends an OTP to [phone] via the backend's Africa's Talking SMS gateway.
+     * [purpose] must be "registration" or "password_reset".
+     * Returns true if the backend accepted the request.
+     */
+    suspend fun sendOtpViaSms(phone: String, purpose: String = "registration"): Boolean {
+        val fullPhone = if (phone.startsWith("+")) phone else "+256$phone"
+        return try {
+            ApiClient.sendOtp(fullPhone, purpose).success
+        } catch (_: Exception) { false }
+    }
+
+    /** Verifies [code] against the backend OTP store. Does NOT create the account. */
+    suspend fun verifyOtpViaBackend(phone: String, code: String): Boolean {
+        val fullPhone = if (phone.startsWith("+")) phone else "+256$phone"
+        return try {
+            ApiClient.verifyOtp(fullPhone, code).success
+        } catch (_: Exception) { false }
+    }
+
+    suspend fun verifyOtp(code: String, firebaseVerified: Boolean = false, backendVerified: Boolean = false): Boolean {
         val state = _authState.value
 
-        if (!firebaseVerified) {
+        if (!firebaseVerified && !backendVerified) {
             val expectedOtp = state.generatedOtp ?: return false
             if (code != expectedOtp) return false
         }
@@ -317,14 +338,34 @@ class AuthViewModel(
 
     suspend fun requestPasswordReset(phone: String): Boolean {
         val fullPhone = "+256$phone"
-        val user = userRepository.getUserByPhone(fullPhone) ?: return false
-        _resetOtp.value = (100000..999999).random().toString()
-        return true
+        return try {
+            val result = ApiClient.sendOtp(fullPhone, "password_reset")
+            if (result.success) return true
+            // Backend said user not found — honour that
+            if (result.error?.contains("not found", ignoreCase = true) == true) return false
+            // Service error — local fallback so user can still reset offline
+            val user = userRepository.getUserByPhone(fullPhone) ?: return false
+            _resetOtp.value = (100000..999999).random().toString()
+            true
+        } catch (_: Exception) {
+            // Network error — local fallback
+            val user = userRepository.getUserByPhone(fullPhone) ?: return false
+            _resetOtp.value = (100000..999999).random().toString()
+            true
+        }
     }
 
-    fun verifyResetOtp(code: String): Boolean {
-        val expected = _resetOtp.value ?: return false
-        return code == expected
+    suspend fun verifyResetOtp(phone: String, code: String): Boolean {
+        val fullPhone = "+256$phone"
+        return try {
+            val result = ApiClient.verifyOtp(fullPhone, code)
+            if (result.success) _verifiedResetCode.value = code
+            result.success
+        } catch (_: Exception) {
+            // Offline fallback against locally-generated OTP
+            val expected = _resetOtp.value ?: return false
+            (code == expected).also { if (it) _verifiedResetCode.value = code }
+        }
     }
 
     fun getResetOtp(): String? = _resetOtp.value
@@ -340,9 +381,23 @@ class AuthViewModel(
 
     suspend fun resetPassword(phone: String, newPassword: String): Boolean {
         val fullPhone = "+256$phone"
+        val code = _verifiedResetCode.value
+        if (code != null) {
+            try {
+                val result = ApiClient.resetPassword(fullPhone, code, newPassword)
+                if (result.success) {
+                    _verifiedResetCode.value = null
+                    _resetOtp.value = null
+                    userRepository.getUserByPhone(fullPhone)?.let { user ->
+                        userRepository.updateUser(user.copy(passwordHash = hashPassword(newPassword)))
+                    }
+                    return true
+                }
+            } catch (_: Exception) { }
+        }
+        // Local fallback (offline or backend error)
         val user = userRepository.getUserByPhone(fullPhone) ?: return false
-        val updated = user.copy(passwordHash = hashPassword(newPassword))
-        userRepository.updateUser(updated)
+        userRepository.updateUser(user.copy(passwordHash = hashPassword(newPassword)))
         return true
     }
 

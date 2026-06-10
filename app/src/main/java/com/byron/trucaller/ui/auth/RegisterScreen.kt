@@ -341,12 +341,14 @@ fun RegisterScreen(navController: NavController, authViewModel: AuthViewModel) {
                                         )
                                         navController.navigate("otp/$phone")
                                     } else {
-                                        // Demo mode fallback
-                                        val otp = authViewModel.getGeneratedOtp()
-                                        if (otp != null) {
-                                            snackbarHostState.showSnackbar("Your OTP code: $otp")
+                                        isLoading = true
+                                        val smsSent = authViewModel.sendOtpViaSms(phone, "registration")
+                                        isLoading = false
+                                        if (smsSent) {
+                                            navController.navigate("otp/$phone")
+                                        } else {
+                                            error = "Failed to send verification SMS. Please check your number and try again."
                                         }
-                                        navController.navigate("otp/$phone")
                                     }
                                 } else {
                                     error = "Registration failed. Please try again."

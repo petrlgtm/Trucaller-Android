@@ -428,17 +428,23 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                                 error = "Enter all 6 digits"
                                 return@TruCallerButton
                             }
-                            if (authViewModel.verifyResetOtp(otp)) {
-                                step = 3
-                                error = null
-                            } else {
-                                error = "Invalid verification code"
+                            isLoading = true
+                            error = null
+                            scope.launch {
+                                val valid = authViewModel.verifyResetOtp(phone, otp)
+                                isLoading = false
+                                if (valid) {
+                                    step = 3
+                                } else {
+                                    error = "Invalid or expired verification code"
+                                }
                             }
                         },
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        enabled = otp.length == 6
+                        isLoading = isLoading,
+                        enabled = otp.length == 6 && !isLoading
                     )
 
                     Spacer(modifier = Modifier.height(24.dp))
@@ -468,27 +474,6 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                     }
 
                     Spacer(modifier = Modifier.height(24.dp))
-
-                    // Demo mode hint -- only shown when Firebase is unavailable
-                    if (!authViewModel.isFirebaseAvailable()) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(
-                                    colorScheme.surfaceVariant,
-                                    RoundedCornerShape(8.dp)
-                                )
-                                .padding(12.dp)
-                        ) {
-                            Text(
-                                text = "Demo Mode: Your OTP is ${authViewModel.getResetOtp() ?: "------"}",
-                                color = colorScheme.onSurfaceVariant,
-                                fontSize = 13.sp,
-                                textAlign = TextAlign.Center,
-                                modifier = Modifier.fillMaxWidth()
-                            )
-                        }
-                    }
                 }
 
                 // Step 3: Set new password
