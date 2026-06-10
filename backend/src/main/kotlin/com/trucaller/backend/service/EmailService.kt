@@ -11,24 +11,25 @@ import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 
 /**
- * Sends OTP and transactional emails via the Resend HTTP API.
+ * Sends OTP and transactional emails via the Brevo (Sendinblue) HTTP API.
  *
  * Required environment variables:
- *   RESEND_API_KEY — API key from resend.com
- *   RESEND_FROM    — Verified sender address, e.g. "TruCaller <noreply@yourdomain.com>"
- *                    Defaults to "TruCaller <onboarding@resend.dev>" (test only)
+ *   BREVO_API_KEY    — API key from brevo.com (Settings → API Keys)
+ *   BREVO_FROM_EMAIL — Verified sender email added under Senders & IP → Senders
+ *   BREVO_FROM_NAME  — Display name (defaults to "TruCaller")
  *
- * When RESEND_API_KEY is absent the service operates in dev-log mode:
+ * When BREVO_API_KEY is absent the service operates in dev-log mode:
  * OTP codes are printed to the server log instead of being sent.
  */
 object EmailService {
 
     private val logger = LoggerFactory.getLogger(EmailService::class.java)
 
-    private val apiKey: String? = System.getenv("RESEND_API_KEY")
-    private val fromAddress: String = System.getenv("RESEND_FROM") ?: "TruCaller <onboarding@resend.dev>"
+    private val apiKey: String? = System.getenv("BREVO_API_KEY")
+    private val fromEmail: String? = System.getenv("BREVO_FROM_EMAIL")
+    private val fromName: String = System.getenv("BREVO_FROM_NAME") ?: "TruCaller"
 
-    val isEnabled: Boolean get() = !apiKey.isNullOrBlank()
+    val isEnabled: Boolean get() = !apiKey.isNullOrBlank() && !fromEmail.isNullOrBlank()
 
     private val httpClient = HttpClient(CIO) {
         install(HttpTimeout) {
@@ -39,36 +40,36 @@ object EmailService {
     }
 
     /**
-     * Sends a 6-digit OTP to [toEmail] via Resend.
+     * Sends a 6-digit OTP to [toEmail] via Brevo.
      * Returns true if accepted, false on failure.
      * In dev-log mode always returns true.
      */
     suspend fun sendOtp(toEmail: String, code: String): Boolean = withContext(Dispatchers.IO) {
         if (!isEnabled) {
-            logger.warn("Email gateway not configured (RESEND_API_KEY missing) — OTP for $toEmail: $code")
+            logger.warn("Email gateway not configured (BREVO_API_KEY/BREVO_FROM_EMAIL missing) — OTP for $toEmail: $code")
             return@withContext true
         }
 
         val body = """
             {
-              "from": "$fromAddress",
-              "to": ["$toEmail"],
+              "sender": { "name": "$fromName", "email": "$fromEmail" },
+              "to": [{ "email": "$toEmail" }],
               "subject": "Your TruCaller verification code",
-              "text": "Your TruCaller verification code is:\n\n$code\n\nThis code expires in 10 minutes. Do not share it with anyone."
+              "textContent": "Your TruCaller verification code is:\n\n$code\n\nThis code expires in 10 minutes. Do not share it with anyone."
             }
         """.trimIndent()
 
         return@withContext try {
-            val response: HttpResponse = httpClient.post("https://api.resend.com/emails") {
-                header(HttpHeaders.Authorization, "Bearer $apiKey")
+            val response: HttpResponse = httpClient.post("https://api.brevo.com/v3/smtp/email") {
+                header("api-key", apiKey)
                 contentType(ContentType.Application.Json)
                 setBody(body)
             }
             if (response.status.isSuccess()) {
-                logger.info("OTP email sent to $toEmail via Resend")
+                logger.info("OTP email sent to $toEmail via Brevo")
                 true
             } else {
-                logger.error("Resend rejected email to $toEmail: HTTP ${response.status.value} — ${response.bodyAsText()}")
+                logger.error("Brevo rejected email to $toEmail: HTTP ${response.status.value} — ${response.bodyAsText()}")
                 false
             }
         } catch (e: Exception) {
