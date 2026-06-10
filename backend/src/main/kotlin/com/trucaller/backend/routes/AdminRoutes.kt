@@ -256,6 +256,33 @@ fun Route.adminRoutes() {
                 )
             }
 
+            // ── GET /api/admin/stolen-reports ────────────────────────────
+            get("/stolen-reports") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@get
+                }
+
+                val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0
+                val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
+                val statusFilter = call.request.queryParameters["status"]
+
+                val filter = if (!statusFilter.isNullOrBlank()) Filters.eq("status", statusFilter) else Filters.empty()
+
+                val reports = Collections.stolenReports
+                    .find(filter)
+                    .sort(Document("reportedAt", -1))
+                    .skip(skip)
+                    .limit(limit)
+                    .toList()
+
+                call.respond(HttpStatusCode.OK, ApiResponse(
+                    success = true,
+                    data = reports.map { it.toJson() },
+                    message = "Retrieved ${reports.size} stolen report(s)"
+                ))
+            }
+
             // ── GET /api/admin/devices ───────────────────────────────────
             get("/devices") {
                 try {
