@@ -413,47 +413,60 @@ fun Route.callerIdRoutes() {
 
             // ── GET /api/caller-id/spam-sync ──────────────────────────────
             get("/spam-sync") {
-                val since = call.request.queryParameters["since"] ?: "1970-01-01T00:00:00Z"
-                val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 100).coerceIn(1, 500)
-                val cursor = call.request.queryParameters["cursor"]
+                try {
+                    val since = call.request.queryParameters["since"] ?: "1970-01-01T00:00:00Z"
+                    val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: 100).coerceIn(1, 500)
+                    val cursor = call.request.queryParameters["cursor"]
 
-                val baseFilter = Filters.gt("lastUpdated", since)
-                val filter = if (cursor != null) {
-                    Filters.and(baseFilter, Filters.gt("_id", cursor))
-                } else {
-                    baseFilter
-                }
-
-                val entries = mutableListOf<Map<String, Any?>>()
-                var lastId: String? = null
-
-                Collections.callerIds
-                    .find(filter)
-                    .sort(Document("_id", 1))
-                    .limit(limit)
-                    .collect { doc ->
-                        lastId = doc.getString("_id")
-                        entries.add(mapOf(
-                            "phoneNumber" to doc.getString("phoneNumber"),
-                            "name" to (doc.getString("bestName") ?: doc.getString("name")),
-                            "spamScore" to doc.getInteger("spamScore", 0),
-                            "reportCount" to doc.getInteger("reportCount", 0),
-                            "category" to doc.getString("category"),
-                            "lastUpdated" to doc.getString("lastUpdated")
-                        ))
+                    val baseFilter = Filters.gt("lastUpdated", since)
+                    val filter = if (cursor != null) {
+                        Filters.and(baseFilter, Filters.gt("_id", cursor))
+                    } else {
+                        baseFilter
                     }
 
-                call.respond(
-                    HttpStatusCode.OK,
-                    ApiResponse(
-                        success = true,
-                        data = mapOf(
-                            "entries" to entries,
-                            "nextCursor" to lastId,
-                            "hasMore" to (entries.size == limit)
+                    val entries = mutableListOf<Map<String, Any?>>()
+                    var lastId: String? = null
+
+                    Collections.callerIds
+                        .find(filter)
+                        .sort(Document("_id", 1))
+                        .limit(limit)
+                        .collect { doc ->
+                            val rawId = doc["_id"]
+                            lastId = when (rawId) {
+                                is String -> rawId
+                                is ObjectId -> rawId.toHexString()
+                                else -> rawId?.toString()
+                            }
+                            entries.add(mapOf(
+                                "phoneNumber" to (doc.getString("phoneNumber") ?: ""),
+                                "name" to (doc.getString("bestName") ?: doc.getString("name") ?: ""),
+                                "spamScore" to (doc.getInteger("spamScore") ?: 0),
+                                "reportCount" to (doc.getInteger("reportCount") ?: 0),
+                                "category" to (doc.getString("category") ?: "SAFE"),
+                                "lastUpdated" to (doc.getString("lastUpdated") ?: "")
+                            ))
+                        }
+
+                    call.respond(
+                        HttpStatusCode.OK,
+                        ApiResponse(
+                            success = true,
+                            data = mapOf(
+                                "entries" to entries,
+                                "nextCursor" to lastId,
+                                "hasMore" to (entries.size == limit)
+                            )
                         )
                     )
-                )
+                } catch (e: Exception) {
+                    call.application.environment.log.error("spam-sync failed", e)
+                    call.respond(
+                        HttpStatusCode.InternalServerError,
+                        ApiResponse<Unit>(success = false, error = "Sync temporarily unavailable: ${e.message}")
+                    )
+                }
             }
         }
     }
