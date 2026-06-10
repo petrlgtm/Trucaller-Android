@@ -18,8 +18,17 @@ import io.ktor.server.routing.*
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import org.bson.Document
 import org.bson.types.ObjectId
+
+private fun Document.toJsonElement(): JsonElement = Json.parseToJsonElement(toJson())
+private fun Document.toJsonElementStripped(vararg fields: String): JsonElement {
+    val copy = Document(this)
+    fields.forEach { copy.remove(it) }
+    return Json.parseToJsonElement(copy.toJson())
+}
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
@@ -68,8 +77,8 @@ data class TrustUpdateRequest(
 
 @Serializable
 data class UserWithDevices(
-    val user: String,       // JSON string of user document
-    val devices: List<String> // JSON strings of device documents
+    val user: JsonElement,
+    val devices: List<JsonElement>
 )
 
 @Serializable
@@ -197,9 +206,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = users.map { it.toJson() }.map { json ->
-                            org.bson.Document.parse(json).also { it.remove("passwordHash") }.toJson()
-                        },
+                        data = users.map { it.toJsonElementStripped("passwordHash") },
                         message = "Retrieved ${users.size} user(s)"
                     )
                 )
@@ -248,8 +255,8 @@ fun Route.adminRoutes() {
                     ApiResponse(
                         success = true,
                         data = UserWithDevices(
-                            user = org.bson.Document.parse(userDoc.toJson()).also { it.remove("passwordHash") }.toJson(),
-                            devices = devices.map { it.toJson() }
+                            user = userDoc.toJsonElementStripped("passwordHash"),
+                            devices = devices.map { it.toJsonElement() }
                         ),
                         message = "User and devices retrieved"
                     )
@@ -278,7 +285,7 @@ fun Route.adminRoutes() {
 
                 call.respond(HttpStatusCode.OK, ApiResponse(
                     success = true,
-                    data = reports.map { it.toJson() },
+                    data = reports.map { it.toJsonElement() },
                     message = "Retrieved ${reports.size} stolen report(s)"
                 ))
             }
@@ -311,7 +318,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = devices.map { it.toJson() },
+                        data = devices.map { it.toJsonElement() },
                         message = "Retrieved ${devices.size} device(s)"
                     )
                 )
@@ -410,7 +417,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = callerIds.map { it.toJson() },
+                        data = callerIds.map { it.toJsonElement() },
                         message = "Retrieved ${callerIds.size} caller ID entry/entries"
                     )
                 )
@@ -559,7 +566,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = reports.map { it.toJson() },
+                        data = reports.map { it.toJsonElement() },
                         message = "Retrieved ${reports.size} SMS spam report(s)"
                     )
                 )
@@ -1220,7 +1227,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = logs.map { it.toJson() },
+                        data = logs.map { it.toJsonElement() },
                         message = "Retrieved ${logs.size} alarm log(s)"
                     )
                 )
