@@ -3,6 +3,7 @@ package com.byron.trucaller.service
 import android.animation.AnimatorSet
 import android.animation.ObjectAnimator
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.Service
 import android.content.Context
 import android.content.Intent
@@ -29,6 +30,9 @@ import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.core.app.NotificationCompat
+import androidx.core.content.ContextCompat
+import com.byron.trucaller.R
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.CallerIdEntry
 import com.byron.trucaller.data.model.SpamCategory
@@ -69,6 +73,9 @@ class CallerIdOverlayService : Service() {
         private const val LIGHT_SURFACE_ELEVATED = 0xFFF5F5F5.toInt()
         private const val LIGHT_DIVIDER = 0xFFE0E0E0.toInt()
 
+        // Foreground service notification (required on Android 8+)
+        private const val FOREGROUND_NOTIFICATION_ID = 1001
+
         // Animation durations
         private const val ANIM_ENTRANCE_DURATION = 350L
         private const val ANIM_EXIT_DURATION = 250L
@@ -81,7 +88,10 @@ class CallerIdOverlayService : Service() {
             val intent = Intent(context, CallerIdOverlayService::class.java).apply {
                 putExtra(EXTRA_PHONE_NUMBER, phoneNumber)
             }
-            context.startService(intent)
+            // On Android 8+ services can't be started from the background as a
+            // regular service — must use startForegroundService() and call
+            // startForeground() within 5 seconds or the system kills the process.
+            ContextCompat.startForegroundService(context, intent)
         }
 
         fun dismiss(context: Context) {
@@ -100,6 +110,10 @@ class CallerIdOverlayService : Service() {
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // Must call startForeground() immediately — Android 8+ will kill the service
+        // if we don't satisfy the foreground requirement within 5 seconds.
+        startForeground(FOREGROUND_NOTIFICATION_ID, buildForegroundNotification())
+
         val phoneNumber = intent?.getStringExtra(EXTRA_PHONE_NUMBER)
         if (phoneNumber.isNullOrBlank()) {
             stopSelf()
@@ -654,6 +668,22 @@ class CallerIdOverlayService : Service() {
         } catch (e: Exception) {
             Log.e(TAG, "Error removing overlay", e)
         }
+    }
+
+    /**
+     * Builds the mandatory foreground notification for Android 8+.
+     * It is silent and low-priority — its only purpose is satisfying the OS
+     * foreground-service contract while the overlay window is visible.
+     * The notification is automatically removed when stopSelf() is called.
+     */
+    private fun buildForegroundNotification(): Notification {
+        return NotificationCompat.Builder(this, NotificationChannelManager.CALLER_ID_CHANNEL)
+            .setSmallIcon(R.drawable.ic_caller_id)
+            .setContentTitle("Identifying caller…")
+            .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setSilent(true)
+            .setOngoing(true)
+            .build()
     }
 
     override fun onDestroy() {

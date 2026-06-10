@@ -305,14 +305,14 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                             isLoading = true
                             error = null
                             scope.launch {
-                                val found = authViewModel.requestPasswordReset(phone)
+                                val resetError = authViewModel.requestPasswordResetWithError(phone)
                                 isLoading = false
-                                if (found) {
+                                if (resetError == null) {
                                     step = 2
                                     countdown = 60
                                     otp = ""
                                 } else {
-                                    error = "Phone number not found"
+                                    error = resetError
                                 }
                             }
                         },
@@ -335,12 +335,12 @@ fun ForgotPasswordScreen(navController: NavController, authViewModel: AuthViewMo
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "We sent a 6-digit code to",
+                        "We sent a 6-digit code to your registered",
                         color = colorScheme.onSurfaceVariant,
                         fontSize = 14.sp
                     )
                     Text(
-                        text = maskPhoneNumber("+256$phone"),
+                        text = "email address",
                         color = colorScheme.onBackground,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.SemiBold

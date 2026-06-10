@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.net.SocketTimeoutException
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -84,33 +85,36 @@ class AuthViewModel(
         }
     }
 
-    suspend fun login(phone: String, password: String): Boolean {
+    suspend fun login(phone: String, password: String): Boolean =
+        loginWithError(phone, password) == null
+
+    /**
+     * Returns null on success, or a user-facing error string on failure.
+     * Distinguishes network timeout (Render.com cold-start) from wrong credentials
+     * so the UI can ask the user to retry rather than blaming their password.
+     */
+    suspend fun loginWithError(phone: String, password: String): String? {
         val fullPhone = "+256$phone"
 
-        // Try backend API login first
         try {
             val apiResult = ApiClient.login(fullPhone, password)
             if (apiResult.success && apiResult.data != null) {
                 val tokenData = apiResult.data
                 ApiClient.setAuthToken(tokenData.token)
                 preferences.setAuthToken(tokenData.token)
-                // Persist refresh token so JWT renewal survives app restarts
                 tokenData.refreshToken?.let {
                     ApiClient.setRefreshToken(it)
                     preferences.setRefreshToken(it)
                 }
 
-                // Store or update user locally — always sync to backend userId and fullName
                 val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
                 val existingUser = userRepository.getUserByPhone(fullPhone)
                 val user = if (existingUser != null && existingUser.id == tokenData.userId) {
-                    // Same ID — just refresh name and lastLogin
                     existingUser.copy(
                         fullName = tokenData.fullName.ifBlank { existingUser.fullName },
                         lastLogin = now
                     )
                 } else {
-                    // New login or ID mismatch (local placeholder ID) — replace with backend record
                     if (existingUser != null) userRepository.deleteUser(existingUser)
                     User(
                         id = tokenData.userId,
@@ -126,37 +130,38 @@ class AuthViewModel(
                 else userRepository.insertUser(user)
                 preferences.setLoggedInUserId(user.id)
 
-                _authState.value = AuthState(
-                    user = user,
-                    isAuthenticated = true,
-                    token = tokenData.token
-                )
+                _authState.value = AuthState(user = user, isAuthenticated = true, token = tokenData.token)
 
                 viewModelScope.launch {
                     try { deviceRegistrationService.registerOrUpdateDevice(user.id) } catch (_: Exception) { }
-                    // Sync trust data from backend
                     syncTrustFromBackend(user.id)
                 }
-                return true
+                return null
             }
-        } catch (_: Exception) { }
+            // Backend reachable but rejected (wrong credentials) — fall through to local Room check
+        } catch (e: SocketTimeoutException) {
+            // Server is reachable but took too long (likely Render.com cold-start).
+            // Don't fall through to local auth — the user knows their credentials are correct;
+            // asking them to retry with a clear message is more helpful than logging them in
+            // locally without a JWT (which breaks every subsequent API call).
+            return "Server is starting up. Please wait a moment and try again."
+        } catch (_: Exception) {
+            // No network — fall through to local Room login for offline access
+        }
 
-        // Fallback: local Room login (offline mode — no fake token to avoid triggering session expiry)
-        val user = userRepository.getUserByPhone(fullPhone) ?: return false
-        if (user.passwordHash != hashPassword(password)) return false
+        // Fallback: local Room login (offline mode — no JWT, limited functionality)
+        val user = userRepository.getUserByPhone(fullPhone)
+            ?: return "Invalid phone number or password"
+        if (user.passwordHash != hashPassword(password))
+            return "Invalid phone number or password"
 
         val updated = user.copy(
             lastLogin = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
         )
         userRepository.updateUser(updated)
         preferences.setLoggedInUserId(updated.id)
-
-        _authState.value = AuthState(
-            user = updated,
-            isAuthenticated = true,
-            token = ""
-        )
-        return true
+        _authState.value = AuthState(user = updated, isAuthenticated = true, token = "")
+        return null
     }
 
     suspend fun adminLogin(phoneNumber: String, password: String): Boolean {
@@ -325,22 +330,38 @@ class AuthViewModel(
         return true
     }
 
-    suspend fun requestPasswordReset(phone: String): Boolean {
+    suspend fun requestPasswordReset(phone: String): Boolean =
+        requestPasswordResetWithError(phone) == null
+
+    /**
+     * Requests a password-reset OTP. Returns null on success, or a user-facing
+     * error string on failure. Distinguishes "no account found", "no email linked",
+     * and generic network failures so the UI can show the right message.
+     */
+    suspend fun requestPasswordResetWithError(phone: String): String? {
         val fullPhone = "+256$phone"
         return try {
             val result = ApiClient.sendOtp(fullPhone, "password_reset")
-            if (result.success) return true
-            // Backend said user not found — honour that
-            if (result.error?.contains("not found", ignoreCase = true) == true) return false
-            // Service error — local fallback so user can still reset offline
-            val user = userRepository.getUserByPhone(fullPhone) ?: return false
-            _resetOtp.value = (100000..999999).random().toString()
-            true
+            when {
+                result.success -> null
+                result.error?.contains("No email address linked", ignoreCase = true) == true ->
+                    "This account has no email linked. Please contact support to reset your password."
+                result.error?.contains("not found", ignoreCase = true) == true ->
+                    "No account found for that phone number."
+                else -> {
+                    // Service or network error — try local fallback so offline users can still reset
+                    val user = userRepository.getUserByPhone(fullPhone)
+                        ?: return "No account found for that phone number."
+                    _resetOtp.value = (100000..999999).random().toString()
+                    null
+                }
+            }
         } catch (_: Exception) {
-            // Network error — local fallback
-            val user = userRepository.getUserByPhone(fullPhone) ?: return false
+            // Network unreachable — offline fallback
+            val user = userRepository.getUserByPhone(fullPhone)
+                ?: return "Unable to connect. Please check your internet and try again."
             _resetOtp.value = (100000..999999).random().toString()
-            true
+            null
         }
     }
 

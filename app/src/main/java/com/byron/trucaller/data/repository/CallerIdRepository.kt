@@ -1,5 +1,6 @@
 package com.byron.trucaller.data.repository
 
+import android.util.Log
 import com.byron.trucaller.data.dao.CallerIdDao
 import com.byron.trucaller.data.dao.ContactAliasDao
 import com.byron.trucaller.data.dao.ContactDao
@@ -11,6 +12,8 @@ import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.util.PhoneUtils
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.withTimeoutOrNull
+
+private const val TAG = "CallerIdRepository"
 
 class CallerIdRepository(
     private val callerIdDao: CallerIdDao,
@@ -51,7 +54,9 @@ class CallerIdRepository(
                     callerIdDao.insertAll(entries)
                 }
             }
-        } catch (_: Exception) {}
+        } catch (e: Exception) {
+            Log.e(TAG, "syncSpamDatabase failed", e)
+        }
     }
 
     /**

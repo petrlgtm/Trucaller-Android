@@ -43,6 +43,7 @@ class UserPreferences(private val context: Context) {
         private val RECORDING_AUTO_DELETE = stringPreferencesKey("recording_auto_delete")
         private val RECORDING_STORAGE_LIMIT = stringPreferencesKey("recording_storage_limit")
         private val RECORDING_CONSENT_SHOWN = booleanPreferencesKey("recording_consent_shown")
+        private val LOCATION_PERMISSION_REQUESTED = booleanPreferencesKey("location_permission_requested")
     }
 
     val autoBackup: Flow<Boolean> = context.dataStore.data.map { it[AUTO_BACKUP_KEY] ?: true }
@@ -70,6 +71,7 @@ class UserPreferences(private val context: Context) {
     val recordingAutoDelete: Flow<String> = context.dataStore.data.map { it[RECORDING_AUTO_DELETE] ?: "NEVER" }
     val recordingStorageLimit: Flow<String> = context.dataStore.data.map { it[RECORDING_STORAGE_LIMIT] ?: "MB_500" }
     val recordingConsentShown: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_CONSENT_SHOWN] ?: false }
+    val locationPermissionRequested: Flow<Boolean> = context.dataStore.data.map { it[LOCATION_PERMISSION_REQUESTED] ?: false }
 
     val recentLookups: Flow<List<String>> = context.dataStore.data.map {
         it[RECENT_LOOKUPS]?.split(",")?.filter { s -> s.isNotEmpty() } ?: emptyList()
@@ -177,6 +179,10 @@ class UserPreferences(private val context: Context) {
 
     suspend fun setRecordingConsentShown(shown: Boolean) {
         context.dataStore.edit { it[RECORDING_CONSENT_SHOWN] = shown }
+    }
+
+    suspend fun setLocationPermissionRequested(requested: Boolean) {
+        context.dataStore.edit { it[LOCATION_PERMISSION_REQUESTED] = requested }
     }
 
     suspend fun setAuthToken(token: String?) {

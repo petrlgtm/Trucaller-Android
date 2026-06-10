@@ -65,8 +65,6 @@ import com.byron.trucaller.ui.components.TruCallerButton
 import com.byron.trucaller.ui.components.TruCallerTextField
 import com.byron.trucaller.util.isValidPhoneInput
 import com.byron.trucaller.viewmodel.AuthViewModel
-import androidx.compose.ui.layout.ContentScale
-import coil3.compose.AsyncImage
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
@@ -143,26 +141,19 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
             .imePadding()
             .verticalScroll(rememberScrollState())
     ) {
-        // ── Header with contextual background image
+        // ── Header with brand gradient background (no external CDN dependency)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(280.dp)
         ) {
-            AsyncImage(
-                model = "https://images.unsplash.com/photo-1512499617640-c74ae3a79d37?auto=format&fit=crop&w=800&h=560&q=80",
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxSize()
-            )
             Box(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
                             colors = listOf(
-                                colorScheme.background.copy(alpha = 0.3f),
-                                colorScheme.background.copy(alpha = 0.7f),
+                                colorScheme.primary.copy(alpha = 0.18f),
                                 colorScheme.background
                             )
                         )
@@ -338,17 +329,16 @@ fun LoginScreen(navController: NavController, authViewModel: AuthViewModel) {
                         isLoading = true
                         error = null
                         scope.launch {
-                            delay(800)
-                            val success = authViewModel.login(phone, password)
+                            val loginError = authViewModel.loginWithError(phone, password)
                             isLoading = false
-                            if (success) {
+                            if (loginError == null) {
                                 val promptShown = authViewModel.isDeviceProtectionPromptShown()
                                 val destination = if (promptShown) "main" else "device_protection_prompt"
                                 navController.navigate(destination) {
                                     popUpTo("splash") { inclusive = true }
                                 }
                             } else {
-                                error = "Invalid phone number or password"
+                                error = loginError
                             }
                         }
                     },

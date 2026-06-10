@@ -79,6 +79,10 @@ fun OtpVerificationScreen(
     var isLoading by remember { mutableStateOf(false) }
     var countdown by remember { mutableIntStateOf(60) }
     var verificationSuccess by remember { mutableStateOf(false) }
+    // Synchronous guard that prevents a second submit while a coroutine is in flight.
+    // isLoading drives the UI disable, but Compose recomposition is not instantaneous,
+    // so a user who types the 6th digit and immediately taps Verify could fire twice.
+    val submitting = remember { java.util.concurrent.atomic.AtomicBoolean(false) }
     val scope = rememberCoroutineScope()
     val focusRequester = remember { FocusRequester() }
 
@@ -124,6 +128,8 @@ fun OtpVerificationScreen(
 
     fun verifyOtp() {
         if (otp.length != 6) { error = "Enter all 6 digits"; return }
+        // compareAndSet returns false if another submit is already in flight — drop the duplicate
+        if (!submitting.compareAndSet(false, true)) return
         error = null
         isLoading = true
         scope.launch {
@@ -131,10 +137,15 @@ fun OtpVerificationScreen(
             if (codeValid) {
                 val success = authViewModel.verifyOtp(otp, backendVerified = true)
                 isLoading = false
-                if (success) onVerificationSuccess()
-                else error = "Failed to create account. Please try again."
+                if (success) {
+                    onVerificationSuccess()
+                } else {
+                    submitting.set(false)
+                    error = "Failed to create account. Please try again."
+                }
             } else {
                 isLoading = false
+                submitting.set(false)
                 error = "Invalid or expired OTP code."
             }
         }

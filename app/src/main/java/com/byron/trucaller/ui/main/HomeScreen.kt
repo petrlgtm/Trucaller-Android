@@ -32,6 +32,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -47,8 +48,10 @@ import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.GlassBorder
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
+import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.viewmodel.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 data class ActivityItem(
@@ -141,6 +144,10 @@ fun HomeScreen(
     }
 
     // Location permission
+    val userPreferences = remember {
+        (context.applicationContext as TruCallerApplication).container.userPreferences
+    }
+
     val locationPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -150,17 +157,25 @@ fun HomeScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
+    // Request location permission exactly once across all app launches.
+    // Using a DataStore flag prevents the dialog from re-appearing every time
+    // the user navigates back to Home (LaunchedEffect(Unit) fires on each
+    // NavHost recomposition).
+    LaunchedEffect(user.id) {
         val hasFineLocation = ContextCompat.checkSelfPermission(
             context, Manifest.permission.ACCESS_FINE_LOCATION
         ) == PackageManager.PERMISSION_GRANTED
         if (!hasFineLocation) {
-            locationPermissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
+            val alreadyRequested = userPreferences.locationPermissionRequested.first()
+            if (!alreadyRequested) {
+                userPreferences.setLocationPermissionRequested(true)
+                locationPermissionLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
                 )
-            )
+            }
         }
     }
 
@@ -185,7 +200,8 @@ fun HomeScreen(
             items.add(ActivityItem(log.id, "ip", "IP Location Update", "${log.city}, ${log.country} - ${log.isp}", log.timestamp, colorScheme.primary))
         }
         stolenReports.forEach { report ->
-            items.add(ActivityItem(report.id, "stolen", "Stolen Report", report.description.take(60) + "...", report.reportedAt, colorScheme.error))
+            val desc = if (report.description.length > 60) report.description.take(60) + "…" else report.description
+            items.add(ActivityItem(report.id, "stolen", "Stolen Report", desc, report.reportedAt, colorScheme.error))
         }
         alarmLogs.forEach { alarm ->
             items.add(ActivityItem(alarm.id, "alarm", "Alarm: ${alarm.type.name.replace("_", " ")}", "Result: ${alarm.result.name} - ${alarm.notes ?: ""}", alarm.triggeredAt, colorScheme.tertiary))
