@@ -36,16 +36,12 @@ val RateLimiterPlugin = createApplicationPlugin(name = "RateLimiter", createConf
     val memoryLog = ConcurrentHashMap<String, ConcurrentLinkedDeque<Long>>()
 
     onCall { call ->
-        // Admin routes are protected by JWT auth + role whitelist — skip rate limiting
-        if (call.request.local.uri.startsWith("/api/admin/")) return@onCall
+        // Only rate-limit auth endpoints — they are the brute-force / OTP-flood targets.
+        // Everything else (health checks, WebSockets, admin routes, lookup, etc.) is exempt.
+        if (!call.request.local.uri.startsWith("/api/auth/")) return@onCall
 
         val ip = call.clientIp()
         val principal = call.principal<JWTPrincipal>()
-
-        // Also skip for authenticated admin-role users on any route
-        val role = principal?.payload?.getClaim("role")?.asString()
-        if (role == "SUPER_ADMIN" || role == "MODERATOR") return@onCall
-
         val key = if (principal != null) {
             "rl:auth:${principal.payload.getClaim("userId").asString() ?: ip}"
         } else {

@@ -141,21 +141,6 @@ object Collections {
                 IndexOptions().expireAfter(3600, java.util.concurrent.TimeUnit.SECONDS)
             )
 
-        // TTL index: auto-delete refresh tokens once expiresAt passes
-        database.getCollection<Document>("refreshTokens")
-            .createIndex(
-                Indexes.ascending("expiresAt"),
-                IndexOptions().expireAfter(0, java.util.concurrent.TimeUnit.SECONDS)
-            )
-
-        // Index on token for refresh/rotation lookups
-        database.getCollection<Document>("refreshTokens")
-            .createIndex(Indexes.ascending("token"))
-
-        // Index on userId for bulk session revocation
-        database.getCollection<Document>("refreshTokens")
-            .createIndex(Indexes.ascending("userId"))
-
         // Index on phoneNumber for OTP rate-limit lookups
         database.getCollection<Document>("otpRateLimits")
             .createIndex(Indexes.ascending("phoneNumber"))
