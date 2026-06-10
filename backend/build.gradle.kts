@@ -53,9 +53,6 @@ dependencies {
     // Sentry error tracking
     implementation("io.sentry:sentry:7.14.0")
 
-    // Email (Gmail SMTP for OTP delivery)
-    implementation("com.sun.mail:jakarta.mail:2.0.1")
-
     // Logging
     implementation("ch.qos.logback:logback-classic:$logbackVersion")
 
