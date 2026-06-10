@@ -24,6 +24,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
@@ -32,24 +33,22 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.data.model.DeviceStatus
+import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.ui.components.BadgeType
 import com.byron.trucaller.ui.components.EmptyStateIcon
 import com.byron.trucaller.ui.components.EmptyStateView
@@ -58,73 +57,74 @@ import com.byron.trucaller.ui.components.TruCallerBadge
 import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
-import com.byron.trucaller.viewmodel.DeviceViewModel
 
-private const val PAGE_SIZE = 20
+private const val DEVICES_PAGE_SIZE = 20
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceViewModel) {
-    var searchQuery by remember { mutableStateOf("") }
-    var isInitialLoad by remember { mutableStateOf(true) }
-    val allDevices by deviceViewModel.allDevices.collectAsState(initial = emptyList())
+fun AdminDevicesScreen(navController: NavController) {
+    val colorScheme = MaterialTheme.colorScheme
 
-    if (allDevices.isNotEmpty() && isInitialLoad) {
-        isInitialLoad = false
+    val devices = remember { mutableStateListOf<Map<String, Any>>() }
+    var isLoading by remember { mutableStateOf(true) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(true) }
+    var skip by remember { mutableStateOf(0) }
+
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearching by remember { mutableStateOf(false) }
+
+    val lazyListState = rememberLazyListState()
+
+    suspend fun loadPage(pageSkip: Int) {
+        val result = ApiClient.getAdminDevices(skip = pageSkip, limit = DEVICES_PAGE_SIZE)
+        if (result.success && result.data != null) {
+            if (pageSkip == 0) { devices.clear(); devices.addAll(result.data) }
+            else devices.addAll(result.data)
+            hasMore = result.data.size >= DEVICES_PAGE_SIZE
+            skip = pageSkip + result.data.size
+        }
     }
 
-    val filtered by remember(searchQuery, allDevices) {
+    LaunchedEffect(Unit) {
+        loadPage(0)
+        isLoading = false
+    }
+
+    LaunchedEffect(lazyListState, hasMore) {
+        snapshotFlow {
+            val info = lazyListState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last to info.totalItemsCount
+        }.collect { (last, total) ->
+            if (total > 0 && last >= total - 3 && hasMore && !isLoadingMore && !isLoading) {
+                isLoadingMore = true
+                loadPage(skip)
+                isLoadingMore = false
+            }
+        }
+    }
+
+    val filtered by remember(searchQuery, devices) {
         derivedStateOf {
-            if (searchQuery.isBlank()) allDevices
+            if (searchQuery.isBlank()) devices
             else {
                 val q = searchQuery.lowercase()
-                allDevices.filter { d ->
-                    d.model.lowercase().contains(q) ||
-                            d.manufacturer.lowercase().contains(q) ||
-                            d.deviceId.lowercase().contains(q) ||
-                            d.lastIp.contains(q)
+                devices.filter { d ->
+                    d["model"]?.toString()?.lowercase()?.contains(q) == true ||
+                    d["manufacturer"]?.toString()?.lowercase()?.contains(q) == true ||
+                    d["deviceId"]?.toString()?.lowercase()?.contains(q) == true ||
+                    d["lastIp"]?.toString()?.contains(q) == true
                 }
             }
         }
     }
 
-    // Pagination state
-    var currentPage by remember { mutableIntStateOf(1) }
-    val lazyListState = rememberLazyListState()
-
-    // Reset page when filter changes
-    LaunchedEffect(searchQuery) {
-        currentPage = 1
-    }
-
-    val paginatedItems by remember(filtered, currentPage) {
-        derivedStateOf { filtered.take(PAGE_SIZE * currentPage) }
-    }
-    val hasMoreItems by remember(paginatedItems, filtered) {
-        derivedStateOf { paginatedItems.size < filtered.size }
-    }
-
-    // Detect scroll near bottom to load next page
-    LaunchedEffect(lazyListState, hasMoreItems) {
-        snapshotFlow {
-            val layoutInfo = lazyListState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisibleIndex to totalItems
-        }.collect { (lastVisible, total) ->
-            if (total > 0 && lastVisible >= total - 3 && hasMoreItems) {
-                currentPage++
-            }
-        }
-    }
-
-    val colorScheme = MaterialTheme.colorScheme
-
     Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
         TopAppBar(
             title = {
                 Text(
-                    "Devices (${filtered.size})",
+                    "Devices (${filtered.size}${if (hasMore && searchQuery.isBlank()) "+" else ""})",
                     fontWeight = FontWeight.Bold,
                     color = colorScheme.onPrimary
                 )
@@ -140,7 +140,7 @@ fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceView
         OutlinedTextField(
             value = searchQuery,
             onValueChange = { searchQuery = it },
-            placeholder = { Text("Search device, model...") },
+            placeholder = { Text("Search device, model, IP...") },
             leadingIcon = { Icon(Icons.Default.Search, null, tint = colorScheme.primary) },
             singleLine = true,
             modifier = Modifier.fillMaxWidth().padding(Spacing.md),
@@ -153,97 +153,90 @@ fun AdminDevicesScreen(navController: NavController, deviceViewModel: DeviceView
             )
         )
 
+        if (isSearching) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+
         when {
-            isInitialLoad && allDevices.isEmpty() -> {
-                ShimmerLoadingList(modifier = Modifier.padding(horizontal = Spacing.md))
-            }
-            filtered.isEmpty() -> {
-                EmptyStateView(
-                    title = "No Devices Found",
-                    subtitle = if (searchQuery.isNotBlank()) "No devices match \"$searchQuery\""
-                    else "No devices have been registered yet",
-                    icon = EmptyStateIcon.GENERIC
-                )
-            }
+            isLoading -> ShimmerLoadingList(modifier = Modifier.padding(horizontal = Spacing.md))
+            filtered.isEmpty() -> EmptyStateView(
+                title = "No Devices Found",
+                subtitle = if (searchQuery.isNotBlank()) "No devices match \"$searchQuery\""
+                else "No devices have been registered yet",
+                icon = EmptyStateIcon.GENERIC
+            )
             else -> {
                 LazyColumn(
                     state = lazyListState,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(horizontal = Spacing.md)
+                    modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md)
                 ) {
-                    items(paginatedItems, key = { it.id }) { device ->
-                        val statusBadgeType = when (device.status) {
-                            DeviceStatus.ACTIVE -> BadgeType.Success
-                            DeviceStatus.STOLEN -> BadgeType.Spam
-                            DeviceStatus.INACTIVE -> BadgeType.Info
-                            DeviceStatus.FLAGGED -> BadgeType.Warning
+                    items(filtered, key = { it["deviceId"]?.toString() ?: it.hashCode().toString() }) { device ->
+                        val deviceId = device["deviceId"]?.toString() ?: device["_id"]?.toString() ?: ""
+                        val model = device["model"]?.toString() ?: "Unknown"
+                        val manufacturer = device["manufacturer"]?.toString() ?: ""
+                        val status = device["status"]?.toString() ?: "ACTIVE"
+                        val lastIp = device["lastIp"]?.toString() ?: ""
+                        val lastSeen = device["lastSeen"]?.toString() ?: device["updatedAt"]?.toString() ?: device["createdAt"]?.toString() ?: ""
+
+                        val badgeType = when (status) {
+                            "ACTIVE" -> BadgeType.Success
+                            "STOLEN" -> BadgeType.Spam
+                            "LOCKED" -> BadgeType.Warning
+                            else -> BadgeType.Info
                         }
 
                         TruCallerCard(
                             modifier = Modifier
                                 .padding(vertical = 4.dp)
-                                .clickable { navController.navigate("admin_device_detail/${device.id}") },
+                                .clickable { navController.navigate("admin_device_detail/$deviceId") },
                             elevation = 1.dp
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Column(modifier = Modifier.weight(1f)) {
                                     Text(
-                                        "${device.manufacturer} ${device.model}",
+                                        "$manufacturer $model".trim(),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 15.sp,
                                         color = colorScheme.onSurface
                                     )
                                     Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Text(
-                                            device.lastIp,
-                                            fontSize = 12.sp,
-                                            color = colorScheme.onSurfaceVariant,
-                                            fontFamily = FontFamily.Monospace
-                                        )
-                                        Spacer(modifier = Modifier.width(8.dp))
-                                        Text(
-                                            formatRelativeTime(device.lastSeen),
-                                            fontSize = 11.sp,
-                                            color = colorScheme.onSurfaceVariant
-                                        )
+                                        if (lastIp.isNotBlank()) {
+                                            Text(
+                                                lastIp,
+                                                fontSize = 12.sp,
+                                                color = colorScheme.onSurfaceVariant,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            Spacer(modifier = Modifier.width(8.dp))
+                                        }
+                                        if (lastSeen.isNotBlank()) {
+                                            Text(
+                                                formatRelativeTime(lastSeen),
+                                                fontSize = 11.sp,
+                                                color = colorScheme.onSurfaceVariant
+                                            )
+                                        }
                                     }
+                                    Text(
+                                        deviceId.take(20),
+                                        fontSize = 11.sp,
+                                        color = colorScheme.onSurfaceVariant,
+                                        fontFamily = FontFamily.Monospace
+                                    )
                                 }
-                                TruCallerBadge(
-                                    text = device.status.name,
-                                    type = statusBadgeType
-                                )
+                                TruCallerBadge(text = status, type = badgeType)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Icon(
-                                    Icons.Default.ChevronRight,
-                                    null,
-                                    tint = colorScheme.onSurfaceVariant,
-                                    modifier = Modifier.size(20.dp)
-                                )
+                                Icon(Icons.Default.ChevronRight, null, tint = colorScheme.onSurfaceVariant, modifier = Modifier.size(20.dp))
                             }
                         }
                     }
-                    // Pagination footer
                     item {
-                        if (hasMoreItems) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(Spacing.md),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = colorScheme.primary
-                                )
+                        if (isLoadingMore) {
+                            Box(modifier = Modifier.fillMaxWidth().padding(Spacing.md), contentAlignment = Alignment.Center) {
+                                CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = colorScheme.primary)
                             }
-                        } else if (paginatedItems.size > PAGE_SIZE) {
+                        } else if (!hasMore && filtered.size > DEVICES_PAGE_SIZE) {
                             Text(
-                                "All items loaded",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(Spacing.md),
+                                "All ${filtered.size} devices loaded",
+                                modifier = Modifier.fillMaxWidth().padding(Spacing.md),
                                 textAlign = TextAlign.Center,
                                 fontSize = 13.sp,
                                 color = colorScheme.onSurfaceVariant

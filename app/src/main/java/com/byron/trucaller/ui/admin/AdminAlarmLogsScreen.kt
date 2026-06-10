@@ -37,10 +37,9 @@ import androidx.compose.material3.rememberDateRangePickerState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -53,8 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.data.model.AlarmResult
-import com.byron.trucaller.data.model.AlarmType
+import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.ui.components.BadgeType
 import com.byron.trucaller.ui.components.EmptyStateIcon
 import com.byron.trucaller.ui.components.EmptyStateView
@@ -64,114 +62,105 @@ import com.byron.trucaller.ui.components.TruCallerCard
 import com.byron.trucaller.ui.theme.Brand
 import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.util.formatRelativeTime
-import com.byron.trucaller.viewmodel.AlarmViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 
-private const val PAGE_SIZE = 20
+private const val ALARM_PAGE_SIZE = 50
 
-private val isoDateFormats = listOf(
+private val alarmIsoFormats = listOf(
     "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
     "yyyy-MM-dd'T'HH:mm:ss'Z'",
     "yyyy-MM-dd'T'HH:mm:ssXXX"
 )
 
-/** Parse an ISO date string to epoch millis, or null on failure. */
-private fun parseIsoToMillis(dateStr: String): Long? {
-    for (fmt in isoDateFormats) {
+private fun parseAlarmIsoToMillis(dateStr: String): Long? {
+    for (fmt in alarmIsoFormats) {
         try {
-            val sdf = SimpleDateFormat(fmt, Locale.US)
-            sdf.timeZone = TimeZone.getTimeZone("UTC")
-            val date = sdf.parse(dateStr)
-            if (date != null) return date.time
+            val sdf = SimpleDateFormat(fmt, Locale.US).also { it.timeZone = TimeZone.getTimeZone("UTC") }
+            return sdf.parse(dateStr)?.time
         } catch (_: Exception) { }
     }
     return null
 }
 
-/** Format epoch millis to a short date label like "Mar 1". */
-private fun formatShortDate(millis: Long): String {
-    val sdf = SimpleDateFormat("MMM d", Locale.US)
-    return sdf.format(Date(millis))
-}
+private fun formatAlarmShortDate(millis: Long): String =
+    SimpleDateFormat("MMM d", Locale.US).format(Date(millis))
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmViewModel) {
-    val allLogs by alarmViewModel.allLogs.collectAsState(initial = emptyList())
-    var isInitialLoad by remember { mutableStateOf(true) }
+fun AdminAlarmLogsScreen(navController: NavController) {
+    val colorScheme = MaterialTheme.colorScheme
 
-    if (allLogs.isNotEmpty() && isInitialLoad) {
-        isInitialLoad = false
-    }
+    val allLogs = remember { mutableStateListOf<Map<String, Any>>() }
+    var isLoading by remember { mutableStateOf(true) }
+    var isLoadingMore by remember { mutableStateOf(false) }
+    var hasMore by remember { mutableStateOf(true) }
+    var skip by remember { mutableStateOf(0) }
 
-    var selectedType by remember { mutableStateOf<AlarmType?>(null) }
-    var selectedResult by remember { mutableStateOf<AlarmResult?>(null) }
+    val lazyListState = rememberLazyListState()
 
-    // Date range filter state
+    // Filters (client-side on loaded data)
+    var selectedType by remember { mutableStateOf<String?>(null) }
+    var selectedResult by remember { mutableStateOf<String?>(null) }
     var startDate by remember { mutableStateOf<Long?>(null) }
     var endDate by remember { mutableStateOf<Long?>(null) }
     var showDateRangePicker by remember { mutableStateOf(false) }
 
-    val filteredLogs by remember(allLogs, selectedType, selectedResult, startDate, endDate) {
-        derivedStateOf {
-            allLogs
-                .let { logs -> if (selectedType != null) logs.filter { it.type == selectedType } else logs }
-                .let { logs -> if (selectedResult != null) logs.filter { it.result == selectedResult } else logs }
-                .let { logs ->
-                    if (startDate != null || endDate != null) {
-                        logs.filter { log ->
-                            val logMillis = parseIsoToMillis(log.triggeredAt) ?: return@filter false
-                            val afterStart = startDate?.let { logMillis >= it } ?: true
-                            // endDate selection represents the start of that day; include the full day
-                            val beforeEnd = endDate?.let { logMillis < it + 86_400_000L } ?: true
-                            afterStart && beforeEnd
-                        }
-                    } else logs
-                }
-                .sortedByDescending { it.triggeredAt }
+    suspend fun loadPage(pageSkip: Int) {
+        val result = ApiClient.getAdminAlarmLogs(skip = pageSkip, limit = ALARM_PAGE_SIZE)
+        if (result.success && result.data != null) {
+            if (pageSkip == 0) { allLogs.clear(); allLogs.addAll(result.data) }
+            else allLogs.addAll(result.data)
+            hasMore = result.data.size >= ALARM_PAGE_SIZE
+            skip = pageSkip + result.data.size
         }
     }
 
-    // Pagination state
-    var currentPage by remember { mutableIntStateOf(1) }
-    val lazyListState = rememberLazyListState()
-
-    // Reset page when filters change
-    LaunchedEffect(selectedType, selectedResult, startDate, endDate) {
-        currentPage = 1
+    LaunchedEffect(Unit) {
+        loadPage(0)
+        isLoading = false
     }
 
-    val paginatedItems by remember(filteredLogs, currentPage) {
-        derivedStateOf { filteredLogs.take(PAGE_SIZE * currentPage) }
-    }
-    val hasMoreItems by remember(paginatedItems, filteredLogs) {
-        derivedStateOf { paginatedItems.size < filteredLogs.size }
-    }
-
-    // Detect scroll near bottom to load next page
-    LaunchedEffect(lazyListState, hasMoreItems) {
+    LaunchedEffect(lazyListState, hasMore) {
         snapshotFlow {
-            val layoutInfo = lazyListState.layoutInfo
-            val totalItems = layoutInfo.totalItemsCount
-            val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-            lastVisibleIndex to totalItems
-        }.collect { (lastVisible, total) ->
-            if (total > 0 && lastVisible >= total - 3 && hasMoreItems) {
-                currentPage++
+            val info = lazyListState.layoutInfo
+            val last = info.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last to info.totalItemsCount
+        }.collect { (last, total) ->
+            if (total > 0 && last >= total - 3 && hasMore && !isLoadingMore && !isLoading) {
+                isLoadingMore = true
+                loadPage(skip)
+                isLoadingMore = false
             }
         }
     }
 
-    val colorScheme = MaterialTheme.colorScheme
+    val filteredLogs by remember(allLogs.toList(), selectedType, selectedResult, startDate, endDate) {
+        derivedStateOf {
+            allLogs
+                .let { logs -> if (selectedType != null) logs.filter { it["type"]?.toString() == selectedType } else logs }
+                .let { logs -> if (selectedResult != null) logs.filter { it["result"]?.toString() == selectedResult } else logs }
+                .let { logs ->
+                    if (startDate != null || endDate != null) {
+                        logs.filter { log ->
+                            val ts = log["triggeredAt"]?.toString() ?: return@filter false
+                            val ms = parseAlarmIsoToMillis(ts) ?: return@filter false
+                            val afterStart = startDate?.let { ms >= it } ?: true
+                            val beforeEnd = endDate?.let { ms < it + 86_400_000L } ?: true
+                            afterStart && beforeEnd
+                        }
+                    } else logs
+                }
+        }
+    }
 
     Column(modifier = Modifier.fillMaxSize().background(colorScheme.background)) {
         TopAppBar(
             title = {
                 Text(
-                    "Alarm Logs (${filteredLogs.size})",
+                    "Alarm Logs (${filteredLogs.size}${if (hasMore && selectedType == null && selectedResult == null) "+" else ""})",
                     fontWeight = FontWeight.Bold,
                     color = colorScheme.onBackground
                 )
@@ -184,314 +173,145 @@ fun AdminAlarmLogsScreen(navController: NavController, alarmViewModel: AlarmView
             colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)
         )
 
-        // Filter chips - Type
         Column(modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.sm)) {
-            Text(
-                "Type",
-                fontSize = 12.sp,
-                color = colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text("Type", fontSize = 12.sp, color = colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = selectedType == null,
-                    onClick = { selectedType = null },
-                    label = { Text("All") },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = colorScheme.primary
-                    )
-                )
-                AlarmType.entries.forEach { type ->
-                    val label = when (type) {
-                        AlarmType.REMOTE_ALARM -> "Remote Alarm"
-                        AlarmType.LOCATION_REQUEST -> "Location"
-                        AlarmType.LOCK_DEVICE -> "Lock Device"
-                    }
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val typeOptions = listOf(null to "All", "REMOTE_ALARM" to "Remote Alarm", "LOCATION_REQUEST" to "Location", "LOCK_DEVICE" to "Lock Device")
+                typeOptions.forEach { (value, label) ->
                     FilterChip(
-                        selected = selectedType == type,
-                        onClick = { selectedType = if (selectedType == type) null else type },
+                        selected = selectedType == value,
+                        onClick = { selectedType = value },
                         label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = colorScheme.primary.copy(alpha = 0.15f),
-                            selectedLabelColor = colorScheme.primary
-                        )
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colorScheme.primary.copy(alpha = 0.15f), selectedLabelColor = colorScheme.primary)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Result",
-                fontSize = 12.sp,
-                color = colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text("Result", fontSize = 12.sp, color = colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                FilterChip(
-                    selected = selectedResult == null,
-                    onClick = { selectedResult = null },
-                    label = { Text("All") },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = colorScheme.primary
-                    )
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val resultOptions = listOf(
+                    null to ("All" to colorScheme.primary),
+                    "SUCCESS" to ("SUCCESS" to Color(0xFF4CAF50)),
+                    "FAILED" to ("FAILED" to colorScheme.error),
+                    "PENDING" to ("PENDING" to colorScheme.primary)
                 )
-                AlarmResult.entries.forEach { result ->
-                    val resultColor = when (result) {
-                        AlarmResult.SUCCESS -> Color(0xFF4CAF50)
-                        AlarmResult.FAILED -> colorScheme.error
-                        AlarmResult.PENDING -> colorScheme.primary
-                    }
+                resultOptions.forEach { (value, pair) ->
+                    val (label, color) = pair
                     FilterChip(
-                        selected = selectedResult == result,
-                        onClick = { selectedResult = if (selectedResult == result) null else result },
-                        label = { Text(result.name) },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = resultColor.copy(alpha = 0.15f),
-                            selectedLabelColor = resultColor
-                        )
+                        selected = selectedResult == value,
+                        onClick = { selectedResult = value },
+                        label = { Text(label) },
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = color.copy(alpha = 0.15f), selectedLabelColor = color)
                     )
                 }
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                "Date Range",
-                fontSize = 12.sp,
-                color = colorScheme.onSurfaceVariant,
-                fontWeight = FontWeight.SemiBold
-            )
+            Text("Date Range", fontSize = 12.sp, color = colorScheme.onSurfaceVariant, fontWeight = FontWeight.SemiBold)
             Spacer(modifier = Modifier.height(4.dp))
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
+            Row(modifier = Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                 val hasDateFilter = startDate != null || endDate != null
-                val dateLabel = if (hasDateFilter) {
-                    val start = startDate?.let { formatShortDate(it) } ?: "..."
-                    val end = endDate?.let { formatShortDate(it) } ?: "..."
-                    "$start - $end"
-                } else {
-                    "Select dates"
-                }
-
+                val dateLabel = if (hasDateFilter) "${startDate?.let { formatAlarmShortDate(it) } ?: "..."} - ${endDate?.let { formatAlarmShortDate(it) } ?: "..."}" else "Select dates"
                 FilterChip(
                     selected = hasDateFilter,
                     onClick = { showDateRangePicker = true },
                     label = { Text(dateLabel) },
-                    leadingIcon = {
-                        Icon(
-                            Icons.Default.DateRange,
-                            contentDescription = "Date range",
-                            modifier = Modifier.size(18.dp)
-                        )
-                    },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = colorScheme.primary.copy(alpha = 0.15f),
-                        selectedLabelColor = colorScheme.primary
-                    )
+                    leadingIcon = { Icon(Icons.Default.DateRange, null, modifier = Modifier.size(18.dp)) },
+                    colors = FilterChipDefaults.filterChipColors(selectedContainerColor = colorScheme.primary.copy(alpha = 0.15f), selectedLabelColor = colorScheme.primary)
                 )
                 if (hasDateFilter) {
-                    FilterChip(
-                        selected = false,
-                        onClick = {
-                            startDate = null
-                            endDate = null
-                        },
-                        label = { Text("Clear") },
-                        leadingIcon = {
-                            Icon(
-                                Icons.Default.Close,
-                                contentDescription = "Clear date filter",
-                                modifier = Modifier.size(16.dp)
-                            )
-                        }
-                    )
+                    FilterChip(selected = false, onClick = { startDate = null; endDate = null }, label = { Text("Clear") },
+                        leadingIcon = { Icon(Icons.Default.Close, null, modifier = Modifier.size(16.dp)) })
                 }
             }
         }
 
-        // Date range picker bottom sheet
         if (showDateRangePicker) {
-            val dateRangePickerState = rememberDateRangePickerState(
-                initialSelectedStartDateMillis = startDate,
-                initialSelectedEndDateMillis = endDate
-            )
+            val datePickerState = rememberDateRangePickerState(initialSelectedStartDateMillis = startDate, initialSelectedEndDateMillis = endDate)
             val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-
-            ModalBottomSheet(
-                onDismissRequest = { showDateRangePicker = false },
-                sheetState = sheetState,
-                containerColor = colorScheme.surface
-            ) {
+            ModalBottomSheet(onDismissRequest = { showDateRangePicker = false }, sheetState = sheetState, containerColor = colorScheme.surface) {
                 Column(modifier = Modifier.fillMaxWidth()) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = Spacing.md),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        TextButton(onClick = { showDateRangePicker = false }) {
-                            Text("Cancel")
-                        }
-                        Text(
-                            "Select Date Range",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
-                        )
-                        TextButton(
-                            onClick = {
-                                startDate = dateRangePickerState.selectedStartDateMillis
-                                endDate = dateRangePickerState.selectedEndDateMillis
-                                showDateRangePicker = false
-                            },
-                            enabled = dateRangePickerState.selectedStartDateMillis != null
-                        ) {
-                            Text("Apply")
-                        }
+                    Row(modifier = Modifier.fillMaxWidth().padding(horizontal = Spacing.md), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = { showDateRangePicker = false }) { Text("Cancel") }
+                        Text("Select Date Range", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                        TextButton(onClick = { startDate = datePickerState.selectedStartDateMillis; endDate = datePickerState.selectedEndDateMillis; showDateRangePicker = false }, enabled = datePickerState.selectedStartDateMillis != null) { Text("Apply") }
                     }
-                    DateRangePicker(
-                        state = dateRangePickerState,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(500.dp),
-                        title = null,
-                        showModeToggle = true
-                    )
+                    DateRangePicker(state = datePickerState, modifier = Modifier.fillMaxWidth().height(500.dp), title = null, showModeToggle = true)
                 }
             }
         }
 
         when {
-            isInitialLoad && allLogs.isEmpty() -> {
-                ShimmerLoadingList(modifier = Modifier.padding(horizontal = Spacing.md))
-            }
-            filteredLogs.isEmpty() -> {
-                EmptyStateView(
-                    title = "No Alarm Logs",
-                    subtitle = "No alarm activity has been recorded yet",
-                    icon = EmptyStateIcon.GENERIC
-                )
-            }
-            else -> {
-                LazyColumn(
-                    state = lazyListState,
-                    modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md)
-                ) {
-                    items(paginatedItems, key = { it.id }) { log ->
-                        val typeBadgeType = when (log.type) {
-                            AlarmType.REMOTE_ALARM -> BadgeType.Spam
-                            AlarmType.LOCATION_REQUEST -> BadgeType.Info
-                            AlarmType.LOCK_DEVICE -> BadgeType.Warning
-                        }
-                        val typeLabel = when (log.type) {
-                            AlarmType.REMOTE_ALARM -> "Remote Alarm"
-                            AlarmType.LOCATION_REQUEST -> "Location Request"
-                            AlarmType.LOCK_DEVICE -> "Lock Device"
-                        }
-                        val resultBadgeType = when (log.result) {
-                            AlarmResult.SUCCESS -> BadgeType.Success
-                            AlarmResult.FAILED -> BadgeType.Spam
-                            AlarmResult.PENDING -> BadgeType.Warning
-                        }
+            isLoading -> ShimmerLoadingList(modifier = Modifier.padding(horizontal = Spacing.md))
+            filteredLogs.isEmpty() -> EmptyStateView(title = "No Alarm Logs", subtitle = "No alarm activity recorded yet", icon = EmptyStateIcon.GENERIC)
+            else -> LazyColumn(
+                state = lazyListState,
+                modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md)
+            ) {
+                items(filteredLogs, key = { it["_id"]?.toString() ?: it.hashCode().toString() }) { log ->
+                    val deviceId = log["deviceId"]?.toString() ?: "Unknown"
+                    val typeStr = log["type"]?.toString() ?: ""
+                    val resultStr = log["result"]?.toString() ?: ""
+                    val triggeredByName = log["triggeredByName"]?.toString() ?: "Unknown"
+                    val triggeredByRole = log["triggeredByRole"]?.toString() ?: "user"
+                    val notes = log["notes"]?.toString()
+                    val triggeredAt = log["triggeredAt"]?.toString() ?: ""
 
-                        TruCallerCard(
-                            modifier = Modifier.padding(vertical = 3.dp),
-                            elevation = 0.dp
-                        ) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        "Device: ${log.deviceId}",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 15.sp,
-                                        color = colorScheme.onSurface
-                                    )
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                                    ) {
-                                        Text(
-                                            log.triggeredByName,
-                                            fontSize = 13.sp,
-                                            color = colorScheme.onSurfaceVariant
-                                        )
-                                        TruCallerBadge(
-                                            text = if (log.triggeredByRole == "admin") "Admin" else "User",
-                                            type = if (log.triggeredByRole == "admin") BadgeType.Custom else BadgeType.Info,
-                                            color = if (log.triggeredByRole == "admin") Brand else null,
-                                            backgroundColor = if (log.triggeredByRole == "admin") Brand.copy(alpha = 0.1f) else null
-                                        )
-                                    }
-                                }
-                                Column(horizontalAlignment = Alignment.End) {
+                    val (typeLabel, typeBadgeType) = when (typeStr) {
+                        "REMOTE_ALARM" -> "Remote Alarm" to BadgeType.Spam
+                        "LOCATION_REQUEST" -> "Location Request" to BadgeType.Info
+                        "LOCK_DEVICE" -> "Lock Device" to BadgeType.Warning
+                        else -> typeStr to BadgeType.Info
+                    }
+                    val resultBadgeType = when (resultStr) {
+                        "SUCCESS" -> BadgeType.Success
+                        "FAILED" -> BadgeType.Spam
+                        else -> BadgeType.Warning
+                    }
+
+                    TruCallerCard(modifier = Modifier.padding(vertical = 3.dp), elevation = 0.dp) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text("Device: $deviceId", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.onSurface)
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Text(triggeredByName, fontSize = 13.sp, color = colorScheme.onSurfaceVariant)
                                     TruCallerBadge(
-                                        text = typeLabel,
-                                        type = typeBadgeType
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    TruCallerBadge(
-                                        text = log.result.name,
-                                        type = resultBadgeType
+                                        text = if (triggeredByRole == "admin") "Admin" else "User",
+                                        type = if (triggeredByRole == "admin") BadgeType.Custom else BadgeType.Info,
+                                        color = if (triggeredByRole == "admin") Brand else null,
+                                        backgroundColor = if (triggeredByRole == "admin") Brand.copy(alpha = 0.1f) else null
                                     )
                                 }
                             }
-                            if (log.notes != null) {
-                                Spacer(modifier = Modifier.height(6.dp))
-                                Text(
-                                    log.notes,
-                                    fontSize = 12.sp,
-                                    color = colorScheme.onSurfaceVariant
-                                )
+                            Column(horizontalAlignment = Alignment.End) {
+                                TruCallerBadge(text = typeLabel, type = typeBadgeType)
+                                Spacer(modifier = Modifier.height(4.dp))
+                                TruCallerBadge(text = resultStr.ifBlank { "PENDING" }, type = resultBadgeType)
                             }
+                        }
+                        if (!notes.isNullOrBlank()) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(notes, fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                        }
+                        if (triggeredAt.isNotBlank()) {
                             Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                formatRelativeTime(log.triggeredAt),
-                                fontSize = 11.sp,
-                                color = colorScheme.onSurfaceVariant
-                            )
+                            Text(formatRelativeTime(triggeredAt), fontSize = 11.sp, color = colorScheme.onSurfaceVariant)
                         }
                     }
-                    // Pagination footer
-                    item {
-                        if (hasMoreItems) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(Spacing.md),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(24.dp),
-                                    strokeWidth = 2.dp,
-                                    color = colorScheme.primary
-                                )
-                            }
-                        } else if (paginatedItems.size > PAGE_SIZE) {
-                            Text(
-                                "All items loaded",
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(Spacing.md),
-                                textAlign = TextAlign.Center,
-                                fontSize = 13.sp,
-                                color = colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                    item { Spacer(modifier = Modifier.height(Spacing.md)) }
                 }
+                item {
+                    if (isLoadingMore) {
+                        Box(modifier = Modifier.fillMaxWidth().padding(Spacing.md), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp, color = colorScheme.primary)
+                        }
+                    } else if (!hasMore && allLogs.size > ALARM_PAGE_SIZE) {
+                        Text("All ${allLogs.size} logs loaded", modifier = Modifier.fillMaxWidth().padding(Spacing.md), textAlign = TextAlign.Center, fontSize = 13.sp, color = colorScheme.onSurfaceVariant)
+                    }
+                }
+                item { Spacer(modifier = Modifier.height(Spacing.md)) }
             }
         }
     }

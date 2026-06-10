@@ -464,11 +464,14 @@ object ApiClient {
     suspend fun getAdminCallerIds(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/caller-ids?skip=$skip&limit=$limit")
 
-    suspend fun getAdminStolenReports(): ApiResult<List<Map<String, Any>>> =
-        get("/api/admin/stolen-reports")
+    suspend fun getAdminStolenReports(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
+        get("/api/admin/stolen-reports?skip=$skip&limit=$limit")
 
-    suspend fun getAdminAlarmLogs(): ApiResult<List<Map<String, Any>>> =
-        get("/api/admin/alarm-logs")
+    suspend fun updateAdminStolenReportStatus(reportId: String, status: String): ApiResult<Unit> =
+        put("/api/admin/stolen-reports/$reportId/status", mapOf("status" to status))
+
+    suspend fun getAdminAlarmLogs(skip: Int = 0, limit: Int = 50): ApiResult<List<Map<String, Any>>> =
+        get("/api/admin/alarm-logs?skip=$skip&limit=$limit")
 
     suspend fun getAdminSmsSpamReports(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/sms-spam-reports?skip=$skip&limit=$limit")
@@ -528,9 +531,6 @@ object ApiClient {
 
     suspend fun deleteAdminCallerId(entryId: String): ApiResult<Unit> =
         delete("/api/admin/caller-ids/$entryId")
-
-    suspend fun updateAdminStolenReportStatus(reportId: String, status: String): ApiResult<Unit> =
-        put("/api/admin/stolen-reports/$reportId/status", mapOf("status" to status))
 
     suspend fun adminUpdateDeviceStatus(
         deviceId: String,

@@ -401,13 +401,11 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
             AdminDashboardScreen(
                 navController = navController,
                 authViewModel = authViewModel,
-                dashboardViewModel = adminDashboardViewModel,
-                stolenReportViewModel = stolenReportViewModel,
-                alarmViewModel = alarmViewModel
+                dashboardViewModel = adminDashboardViewModel
             )
         }
         composable("admin_devices") {
-            AdminDevicesScreen(navController = navController, deviceViewModel = deviceViewModel)
+            AdminDevicesScreen(navController = navController)
         }
         composable("admin_device_detail/{deviceId}") { backStackEntry ->
             val deviceId = backStackEntry.arguments?.getString("deviceId") ?: ""
@@ -433,10 +431,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
             )
         }
         composable("admin_stolen_reports") {
-            AdminStolenReportsScreen(
-                navController = navController,
-                stolenReportViewModel = stolenReportViewModel
-            )
+            AdminStolenReportsScreen(navController = navController)
         }
         composable("admin_caller_id") {
             AdminCallerIdScreen(
@@ -445,7 +440,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
             )
         }
         composable("admin_alarm_logs") {
-            AdminAlarmLogsScreen(navController = navController, alarmViewModel = alarmViewModel)
+            AdminAlarmLogsScreen(navController = navController)
         }
         composable("admin_settings") {
             AdminSettingsScreen(

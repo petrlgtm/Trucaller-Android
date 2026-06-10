@@ -63,9 +63,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.data.model.AlarmLog
-import com.byron.trucaller.data.model.AlarmType
-import com.byron.trucaller.data.model.StolenReport
 import com.byron.trucaller.ui.components.EmptyStateIcon
 import com.byron.trucaller.ui.components.EmptyStateView
 import com.byron.trucaller.ui.components.TruCallerCard
@@ -73,16 +70,12 @@ import com.byron.trucaller.ui.components.TruCallerHeader
 import com.byron.trucaller.ui.theme.Brand
 import com.byron.trucaller.ui.theme.BrandGold
 import com.byron.trucaller.ui.theme.Spacing
+import com.byron.trucaller.service.ApiClient
+import com.byron.trucaller.util.formatRelativeTime
 import com.byron.trucaller.viewmodel.AdminDashboardViewModel
-import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
 import com.byron.trucaller.viewmodel.DashboardDataSource
-import com.byron.trucaller.viewmodel.StolenReportViewModel
 import kotlinx.coroutines.delay
-import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.concurrent.TimeUnit
 
 // ── Activity Type ────────────────────────────────────────────────────────────
 
@@ -112,9 +105,7 @@ private data class AdminActivityItem(
 fun AdminDashboardScreen(
     navController: NavController,
     authViewModel: AuthViewModel,
-    dashboardViewModel: AdminDashboardViewModel,
-    stolenReportViewModel: StolenReportViewModel,
-    alarmViewModel: AlarmViewModel
+    dashboardViewModel: AdminDashboardViewModel
 ) {
     var showLogoutDialog by remember { mutableStateOf(false) }
 
@@ -123,12 +114,49 @@ fun AdminDashboardScreen(
     val error by dashboardViewModel.error.collectAsState()
     val dataSource by dashboardViewModel.dataSource.collectAsState()
 
-    val reports by stolenReportViewModel.allReports.collectAsState(initial = emptyList())
-    val alarmLogs by alarmViewModel.allLogs.collectAsState(initial = emptyList())
-
-    // Build unified activity feed from stolen reports + alarm logs
-    val recentActivity = remember(reports, alarmLogs) {
-        buildRecentActivityList(reports, alarmLogs)
+    // Recent activity loaded from server
+    var recentActivity by remember { mutableStateOf<List<AdminActivityItem>>(emptyList()) }
+    LaunchedEffect(Unit) {
+        try {
+            val reportsResult = ApiClient.getAdminStolenReports(skip = 0, limit = 5)
+            val alarmsResult = ApiClient.getAdminAlarmLogs(skip = 0, limit = 5)
+            val items = mutableListOf<AdminActivityItem>()
+            if (reportsResult.success && reportsResult.data != null) {
+                reportsResult.data.forEach { doc ->
+                    val id = doc["_id"]?.toString() ?: return@forEach
+                    val deviceId = doc["deviceId"]?.toString() ?: ""
+                    val status = doc["status"]?.toString() ?: "PENDING"
+                    val ts = doc["reportedAt"]?.toString() ?: doc["createdAt"]?.toString() ?: ""
+                    items.add(AdminActivityItem(
+                        id = id, type = AdminActivityType.STOLEN_REPORT,
+                        title = "Stolen device reported",
+                        subtitle = "Device ${deviceId.take(12)}… — $status",
+                        timestamp = ts, navigationRoute = "admin_stolen_reports"
+                    ))
+                }
+            }
+            if (alarmsResult.success && alarmsResult.data != null) {
+                alarmsResult.data.forEach { doc ->
+                    val id = doc["_id"]?.toString() ?: return@forEach
+                    val typeStr = doc["type"]?.toString() ?: ""
+                    val triggeredBy = doc["triggeredByName"]?.toString() ?: "Admin"
+                    val result = doc["result"]?.toString() ?: ""
+                    val ts = doc["triggeredAt"]?.toString() ?: ""
+                    val (actType, title) = when (typeStr) {
+                        "LOCATION_REQUEST" -> AdminActivityType.LOCATION_REQUEST to "Location requested"
+                        "LOCK_DEVICE" -> AdminActivityType.DEVICE_LOCKED to "Device lock triggered"
+                        else -> AdminActivityType.ALARM_TRIGGERED to "Alarm triggered"
+                    }
+                    items.add(AdminActivityItem(
+                        id = id, type = actType,
+                        title = title,
+                        subtitle = "By $triggeredBy — ${result.lowercase().replaceFirstChar { it.uppercase() }}",
+                        timestamp = ts, navigationRoute = "admin_alarm_logs"
+                    ))
+                }
+            }
+            recentActivity = items.sortedByDescending { it.timestamp }.take(10)
+        } catch (_: Exception) { }
     }
 
     // Staggered entrance animation state
@@ -701,80 +729,3 @@ private fun RecentActivityRow(
     }
 }
 
-// ── Activity List Builder ────────────────────────────────────────────────────
-
-/**
- * Merges stolen reports and alarm logs into a unified activity feed,
- * sorted by timestamp descending, limited to the 10 most recent items.
- */
-private fun buildRecentActivityList(
-    reports: List<StolenReport>,
-    alarmLogs: List<AlarmLog>
-): List<AdminActivityItem> {
-    val reportItems = reports.map { report ->
-        AdminActivityItem(
-            id = report.id,
-            type = AdminActivityType.STOLEN_REPORT,
-            title = "Stolen device reported",
-            subtitle = "Device ${report.deviceId.take(12)}... - ${report.status.name.lowercase().replaceFirstChar { it.uppercase() }}",
-            timestamp = report.reportedAt,
-            navigationRoute = "admin_stolen_reports"
-        )
-    }
-
-    val alarmItems = alarmLogs.map { log ->
-        val (type, title) = when (log.type) {
-            AlarmType.REMOTE_ALARM -> AdminActivityType.ALARM_TRIGGERED to "Alarm triggered"
-            AlarmType.LOCATION_REQUEST -> AdminActivityType.LOCATION_REQUEST to "Location requested"
-            AlarmType.LOCK_DEVICE -> AdminActivityType.DEVICE_LOCKED to "Device lock triggered"
-        }
-        AdminActivityItem(
-            id = log.id,
-            type = type,
-            title = title,
-            subtitle = "By ${log.triggeredByName} - ${log.result.name.lowercase().replaceFirstChar { it.uppercase() }}",
-            timestamp = log.triggeredAt,
-            navigationRoute = "admin_alarm_logs"
-        )
-    }
-
-    return (reportItems + alarmItems)
-        .sortedByDescending { it.timestamp }
-        .take(10)
-}
-
-// ── Relative Time Formatter ──────────────────────────────────────────────────
-
-/**
- * Converts an ISO-8601 timestamp string to a human-readable relative time
- * (e.g., "2h ago", "3d ago", "Just now").
- */
-private fun formatRelativeTime(isoTimestamp: String): String {
-    return try {
-        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
-        val date = format.parse(isoTimestamp) ?: return isoTimestamp
-        val now = Date()
-        val diffMs = now.time - date.time
-
-        if (diffMs < 0) return "Just now"
-
-        val minutes = TimeUnit.MILLISECONDS.toMinutes(diffMs)
-        val hours = TimeUnit.MILLISECONDS.toHours(diffMs)
-        val days = TimeUnit.MILLISECONDS.toDays(diffMs)
-        val weeks = days / 7
-
-        when {
-            minutes < 1 -> "Just now"
-            minutes < 60 -> "${minutes}m ago"
-            hours < 24 -> "${hours}h ago"
-            days < 7 -> "${days}d ago"
-            weeks < 4 -> "${weeks}w ago"
-            else -> {
-                val displayFormat = SimpleDateFormat("MMM d", Locale.US)
-                displayFormat.format(date)
-            }
-        }
-    } catch (_: Exception) {
-        isoTimestamp
-    }
-}
