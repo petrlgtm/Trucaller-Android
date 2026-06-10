@@ -73,6 +73,11 @@ data class UserWithDevices(
 )
 
 @Serializable
+data class BulkDeleteRequest(
+    val userIds: List<String>
+)
+
+@Serializable
 data class LoginAuditEntry(
     val phone: String,
     val ip: String,
@@ -732,6 +737,42 @@ fun Route.adminRoutes() {
                         "reportsDeleted" to reportsDeleted
                     ),
                     message = "User and all associated data deleted"
+                ))
+            }
+
+            // ── POST /api/admin/users/bulk-delete ─────────────────────────
+            post("/users/bulk-delete") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@post
+                }
+
+                val request = try { call.receive<BulkDeleteRequest>() } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Invalid request body"))
+                    return@post
+                }
+
+                if (request.userIds.isEmpty()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "No user IDs provided"))
+                    return@post
+                }
+
+                val ids = request.userIds.distinct()
+                val usersDeleted = Collections.users.deleteMany(Filters.`in`("_id", ids)).deletedCount
+                val devicesDeleted = Collections.devices.deleteMany(Filters.`in`("userId", ids)).deletedCount
+                val contactsDeleted = Collections.contacts.deleteMany(Filters.`in`("userId", ids)).deletedCount
+                val reportsDeleted = Collections.stolenReports.deleteMany(Filters.`in`("userId", ids)).deletedCount
+                runCatching { Collections.blockedNumbers.deleteMany(Filters.`in`("userId", ids)) }
+
+                call.respond(HttpStatusCode.OK, ApiResponse(
+                    success = true,
+                    data = mapOf(
+                        "usersDeleted" to usersDeleted,
+                        "devicesDeleted" to devicesDeleted,
+                        "contactsDeleted" to contactsDeleted,
+                        "reportsDeleted" to reportsDeleted
+                    ),
+                    message = "$usersDeleted user(s) and all associated data deleted"
                 ))
             }
 

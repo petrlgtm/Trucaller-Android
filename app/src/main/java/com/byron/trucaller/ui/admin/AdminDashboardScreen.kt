@@ -76,6 +76,7 @@ import com.byron.trucaller.ui.theme.Spacing
 import com.byron.trucaller.viewmodel.AdminDashboardViewModel
 import com.byron.trucaller.viewmodel.AlarmViewModel
 import com.byron.trucaller.viewmodel.AuthViewModel
+import com.byron.trucaller.viewmodel.DashboardDataSource
 import com.byron.trucaller.viewmodel.StolenReportViewModel
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
@@ -120,6 +121,7 @@ fun AdminDashboardScreen(
     val stats by dashboardViewModel.stats.collectAsState()
     val isLoading by dashboardViewModel.isLoading.collectAsState()
     val error by dashboardViewModel.error.collectAsState()
+    val dataSource by dashboardViewModel.dataSource.collectAsState()
 
     val reports by stolenReportViewModel.allReports.collectAsState(initial = emptyList())
     val alarmLogs by alarmViewModel.allLogs.collectAsState(initial = emptyList())
@@ -188,28 +190,25 @@ fun AdminDashboardScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(bottom = 8.dp)
                 ) {
+                    val (dotColor, statusText) = when (dataSource) {
+                        DashboardDataSource.WEBSOCKET -> Color(0xFF4CAF50) to run {
+                            val s = ((System.currentTimeMillis() - stats.lastUpdated) / 1_000).toInt()
+                            "WebSocket · ${if (s < 5) "Live" else "${s}s ago"}"
+                        }
+                        DashboardDataSource.HTTP -> Color(0xFFFFA000) to run {
+                            val s = ((System.currentTimeMillis() - stats.lastUpdated) / 1_000).toInt()
+                            "Server · ${if (s < 5) "just now" else "${s}s ago"} · polling every 30s"
+                        }
+                        DashboardDataSource.LOCAL_OFFLINE -> colorScheme.error to "Offline · local data only"
+                        DashboardDataSource.LOADING -> colorScheme.onSurfaceVariant to "Connecting..."
+                    }
                     Box(
                         modifier = Modifier
                             .size(8.dp)
-                            .background(Color(0xFF4CAF50), CircleShape)
+                            .background(dotColor, CircleShape)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    if (stats.lastUpdated > 0L) {
-                        val secondsAgo = ((System.currentTimeMillis() - stats.lastUpdated) / 1_000).toInt()
-                        val timeText = when {
-                            secondsAgo < 10 -> "Live"
-                            secondsAgo < 60 -> "${secondsAgo}s ago"
-                            secondsAgo < 3600 -> "${secondsAgo / 60}m ago"
-                            else -> "${secondsAgo / 3600}h ago"
-                        }
-                        Text(
-                            "Realtime · $timeText · auto-refresh every 30s",
-                            fontSize = 12.sp,
-                            color = colorScheme.onSurfaceVariant
-                        )
-                    } else {
-                        Text("Connecting...", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
-                    }
+                    Text(statusText, fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
                 }
 
                 error?.let {

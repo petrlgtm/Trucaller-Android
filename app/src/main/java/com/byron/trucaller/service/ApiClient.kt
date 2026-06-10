@@ -491,6 +491,9 @@ object ApiClient {
     suspend fun promoteSmsSpamToCallerId(reportId: String): ApiResult<Map<String, Any>> =
         post("/api/admin/sms-spam-reports/$reportId/promote", emptyMap<String, Any>())
 
+    suspend fun bulkDeleteAdminUsers(userIds: List<String>): ApiResult<Map<String, Any>> =
+        post("/api/admin/users/bulk-delete", mapOf("userIds" to userIds))
+
     suspend fun createAdminCallerId(
         id: String,
         phoneNumber: String,

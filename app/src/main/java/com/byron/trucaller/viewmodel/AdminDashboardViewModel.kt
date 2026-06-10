@@ -35,6 +35,7 @@ import java.util.concurrent.TimeUnit
 
 private const val WS_RECONNECT_DELAY_MS = 5_000L
 private const val POLL_FALLBACK_INTERVAL_MS = 30_000L
+private const val WS_STALE_THRESHOLD_MS = 60_000L
 
 data class DashboardStats(
     val userCount: Int = 0,
@@ -49,6 +50,8 @@ data class DashboardStats(
     val resolvedReports: Int = 0,
     val lastUpdated: Long = 0L
 )
+
+enum class DashboardDataSource { LOADING, WEBSOCKET, HTTP, LOCAL_OFFLINE }
 
 class AdminDashboardViewModel(
     application: Application,
@@ -89,16 +92,21 @@ class AdminDashboardViewModel(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _dataSource = MutableStateFlow(DashboardDataSource.LOADING)
+    val dataSource: StateFlow<DashboardDataSource> = _dataSource.asStateFlow()
+
     private val gson = Gson()
 
     private val wsClient = OkHttpClient.Builder()
-        .readTimeout(0, TimeUnit.MILLISECONDS) // no read timeout for WebSocket
+        .readTimeout(0, TimeUnit.MILLISECONDS)
         .build()
 
     private var webSocket: WebSocket? = null
     private var wsJob: Job? = null
     private var fallbackJob: Job? = null
-    private var wsConnected = false
+
+    @Volatile private var wsConnected = false
+    @Volatile private var lastWsMessageAt = 0L
 
     init {
         fetchStatsHttp()
@@ -106,8 +114,19 @@ class AdminDashboardViewModel(
     }
 
     fun refresh() {
-        if (wsConnected) return // WebSocket is pushing updates; no manual poll needed
+        // Always force-fetch from server regardless of WS state
         fetchStatsHttp()
+        // Reconnect WS if not connected or stale (no message in WS_STALE_THRESHOLD_MS)
+        val wsStale = wsConnected && lastWsMessageAt > 0 &&
+                (System.currentTimeMillis() - lastWsMessageAt) > WS_STALE_THRESHOLD_MS
+        if (!wsConnected || wsStale) {
+            Log.d(TAG, "refresh: reconnecting WebSocket (connected=$wsConnected, stale=$wsStale)")
+            webSocket?.cancel()
+            webSocket = null
+            wsConnected = false
+            wsJob?.cancel()
+            connectWebSocket()
+        }
     }
 
     private fun connectWebSocket() {
@@ -131,12 +150,14 @@ class AdminDashboardViewModel(
                     }
 
                     override fun onMessage(ws: WebSocket, text: String) {
+                        lastWsMessageAt = System.currentTimeMillis()
                         parseAndEmit(text)
                     }
 
                     override fun onFailure(ws: WebSocket, t: Throwable, response: Response?) {
                         Log.w(TAG, "WebSocket failure: ${t.message}")
                         wsConnected = false
+                        startFallbackPolling()
                     }
 
                     override fun onClosed(ws: WebSocket, code: Int, reason: String) {
@@ -147,7 +168,6 @@ class AdminDashboardViewModel(
 
                 webSocket = wsClient.newWebSocket(request, listener)
 
-                // Wait for WS_RECONNECT_DELAY_MS, then reconnect if still not connected
                 delay(WS_RECONNECT_DELAY_MS)
                 if (!wsConnected) {
                     Log.w(TAG, "WebSocket not connected after ${WS_RECONNECT_DELAY_MS}ms, retrying...")
@@ -156,11 +176,16 @@ class AdminDashboardViewModel(
                     startFallbackPolling()
                     delay(WS_RECONNECT_DELAY_MS * 2)
                 } else {
-                    // WebSocket is live — loop will keep it alive via reconnect if needed
                     while (isActive && wsConnected) {
-                        delay(1_000L)
+                        // Detect zombie connections: if no message for WS_STALE_THRESHOLD_MS, reconnect
+                        if (lastWsMessageAt > 0 &&
+                            (System.currentTimeMillis() - lastWsMessageAt) > WS_STALE_THRESHOLD_MS
+                        ) {
+                            Log.w(TAG, "WebSocket stale — no message in ${WS_STALE_THRESHOLD_MS}ms, reconnecting")
+                            wsConnected = false
+                        }
+                        delay(5_000L)
                     }
-                    // WebSocket dropped — cancel and reconnect
                     webSocket?.cancel()
                     webSocket = null
                 }
@@ -197,13 +222,33 @@ class AdminDashboardViewModel(
                 if (result.success && result.data != null) {
                     _stats.value = mapToStats(result.data)
                     _isLoading.value = false
+                    _error.value = null
+                    // Only update source to HTTP if WS isn't actively pushing
+                    if (_dataSource.value != DashboardDataSource.WEBSOCKET) {
+                        _dataSource.value = DashboardDataSource.HTTP
+                    }
                     return@launch
                 }
-                Log.w(TAG, "HTTP fetch failed: ${result.error}")
-                fallbackToLocal(silent)
+                Log.w(TAG, "HTTP stats fetch returned error: ${result.error}")
+                if (!silent) {
+                    _isLoading.value = false
+                    // Only fall back to local if we have no server data yet
+                    if (_stats.value.lastUpdated == 0L) {
+                        fallbackToLocal()
+                    } else {
+                        _error.value = result.error ?: "Could not refresh — showing last known data"
+                    }
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "HTTP stats fetch failed", e)
-                fallbackToLocal(silent)
+                if (!silent) {
+                    _isLoading.value = false
+                    if (_stats.value.lastUpdated == 0L) {
+                        fallbackToLocal()
+                    } else {
+                        _error.value = "Network error — showing last known data. Pull to retry."
+                    }
+                }
             }
         }
     }
@@ -218,6 +263,7 @@ class AdminDashboardViewModel(
                 _stats.value = mapToStats(data)
                 _isLoading.value = false
                 _error.value = null
+                _dataSource.value = DashboardDataSource.WEBSOCKET
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to parse WebSocket frame", e)
@@ -238,7 +284,7 @@ class AdminDashboardViewModel(
         lastUpdated = System.currentTimeMillis()
     )
 
-    private suspend fun fallbackToLocal(silent: Boolean = false) {
+    private suspend fun fallbackToLocal() {
         try {
             val users = userRepository.getUserCount().firstOrNull() ?: 0
             val devices = deviceRepository.getDeviceCount().firstOrNull() ?: 0
@@ -256,18 +302,14 @@ class AdminDashboardViewModel(
                 smsSpamReportCount = smsSpam,
                 lastUpdated = System.currentTimeMillis()
             )
-            if (!silent) {
-                _error.value = "Showing local data (offline)"
-            }
+            _error.value = "Offline — showing this device's local data only. Pull to retry."
+            _dataSource.value = DashboardDataSource.LOCAL_OFFLINE
         } catch (e: Exception) {
             Log.e(TAG, "Local fallback failed", e)
-            if (!silent) {
-                _error.value = "Unable to load dashboard stats"
-            }
+            _error.value = "Unable to load dashboard stats. Pull to retry."
+            _dataSource.value = DashboardDataSource.LOCAL_OFFLINE
         } finally {
-            if (!silent) {
-                _isLoading.value = false
-            }
+            _isLoading.value = false
         }
     }
 }
