@@ -701,5 +701,7 @@ data class TokenResponse(
     val token: String,
     val refreshToken: String? = null,
     val expiresIn: Long = 0,
-    val userId: String = ""
+    val userId: String = "",
+    val fullName: String = "",
+    val role: String = ""
 )

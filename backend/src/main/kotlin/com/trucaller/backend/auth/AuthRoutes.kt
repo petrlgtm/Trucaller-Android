@@ -411,7 +411,9 @@ private fun Route.registerRoute() {
                     token = token,
                     refreshToken = refreshTokenStr,
                     expiresIn = JwtConfig.expiresInSeconds(),
-                    userId = userId
+                    userId = userId,
+                    fullName = request.fullName,
+                    role = "user"
                 ),
                 message = "Registration successful."
             )
@@ -506,7 +508,9 @@ private fun Route.loginRoute() {
                     token = accessToken,
                     refreshToken = refreshTokenStr,
                     expiresIn = JwtConfig.expiresInSeconds(),
-                    userId = userId
+                    userId = userId,
+                    fullName = userDoc.getString("fullName") ?: "",
+                    role = "user"
                 ),
                 message = "Login successful."
             )

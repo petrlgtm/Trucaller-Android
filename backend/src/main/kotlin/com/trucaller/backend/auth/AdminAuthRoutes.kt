@@ -182,7 +182,9 @@ fun Route.adminAuthRoutes() {
                         token = token,
                         refreshToken = null,
                         expiresIn = expiresIn,
-                        userId = userId
+                        userId = userId,
+                        fullName = adminName,
+                        role = role
                     ),
                     message = "Welcome, $adminName"
                 )

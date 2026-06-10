@@ -76,7 +76,9 @@ data class TokenResponse(
     val token: String,
     val refreshToken: String? = null,
     val expiresIn: Long,           // seconds until token expiry
-    val userId: String
+    val userId: String,
+    val fullName: String = "",
+    val role: String = ""
 )
 
 @Serializable

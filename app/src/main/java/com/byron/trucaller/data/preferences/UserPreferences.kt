@@ -31,6 +31,7 @@ class UserPreferences(private val context: Context) {
         private val FCM_TOKEN_NEEDS_SYNC = booleanPreferencesKey("fcm_token_needs_sync")
         private val DEVICE_PROTECTION_PROMPT_SHOWN = booleanPreferencesKey("device_protection_prompt_shown")
         private val AUTH_TOKEN = stringPreferencesKey("auth_token")
+        private val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
 
         // ── Call Recording Settings ────────────────────────────────────
         private val RECORDING_CONSENT_ACCEPTED = booleanPreferencesKey("recording_consent_accepted")
@@ -58,6 +59,7 @@ class UserPreferences(private val context: Context) {
     val fcmTokenNeedsSync: Flow<Boolean> = context.dataStore.data.map { it[FCM_TOKEN_NEEDS_SYNC] ?: false }
     val deviceProtectionPromptShown: Flow<Boolean> = context.dataStore.data.map { it[DEVICE_PROTECTION_PROMPT_SHOWN] ?: false }
     val authToken: Flow<String?> = context.dataStore.data.map { it[AUTH_TOKEN] }
+    val refreshToken: Flow<String?> = context.dataStore.data.map { it[REFRESH_TOKEN] }
     // ── Call Recording Settings (flows) ───────────────────────────────
     val recordingConsentAccepted: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_CONSENT_ACCEPTED] ?: false }
     val recordingEnabled: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_ENABLED] ?: false }
@@ -184,11 +186,19 @@ class UserPreferences(private val context: Context) {
         }
     }
 
+    suspend fun setRefreshToken(token: String?) {
+        context.dataStore.edit {
+            if (token != null) it[REFRESH_TOKEN] = token
+            else it.remove(REFRESH_TOKEN)
+        }
+    }
+
     suspend fun clearSession() {
         context.dataStore.edit {
             it.remove(LOGGED_IN_USER_ID)
             it.remove(ADMIN_ID)
             it.remove(AUTH_TOKEN)
+            it.remove(REFRESH_TOKEN)
         }
     }
 }

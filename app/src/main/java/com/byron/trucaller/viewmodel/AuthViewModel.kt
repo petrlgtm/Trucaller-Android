@@ -65,6 +65,9 @@ class AuthViewModel(
                         null
                     }
                     if (savedToken != null) ApiClient.setAuthToken(savedToken)
+                    // Restore refresh token so automatic JWT renewal works after restart
+                    val savedRefresh = try { preferences.refreshToken.first() } catch (_: Exception) { null }
+                    if (savedRefresh != null) ApiClient.setRefreshToken(savedRefresh)
                     _authState.value = AuthState(
                         user = user,
                         isAuthenticated = true,
@@ -93,20 +96,36 @@ class AuthViewModel(
                 val tokenData = apiResult.data
                 ApiClient.setAuthToken(tokenData.token)
                 preferences.setAuthToken(tokenData.token)
+                // Persist refresh token so JWT renewal survives app restarts
+                tokenData.refreshToken?.let {
+                    ApiClient.setRefreshToken(it)
+                    preferences.setRefreshToken(it)
+                }
 
-                // Store or update user locally
+                // Store or update user locally — always sync to backend userId and fullName
                 val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
                 val existingUser = userRepository.getUserByPhone(fullPhone)
-                val user = existingUser?.copy(lastLogin = now) ?: User(
-                    id = tokenData.userId,
-                    fullName = fullPhone,
-                    phoneNumber = fullPhone,
-                    passwordHash = hashPassword(password),
-                    createdAt = now,
-                    lastLogin = now,
-                    isActive = true
-                )
-                if (existingUser != null) userRepository.updateUser(user) else userRepository.insertUser(user)
+                val user = if (existingUser != null && existingUser.id == tokenData.userId) {
+                    // Same ID — just refresh name and lastLogin
+                    existingUser.copy(
+                        fullName = tokenData.fullName.ifBlank { existingUser.fullName },
+                        lastLogin = now
+                    )
+                } else {
+                    // New login or ID mismatch (local placeholder ID) — replace with backend record
+                    if (existingUser != null) userRepository.deleteUser(existingUser)
+                    User(
+                        id = tokenData.userId,
+                        fullName = tokenData.fullName.ifBlank { fullPhone },
+                        phoneNumber = fullPhone,
+                        passwordHash = hashPassword(password),
+                        createdAt = now,
+                        lastLogin = now,
+                        isActive = true
+                    )
+                }
+                if (userRepository.getUserById(user.id) != null) userRepository.updateUser(user)
+                else userRepository.insertUser(user)
                 preferences.setLoggedInUserId(user.id)
 
                 _authState.value = AuthState(
@@ -124,7 +143,7 @@ class AuthViewModel(
             }
         } catch (_: Exception) { }
 
-        // Fallback: local Room login
+        // Fallback: local Room login (offline mode — no fake token to avoid triggering session expiry)
         val user = userRepository.getUserByPhone(fullPhone) ?: return false
         if (user.passwordHash != hashPassword(password)) return false
 
@@ -134,19 +153,11 @@ class AuthViewModel(
         userRepository.updateUser(updated)
         preferences.setLoggedInUserId(updated.id)
 
-        val localToken = UUID.randomUUID().toString()
-        ApiClient.setAuthToken(localToken)
-        preferences.setAuthToken(localToken)
-
         _authState.value = AuthState(
             user = updated,
             isAuthenticated = true,
-            token = localToken
+            token = ""
         )
-
-        viewModelScope.launch {
-            try { deviceRegistrationService.registerOrUpdateDevice(updated.id) } catch (_: Exception) { }
-        }
         return true
     }
 
@@ -165,15 +176,23 @@ class AuthViewModel(
                     val now = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).format(Date())
                     admin = AdminUser(
                         id = tokenData.userId,
-                        name = "Admin",
+                        name = tokenData.fullName.ifBlank { "Admin" },
                         phoneNumber = phoneNumber,
                         email = "",
                         password = hashPassword(password),
-                        role = "SUPER_ADMIN",
+                        role = tokenData.role.ifBlank { "SUPER_ADMIN" },
                         lastLogin = now,
                         createdAt = now
                     )
                     userRepository.insertAdminUser(admin)
+                } else {
+                    // Sync name and role from backend in case they changed
+                    val updated = admin.copy(
+                        name = tokenData.fullName.ifBlank { admin.name },
+                        role = tokenData.role.ifBlank { admin.role }
+                    )
+                    userRepository.updateAdmin(updated)
+                    admin = updated
                 }
                 preferences.setAdminId(admin.id)
                 preferences.setAdminProfile(admin.name, admin.phoneNumber)
@@ -238,6 +257,10 @@ class AuthViewModel(
                 userId = apiResult.data.userId
                 token = apiResult.data.token
                 ApiClient.setAuthToken(token)
+                apiResult.data.refreshToken?.let {
+                    ApiClient.setRefreshToken(it)
+                    preferences.setRefreshToken(it)
+                }
             }
         } catch (_: Exception) { }
 
@@ -387,9 +410,13 @@ class AuthViewModel(
 
     fun logout() {
         viewModelScope.launch {
+            val refreshToken = ApiClient.getAuthToken()?.let { preferences.refreshToken.first() }
+            try { ApiClient.logout(refreshToken) } catch (_: Exception) { }
             preferences.setLoggedInUserId(null)
             preferences.setAuthToken(null)
+            preferences.setRefreshToken(null)
             ApiClient.setAuthToken(null)
+            ApiClient.setRefreshToken(null)
             phoneAuthManager.signOut()
             _authState.value = AuthState()
         }
