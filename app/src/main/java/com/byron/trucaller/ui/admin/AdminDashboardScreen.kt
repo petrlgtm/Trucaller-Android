@@ -503,7 +503,7 @@ fun AdminDashboardScreen(
                                 "${stats.smsSpamReportCount} reports",
                                 BrandGold
                             ) {
-                                navController.navigate("admin_caller_id")
+                                navController.navigate("admin_sms_spam")
                             }
                             AdminMenuItem(
                                 Icons.Default.Settings,

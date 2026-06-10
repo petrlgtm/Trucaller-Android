@@ -85,6 +85,10 @@ fun AdminUserDetailScreen(
     var user by remember { mutableStateOf<User?>(null) }
     var showDeactivateDialog by remember { mutableStateOf(false) }
     var showReactivateDialog by remember { mutableStateOf(false) }
+    var showBanDialog by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
+    var isActionLoading by remember { mutableStateOf(false) }
+    var actionError by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(userId) {
         user = app.container.userRepository.getUserById(userId)
@@ -119,6 +123,56 @@ fun AdminUserDetailScreen(
                     Text("Cancel")
                 }
             }
+        )
+    }
+
+    // Ban confirmation dialog
+    if (showBanDialog) {
+        AlertDialog(
+            onDismissRequest = { showBanDialog = false },
+            title = { Text("Ban User") },
+            text = { Text("This user will be permanently banned and will not be able to log in. You can unban by setting status to Active.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showBanDialog = false
+                    coroutineScope.launch {
+                        isActionLoading = true
+                        val result = ApiClient.banUser(userId, "BANNED")
+                        isActionLoading = false
+                        if (result.success) {
+                            user = user?.copy(isActive = false)
+                        } else {
+                            actionError = result.error ?: "Failed to ban user"
+                        }
+                    }
+                }) { Text("Ban", color = colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showBanDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Permanently Delete User") },
+            text = { Text("This will irreversibly delete the user and all their devices, contacts, and reports. This cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showDeleteDialog = false
+                    coroutineScope.launch {
+                        isActionLoading = true
+                        val result = ApiClient.deleteAdminUser(userId)
+                        isActionLoading = false
+                        if (result.success) {
+                            navController.popBackStack()
+                        } else {
+                            actionError = result.error ?: "Failed to delete user"
+                        }
+                    }
+                }) { Text("Delete Forever", color = colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") } }
         )
     }
 
@@ -277,6 +331,29 @@ fun AdminUserDetailScreen(
                         style = TruCallerButtonStyle.Primary,
                         leadingIcon = Icons.Default.CheckCircle
                     )
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TruCallerButton(
+                    text = if (isActionLoading) "Processing…" else "Ban User",
+                    onClick = { if (!isActionLoading) showBanDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TruCallerButtonStyle.Danger
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                TruCallerButton(
+                    text = if (isActionLoading) "Processing…" else "Delete User",
+                    onClick = { if (!isActionLoading) showDeleteDialog = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    style = TruCallerButtonStyle.Secondary
+                )
+
+                actionError?.let { err ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(err, color = colorScheme.error, fontSize = 13.sp)
                 }
 
                 Spacer(modifier = Modifier.height(16.dp))

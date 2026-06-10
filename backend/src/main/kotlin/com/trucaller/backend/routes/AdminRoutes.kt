@@ -170,9 +170,20 @@ fun Route.adminRoutes() {
 
                 val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
+                val search = call.request.queryParameters["search"]?.trim()
+                val sortParam = call.request.queryParameters["sort"]
+                val sortOrder = if (sortParam == "createdAt_asc") 1 else -1
+
+                val filter = if (!search.isNullOrBlank()) {
+                    Filters.or(
+                        Filters.regex("fullName", search, "i"),
+                        Filters.regex("phoneNumber", search)
+                    )
+                } else Filters.empty()
 
                 val users = Collections.users
-                    .find()
+                    .find(filter)
+                    .sort(Document("createdAt", sortOrder))
                     .skip(skip)
                     .limit(limit)
                     .toList()
@@ -232,7 +243,7 @@ fun Route.adminRoutes() {
                     ApiResponse(
                         success = true,
                         data = UserWithDevices(
-                            user = userDoc.toJson(),
+                            user = org.bson.Document.parse(userDoc.toJson()).also { it.remove("passwordHash") }.toJson(),
                             devices = devices.map { it.toJson() }
                         ),
                         message = "User and devices retrieved"
@@ -254,9 +265,12 @@ fun Route.adminRoutes() {
 
                 val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 20
+                val sortParam = call.request.queryParameters["sort"]
+                val sortOrder = if (sortParam == "createdAt_asc") 1 else -1
 
                 val devices = Collections.devices
                     .find()
+                    .sort(Document("createdAt", sortOrder))
                     .skip(skip)
                     .limit(limit)
                     .toList()
@@ -644,6 +658,184 @@ fun Route.adminRoutes() {
                         message = "Stolen report status updated to ${request.status}"
                     )
                 )
+            }
+
+            // ── PUT /api/admin/users/{userId}/status ─────────────────────
+            put("/users/{userId}/status") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@put
+                }
+
+                val targetId = call.parameters["userId"]
+                if (targetId.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Missing userId"))
+                    return@put
+                }
+
+                val request = try { call.receive<AdminStatusUpdateRequest>() } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Invalid request body"))
+                    return@put
+                }
+
+                val validStatuses = listOf("ACTIVE", "BANNED", "SUSPENDED")
+                if (request.status !in validStatuses) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Invalid status. Must be one of: ${validStatuses.joinToString()}"))
+                    return@put
+                }
+
+                val result = Collections.users.updateOne(
+                    Filters.eq("_id", targetId),
+                    Updates.combine(
+                        Updates.set("status", request.status),
+                        Updates.set("updatedAt", java.time.Instant.now().toString())
+                    )
+                )
+
+                if (result.matchedCount == 0L) {
+                    call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(success = false, error = "User not found"))
+                    return@put
+                }
+
+                call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(success = true, message = "User status updated to ${request.status}"))
+            }
+
+            // ── DELETE /api/admin/users/{userId} ──────────────────────────
+            delete("/users/{userId}") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@delete
+                }
+
+                val targetId = call.parameters["userId"]
+                if (targetId.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Missing userId"))
+                    return@delete
+                }
+
+                val userResult = Collections.users.deleteOne(Filters.eq("_id", targetId))
+                if (userResult.deletedCount == 0L) {
+                    call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(success = false, error = "User not found"))
+                    return@delete
+                }
+
+                val devicesDeleted = Collections.devices.deleteMany(Filters.eq("userId", targetId)).deletedCount
+                val contactsDeleted = Collections.contacts.deleteMany(Filters.eq("userId", targetId)).deletedCount
+                val reportsDeleted = Collections.stolenReports.deleteMany(Filters.eq("userId", targetId)).deletedCount
+                runCatching { Collections.blockedNumbers.deleteMany(Filters.eq("userId", targetId)) }
+
+                call.respond(HttpStatusCode.OK, ApiResponse(
+                    success = true,
+                    data = mapOf(
+                        "devicesDeleted" to devicesDeleted,
+                        "contactsDeleted" to contactsDeleted,
+                        "reportsDeleted" to reportsDeleted
+                    ),
+                    message = "User and all associated data deleted"
+                ))
+            }
+
+            // ── PUT /api/admin/sms-spam-reports/{id}/status ───────────────
+            put("/sms-spam-reports/{id}/status") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@put
+                }
+
+                val reportId = call.parameters["id"]
+                if (reportId.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Missing report id"))
+                    return@put
+                }
+
+                val request = try { call.receive<AdminStatusUpdateRequest>() } catch (e: Exception) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Invalid request body"))
+                    return@put
+                }
+
+                val validStatuses = listOf("PENDING", "REVIEWED", "DISMISSED")
+                if (request.status !in validStatuses) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Invalid status. Must be one of: ${validStatuses.joinToString()}"))
+                    return@put
+                }
+
+                val result = Collections.smsSpamReports.updateOne(
+                    Filters.eq("_id", reportId),
+                    Updates.combine(
+                        Updates.set("status", request.status),
+                        Updates.set("updatedAt", java.time.Instant.now().toString())
+                    )
+                )
+
+                if (result.matchedCount == 0L) {
+                    call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(success = false, error = "SMS spam report not found"))
+                    return@put
+                }
+
+                call.respond(HttpStatusCode.OK, ApiResponse<Nothing>(success = true, message = "SMS spam report status updated to ${request.status}"))
+            }
+
+            // ── POST /api/admin/sms-spam-reports/{id}/promote ─────────────
+            post("/sms-spam-reports/{id}/promote") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@post
+                }
+
+                val reportId = call.parameters["id"]
+                if (reportId.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Missing report id"))
+                    return@post
+                }
+
+                val reportDoc = Collections.smsSpamReports.find(Filters.eq("_id", reportId)).toList().firstOrNull()
+                if (reportDoc == null) {
+                    call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(success = false, error = "SMS spam report not found"))
+                    return@post
+                }
+
+                val senderNumber = reportDoc.getString("senderNumber") ?: reportDoc.getString("phoneNumber") ?: ""
+                if (senderNumber.isBlank()) {
+                    call.respond(HttpStatusCode.UnprocessableEntity, ApiResponse<Nothing>(success = false, error = "Report has no sender number"))
+                    return@post
+                }
+
+                val now = java.time.Instant.now().toString()
+                val existing = Collections.callerIds.find(Filters.eq("phoneNumber", senderNumber)).toList().firstOrNull()
+                if (existing != null) {
+                    val newScore = maxOf(existing.getInteger("spamScore", 0), 80)
+                    val newCount = existing.getInteger("reportCount", 0) + 1
+                    Collections.callerIds.updateOne(
+                        Filters.eq("phoneNumber", senderNumber),
+                        Updates.combine(
+                            Updates.set("spamScore", newScore),
+                            Updates.set("reportCount", newCount),
+                            Updates.set("category", "SPAM"),
+                            Updates.set("lastUpdated", now)
+                        )
+                    )
+                } else {
+                    Collections.callerIds.insertOne(Document()
+                        .append("_id", ObjectId().toString())
+                        .append("phoneNumber", senderNumber)
+                        .append("name", senderNumber)
+                        .append("spamScore", 80)
+                        .append("reportCount", 1)
+                        .append("category", "SPAM")
+                        .append("lastUpdated", now)
+                    )
+                }
+
+                Collections.smsSpamReports.updateOne(
+                    Filters.eq("_id", reportId),
+                    Updates.combine(Updates.set("status", "REVIEWED"), Updates.set("updatedAt", now))
+                )
+
+                call.respond(HttpStatusCode.OK, ApiResponse(
+                    success = true,
+                    data = mapOf("senderNumber" to senderNumber, "promoted" to true),
+                    message = "$senderNumber promoted to caller ID spam list"
+                ))
             }
 
             // ── PUT /api/admin/profile ────────────────────────────────────

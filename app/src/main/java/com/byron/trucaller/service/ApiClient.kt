@@ -476,6 +476,21 @@ object ApiClient {
     suspend fun getAdminUserDetail(userId: String): ApiResult<Map<String, Any>> =
         get("/api/admin/users/$userId")
 
+    suspend fun banUser(userId: String, status: String): ApiResult<Unit> =
+        put("/api/admin/users/$userId/status", mapOf("status" to status))
+
+    suspend fun deleteAdminUser(userId: String): ApiResult<Map<String, Any>> =
+        delete("/api/admin/users/$userId")
+
+    suspend fun searchAdminUsers(search: String, skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
+        get("/api/admin/users?search=${java.net.URLEncoder.encode(search, "UTF-8")}&skip=$skip&limit=$limit")
+
+    suspend fun updateSmsSpamStatus(reportId: String, status: String): ApiResult<Unit> =
+        put("/api/admin/sms-spam-reports/$reportId/status", mapOf("status" to status))
+
+    suspend fun promoteSmsSpamToCallerId(reportId: String): ApiResult<Map<String, Any>> =
+        post("/api/admin/sms-spam-reports/$reportId/promote", emptyMap<String, Any>())
+
     suspend fun createAdminCallerId(
         id: String,
         phoneNumber: String,

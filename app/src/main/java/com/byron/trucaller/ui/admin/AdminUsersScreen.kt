@@ -40,6 +40,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
+import com.byron.trucaller.data.model.User
+import com.byron.trucaller.service.ApiClient
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -69,6 +73,9 @@ private const val PAGE_SIZE = 20
 fun AdminUsersScreen(navController: NavController) {
     var searchQuery by remember { mutableStateOf("") }
     var isInitialLoad by remember { mutableStateOf(true) }
+    var isServerSearching by remember { mutableStateOf(false) }
+    var serverSearchResults by remember { mutableStateOf<List<User>?>(null) }
+    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
 
     val app = LocalContext.current.applicationContext as TruCallerApplication
     val users by app.container.userRepository.getAllUsers().collectAsState(initial = emptyList())
@@ -78,7 +85,42 @@ fun AdminUsersScreen(navController: NavController) {
         isInitialLoad = false
     }
 
-    val filtered by remember(searchQuery, users) {
+    // Debounced server-side search
+    LaunchedEffect(searchQuery) {
+        if (searchQuery.length >= 2) {
+            delay(400)
+            isServerSearching = true
+            try {
+                val result = ApiClient.searchAdminUsers(searchQuery)
+                if (result.success && result.data != null) {
+                    serverSearchResults = result.data.mapNotNull { map ->
+                        try {
+                            User(
+                                id = map["_id"]?.toString() ?: map["id"]?.toString() ?: return@mapNotNull null,
+                                fullName = map["fullName"]?.toString() ?: "",
+                                phoneNumber = map["phoneNumber"]?.toString() ?: "",
+                                email = map["email"]?.toString(),
+                                passwordHash = "",
+                                isActive = map["isActive"] as? Boolean ?: (map["status"]?.toString() == "ACTIVE"),
+                                createdAt = map["createdAt"]?.toString() ?: "",
+                                lastLogin = map["lastLogin"]?.toString(),
+                                trustScore = (map["trustScore"] as? Number)?.toInt() ?: 0,
+                                trustLevel = try { com.byron.trucaller.data.model.TrustLevel.valueOf(map["trustLevel"]?.toString() ?: "NEW") } catch (_: Exception) { com.byron.trucaller.data.model.TrustLevel.NEW }
+                            )
+                        } catch (_: Exception) { null }
+                    }
+                }
+            } catch (_: Exception) {
+                serverSearchResults = null
+            }
+            isServerSearching = false
+        } else {
+            serverSearchResults = null
+            isServerSearching = false
+        }
+    }
+
+    val localFiltered by remember(searchQuery, users) {
         derivedStateOf {
             if (searchQuery.isBlank()) users
             else {
@@ -87,6 +129,8 @@ fun AdminUsersScreen(navController: NavController) {
             }
         }
     }
+
+    val filtered = serverSearchResults ?: localFiltered
 
     // Pagination state
     var currentPage by remember { mutableIntStateOf(1) }
@@ -151,6 +195,10 @@ fun AdminUsersScreen(navController: NavController) {
                 unfocusedContainerColor = colorScheme.surfaceVariant
             )
         )
+
+        if (isServerSearching) {
+            androidx.compose.material3.LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+        }
 
         when {
             isInitialLoad && users.isEmpty() -> {

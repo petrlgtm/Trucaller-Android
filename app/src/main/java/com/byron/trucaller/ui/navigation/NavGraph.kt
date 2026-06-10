@@ -66,6 +66,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.byron.trucaller.ui.admin.AdminAlarmLogsScreen
+import com.byron.trucaller.ui.admin.AdminSmsSpamScreen
 import com.byron.trucaller.ui.admin.AdminCallerIdScreen
 import com.byron.trucaller.ui.admin.AdminDashboardScreen
 import com.byron.trucaller.ui.admin.AdminDeviceDetailScreen
@@ -452,6 +453,9 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
                 authViewModel = authViewModel,
                 adminSettingsViewModel = adminSettingsViewModel
             )
+        }
+        composable("admin_sms_spam") {
+            AdminSmsSpamScreen(navController = navController)
         }
     }
 }
