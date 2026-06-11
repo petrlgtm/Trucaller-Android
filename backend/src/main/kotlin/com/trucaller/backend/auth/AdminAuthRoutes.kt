@@ -168,17 +168,23 @@ fun Route.adminAuthRoutes() {
             // failing until re-login. The stored role lets /api/auth/refresh
             // mint a new access token that keeps admin rights.
             val token = JwtConfig.makeToken(userId = userId, role = role)
-            val refreshTokenStr = JwtConfig.makeRefreshToken(userId)
-
-            Collections.refreshTokens.insertOne(
-                org.bson.Document()
-                    .append("token", refreshTokenStr)
-                    .append("userId", userId)
-                    .append("role", role)
-                    .append("createdAt", java.util.Date.from(Instant.now()))
-                    .append("expiresAt", java.util.Date.from(Instant.now().plusMillis(JwtConfig.REFRESH_TOKEN_EXPIRATION_MS)))
-                    .append("ip", ip)
-            )
+            val refreshTokenStr: String? = try {
+                val rt = JwtConfig.makeRefreshToken(userId)
+                Collections.refreshTokens.insertOne(
+                    org.bson.Document()
+                        .append("token", rt)
+                        .append("userId", userId)
+                        .append("role", role)
+                        .append("createdAt", java.util.Date.from(Instant.now()))
+                        .append("expiresAt", java.util.Date.from(Instant.now().plusMillis(JwtConfig.REFRESH_TOKEN_EXPIRATION_MS)))
+                        .append("ip", ip)
+                )
+                rt
+            } catch (e: Exception) {
+                io.ktor.util.logging.KtorSimpleLogger("AdminAuthRoutes")
+                    .error("Failed to store admin refresh token for $userId: ${e.message}")
+                null
+            }
 
             // Update lastLogin timestamp
             Collections.adminUsers.updateOne(
