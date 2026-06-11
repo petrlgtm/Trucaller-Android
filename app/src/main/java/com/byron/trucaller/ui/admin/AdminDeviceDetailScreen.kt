@@ -106,6 +106,7 @@ fun AdminDeviceDetailScreen(
     var statusMessage by remember { mutableStateOf<String?>(null) }
 
     val alarmPlaying by alarmViewModel.alarmPlaying.collectAsState()
+    val alarmSentDeviceId by alarmViewModel.alarmSentDeviceId.collectAsState()
     val adminUser by authViewModel.adminUser.collectAsState()
     val actionMessage by alarmViewModel.actionMessage.collectAsState()
 
@@ -293,8 +294,8 @@ fun AdminDeviceDetailScreen(
                         DeviceStatus.FLAGGED -> BadgeType.Warning
                     }
 
-                    // Alarm active banner
-                    if (alarmPlaying) {
+                    // Alarm active banner (local test OR remotely-triggered)
+                    if (alarmPlaying || alarmSentDeviceId == deviceId) {
                         TruCallerCard(
                             modifier = Modifier.padding(bottom = 12.dp),
                             containerColor = colorScheme.error
@@ -306,7 +307,7 @@ fun AdminDeviceDetailScreen(
                                     Text("ALARM ACTIVE", color = colorScheme.onError, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                                     Text("Alarm is sounding on device", color = colorScheme.onError.copy(alpha = 0.8f), fontSize = 12.sp)
                                 }
-                                TruCallerButton(text = "STOP", onClick = { alarmViewModel.stopAlarm() }, style = TruCallerButtonStyle.Secondary)
+                                TruCallerButton(text = "STOP", onClick = { alarmViewModel.stopRemoteAlarm(deviceId) }, style = TruCallerButtonStyle.Secondary)
                             }
                         }
                     }

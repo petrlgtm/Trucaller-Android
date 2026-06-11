@@ -13,9 +13,15 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 object AlarmSoundManager {
+    private val _alarmActive = MutableStateFlow(false)
+    val alarmActiveFlow: StateFlow<Boolean> = _alarmActive.asStateFlow()
+
     private var mediaPlayer: MediaPlayer? = null
     private var vibrator: Vibrator? = null
     private var alarmJob: Job? = null
@@ -24,6 +30,7 @@ object AlarmSoundManager {
 
     fun triggerAlarm(context: Context, durationMs: Long = 30_000) {
         stopAlarm()
+        _alarmActive.value = true
 
         val am = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
         audioManager = am
@@ -77,6 +84,7 @@ object AlarmSoundManager {
     }
 
     fun stopAlarm() {
+        _alarmActive.value = false
         alarmJob?.cancel()
         alarmJob = null
 

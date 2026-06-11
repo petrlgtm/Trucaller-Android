@@ -166,6 +166,7 @@ fun RemoteActionsScreen(
     val hasPin = authViewModel.hasSecurityPin()
 
     val alarmPlaying by alarmViewModel.alarmPlaying.collectAsState()
+    val alarmSentDeviceId by alarmViewModel.alarmSentDeviceId.collectAsState()
     val actionMessage by alarmViewModel.actionMessage.collectAsState()
 
     val authState by authViewModel.authState.collectAsState()
@@ -681,8 +682,9 @@ fun RemoteActionsScreen(
                     .verticalScroll(rememberScrollState())
                     .padding(Spacing.md)
             ) {
-                // Pulsing alarm active banner
-                if (alarmPlaying) {
+                // Pulsing alarm active banner (local alarm OR remotely-triggered alarm)
+                val deviceId = device?.id
+                if (alarmPlaying || (deviceId != null && alarmSentDeviceId == deviceId)) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -702,7 +704,10 @@ fun RemoteActionsScreen(
                                 Text("Alarm is sounding on device", color = colorScheme.onError.copy(alpha = 0.8f), fontSize = 12.sp)
                             }
                             Button(
-                                onClick = { alarmViewModel.stopAlarm() },
+                                onClick = {
+                                    if (deviceId != null) alarmViewModel.stopRemoteAlarm(deviceId)
+                                    else alarmViewModel.stopAlarm()
+                                },
                                 colors = ButtonDefaults.buttonColors(containerColor = colorScheme.onError)
                             ) {
                                 Text("STOP", color = colorScheme.error, fontWeight = FontWeight.Bold)

@@ -190,6 +190,14 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".service.AlarmStopReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.byron.trucaller.ACTION_STOP_ALARM" />
+            </intent-filter>
+        </receiver>
+
     </application>
 
 </manifest>

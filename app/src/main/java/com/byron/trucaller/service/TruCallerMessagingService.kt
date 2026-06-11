@@ -67,6 +67,11 @@ class TruCallerMessagingService : FirebaseMessagingService() {
                 }
                 reportActionResult(logId, success, action)
             }
+            "STOP_ALARM" -> {
+                AlarmSoundManager.stopAlarm()
+                SecurityNotificationHelper.dismissAlarmNotification(applicationContext)
+                reportActionResult(logId, true, action)
+            }
             "LOCK_DEVICE" -> {
                 var success = false
                 try {

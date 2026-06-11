@@ -51,10 +51,23 @@ class AlarmViewModel(
     private val _alarmPlaying = MutableStateFlow(false)
     val alarmPlaying: StateFlow<Boolean> = _alarmPlaying.asStateFlow()
 
+    // tracks the deviceId of a remote device we sent REMOTE_ALARM to (null = none active)
+    private val _alarmSentDeviceId = MutableStateFlow<String?>(null)
+    val alarmSentDeviceId: StateFlow<String?> = _alarmSentDeviceId.asStateFlow()
+
     private val _actionMessage = MutableStateFlow<String?>(null)
     val actionMessage: StateFlow<String?> = _actionMessage.asStateFlow()
 
     fun clearActionMessage() { _actionMessage.value = null }
+
+    init {
+        // Keep alarmPlaying in sync with AlarmSoundManager (covers FCM-triggered alarms)
+        viewModelScope.launch {
+            AlarmSoundManager.alarmActiveFlow.collect { active ->
+                _alarmPlaying.value = active
+            }
+        }
+    }
 
     val allLogs: Flow<List<AlarmLog>> = alarmRepository.getAllLogs()
     val pendingCount: Flow<Int> = alarmRepository.getPendingCount()
@@ -118,10 +131,18 @@ class AlarmViewModel(
                     // The device will report SUCCESS/FAILED via PUT result callback.
                     // We keep the local log as PENDING — it reflects "command sent".
                     _actionMessage.value = when (type) {
-                        AlarmType.REMOTE_ALARM    -> "Alarm command sent to device"
+                        AlarmType.REMOTE_ALARM     -> "Alarm command sent to device"
                         AlarmType.LOCATION_REQUEST -> "Location request sent to device"
                         AlarmType.LOCK_DEVICE      -> "Lock command sent to device"
                         AlarmType.WIPE_DATA        -> "Wipe command sent to device"
+                        AlarmType.STOP_ALARM       -> "Stop alarm command sent"
+                    }
+                    if (type == AlarmType.REMOTE_ALARM) {
+                        _alarmSentDeviceId.value = deviceId
+                        viewModelScope.launch {
+                            delay(30_000)
+                            if (_alarmSentDeviceId.value == deviceId) _alarmSentDeviceId.value = null
+                        }
                     }
                 } else {
                     alarmRepository.updateResult(
@@ -168,6 +189,23 @@ class AlarmViewModel(
         alarmTimeoutJob = null
         AlarmSoundManager.stopAlarm()
         _alarmPlaying.value = false
+    }
+
+    fun stopRemoteAlarm(deviceId: String) {
+        viewModelScope.launch {
+            _alarmSentDeviceId.value = null
+            if (isCurrentDevice(deviceId)) {
+                stopAlarm()
+                return@launch
+            }
+            try {
+                ApiClient.triggerAlarm(deviceId = deviceId, type = AlarmType.STOP_ALARM.name, notes = null)
+                _actionMessage.value = "Stop command sent to device"
+            } catch (e: Exception) {
+                Log.e(TAG, "stopRemoteAlarm failed", e)
+                _actionMessage.value = "Failed to send stop command"
+            }
+        }
     }
 
     // ── Request Location ─────────────────────────────────────────────────
