@@ -7,6 +7,7 @@ import android.content.Intent
 import android.provider.Telephony
 import android.util.Log
 import com.byron.trucaller.TruCallerApplication
+import com.byron.trucaller.data.model.SmsCategory
 import com.byron.trucaller.data.model.SpamCategory
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -48,6 +49,7 @@ class SmsReceiver : BroadcastReceiver() {
         val app = context.applicationContext as? TruCallerApplication ?: return
         val callerIdRepo = app.container.callerIdRepository
         val blockedRepo = app.container.blockedNumberRepository
+        val smsRuleRepo = app.container.smsRuleRepository
         val userPrefs = app.container.userPreferences
 
         // Make sure the receiver can finish async work safely.
@@ -64,7 +66,38 @@ class SmsReceiver : BroadcastReceiver() {
                     return@launch
                 }
 
-                // Check caller ID database for spam
+                // User-defined rules take priority over auto-classification
+                if (userId != null) {
+                    val ruleCategory = try {
+                        smsRuleRepo.evaluate(userId, senderNumber, fullBody)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Rule evaluation failed", e)
+                        null
+                    }
+                    if (ruleCategory != null) {
+                        Log.d(TAG, "SMS from $senderNumber matched user rule → $ruleCategory")
+                        when (ruleCategory) {
+                            SmsCategory.SPAM -> SmsNotificationHelper.showSpamSmsNotification(
+                                context = context,
+                                sender = senderNumber,
+                                senderNumber = senderNumber,
+                                messagePreview = fullBody.take(80),
+                                spamScore = 90
+                            )
+                            SmsCategory.PROMOTIONAL -> SmsNotificationHelper.showSuspectedSpamNotification(
+                                context = context,
+                                sender = senderNumber,
+                                senderNumber = senderNumber,
+                                messagePreview = fullBody.take(80)
+                            )
+                            // PERSONAL / TRANSACTIONAL: rule explicitly says this is fine — no warning
+                            else -> Unit
+                        }
+                        return@launch
+                    }
+                }
+
+                // Fallback: check caller ID database for spam
                 val lookupResult = callerIdRepo.lookupNumber(senderNumber)
                 val entry = lookupResult.callerIdEntry
 
