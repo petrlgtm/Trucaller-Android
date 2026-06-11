@@ -470,8 +470,13 @@ object ApiClient {
     suspend fun updateAdminStolenReportStatus(reportId: String, status: String): ApiResult<Unit> =
         put("/api/admin/stolen-reports/$reportId/status", mapOf("status" to status))
 
-    suspend fun getAdminAlarmLogs(skip: Int = 0, limit: Int = 50): ApiResult<List<Map<String, Any>>> =
-        get("/api/admin/alarm-logs?skip=$skip&limit=$limit")
+    suspend fun getAdminAlarmLogs(skip: Int = 0, limit: Int = 50, deviceId: String? = null): ApiResult<List<Map<String, Any>>> {
+        val base = "/api/admin/alarm-logs?skip=$skip&limit=$limit"
+        return get(if (deviceId != null) "$base&deviceId=$deviceId" else base)
+    }
+
+    suspend fun getAdminDeviceDetail(deviceId: String): ApiResult<AdminDeviceSummary> =
+        get("/api/admin/devices/$deviceId")
 
     suspend fun getAdminSmsSpamReports(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/sms-spam-reports?skip=$skip&limit=$limit")

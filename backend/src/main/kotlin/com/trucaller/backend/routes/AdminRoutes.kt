@@ -24,7 +24,7 @@ import org.bson.Document
 import org.bson.types.ObjectId
 
 private fun idFilter(id: String) = try {
-    Filters.eq("_id", ObjectId(id))
+    Filters.or(Filters.eq("_id", ObjectId(id)), Filters.eq("_id", id))
 } catch (_: Exception) {
     Filters.eq("_id", id)
 }
@@ -376,6 +376,32 @@ fun Route.adminRoutes() {
                         message = "Retrieved ${devices.size} device(s)"
                     )
                 )
+            }
+
+            // ── GET /api/admin/devices/{deviceId} ────────────────────────
+            get("/devices/{deviceId}") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@get
+                }
+
+                val deviceId = call.parameters["deviceId"]
+                if (deviceId.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Missing deviceId"))
+                    return@get
+                }
+
+                val deviceDoc = Collections.devices
+                    .find(Filters.or(Filters.eq("deviceId", deviceId), idFilter(deviceId)))
+                    .toList()
+                    .firstOrNull()
+
+                if (deviceDoc == null) {
+                    call.respond(HttpStatusCode.NotFound, ApiResponse<Nothing>(success = false, error = "Device not found"))
+                    return@get
+                }
+
+                call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = deviceDoc.toDeviceResponse()))
             }
 
             // ── PUT /api/admin/devices/{deviceId}/status ─────────────────
@@ -1269,9 +1295,13 @@ fun Route.adminRoutes() {
 
                 val skip = call.request.queryParameters["skip"]?.toIntOrNull() ?: 0
                 val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
+                val deviceIdParam = call.request.queryParameters["deviceId"]
+
+                val filter = if (!deviceIdParam.isNullOrBlank()) Filters.eq("deviceId", deviceIdParam)
+                             else Filters.empty()
 
                 val logs = Collections.alarmLogs
-                    .find()
+                    .find(filter)
                     .sort(org.bson.Document("triggeredAt", -1))
                     .skip(skip)
                     .limit(limit)
