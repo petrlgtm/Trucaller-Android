@@ -115,6 +115,7 @@ fun Route.familyGroupRoutes() {
             deleteGroup()
             getGroupDevices()
             sendGroupAlert()
+            regenerateInviteCode()
         }
     }
 }
@@ -1024,6 +1025,55 @@ private fun Route.sendGroupAlert() {
             ApiResponse<Nothing>(
                 success = true,
                 message = "Alert sent to ${targetUserIds.size} member(s), $sentCount device(s) notified"
+            )
+        )
+    }
+}
+
+// ── POST /api/family/{groupId}/regenerate-invite ─────────────────────────
+
+private fun Route.regenerateInviteCode() {
+    post("/{groupId}/regenerate-invite") {
+        val currentUserId = call.userId()
+        val groupId = call.parameters["groupId"]
+
+        if (groupId.isNullOrBlank()) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Missing groupId")
+            )
+            return@post
+        }
+
+        val groupDoc = Collections.familyGroups.find(Filters.eq("_id", groupId)).firstOrNull()
+        if (groupDoc == null) {
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiResponse<Unit>(success = false, error = "Group not found")
+            )
+            return@post
+        }
+
+        if (groupDoc.getString("ownerId") != currentUserId) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                ApiResponse<Unit>(success = false, error = "Only the group OWNER can regenerate the invite code")
+            )
+            return@post
+        }
+
+        val newCode = generateInviteCode()
+        Collections.familyGroups.updateOne(
+            Filters.eq("_id", groupId),
+            Document("\$set", Document("inviteCode", newCode))
+        )
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse(
+                success = true,
+                data = mapOf("inviteCode" to newCode),
+                message = "Invite code regenerated"
             )
         )
     }

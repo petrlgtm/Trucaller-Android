@@ -250,7 +250,7 @@ class FamilyGroupViewModel : ViewModel() {
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(error = null)
             try {
-                val result = ApiClient.removeFamilyGroupMember(groupId, memberId)
+                val result = ApiClient.removeFamilyMember(groupId, userId)
                 if (result.success) {
                     _uiState.value = _uiState.value.copy(
                         successMessage = "Member removed"
