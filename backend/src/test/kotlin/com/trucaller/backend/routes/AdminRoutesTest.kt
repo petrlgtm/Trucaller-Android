@@ -4,6 +4,9 @@ import com.trucaller.backend.data.models.AdminPasswordUpdateRequest
 import com.trucaller.backend.data.models.AdminProfileUpdateRequest
 import com.trucaller.backend.data.models.AdminRole
 import com.trucaller.backend.data.models.ApiResponse
+import com.trucaller.backend.routes.DeviceResponse
+import com.trucaller.backend.routes.UserDetailResponse
+import com.trucaller.backend.routes.UserResponse
 import kotlinx.serialization.encodeToString
 import kotlin.test.*
 
@@ -235,21 +238,40 @@ class AdminRoutesTest : RouteTestBase() {
         assertEquals("newSecure456", decoded.newPassword)
     }
 
-    // ── UserWithDevices ──────────────────────────────────────────────────
+    // ── UserDetailResponse ───────────────────────────────────────────────
 
     @Test
-    fun `UserWithDevices serialises correctly`() {
-        val userWithDevices = UserWithDevices(
-            user = """{"_id":"u-1","fullName":"John"}""",
+    fun `UserDetailResponse serialises correctly`() {
+        val detail = UserDetailResponse(
+            user = UserResponse(
+                id = "u-1",
+                fullName = "John",
+                phoneNumber = "+256700000001",
+                isActive = true,
+                status = "ACTIVE",
+                trustScore = 50,
+                trustLevel = "NEW",
+                createdAt = "2026-01-01T00:00:00Z"
+            ),
             devices = listOf(
-                """{"deviceId":"d-1","model":"Pixel"}""",
-                """{"deviceId":"d-2","model":"Samsung"}"""
+                DeviceResponse(
+                    id = "d-1", userId = "u-1", model = "Pixel",
+                    manufacturer = "Google", osVersion = "14", deviceId = "dev-1",
+                    status = "ACTIVE", lastIp = "1.2.3.4",
+                    lastSeen = "2026-01-01T00:00:00Z", registeredAt = "2026-01-01T00:00:00Z"
+                ),
+                DeviceResponse(
+                    id = "d-2", userId = "u-1", model = "Samsung",
+                    manufacturer = "Samsung", osVersion = "13", deviceId = "dev-2",
+                    status = "ACTIVE", lastIp = "1.2.3.5",
+                    lastSeen = "2026-01-01T00:00:00Z", registeredAt = "2026-01-01T00:00:00Z"
+                )
             )
         )
-        val encoded = json.encodeToString(userWithDevices)
-        val decoded = json.decodeFromString<UserWithDevices>(encoded)
+        val encoded = json.encodeToString(detail)
+        val decoded = json.decodeFromString<UserDetailResponse>(encoded)
 
-        assertTrue(decoded.user.contains("John"))
+        assertEquals("John", decoded.user.fullName)
         assertEquals(2, decoded.devices.size)
     }
 

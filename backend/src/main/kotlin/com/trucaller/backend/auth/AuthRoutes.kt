@@ -880,10 +880,13 @@ private fun Route.refreshTokenRoute() {
             return@post
         }
 
-        // Rotate: delete old token, issue new access + refresh pair
+        // Rotate: delete old token, issue new access + refresh pair.
+        // Preserve the role recorded at login (admin sessions must not be
+        // downgraded to "user" on refresh, or every admin endpoint 403s).
         Collections.refreshTokens.deleteOne(Filters.eq("token", body.refreshToken))
 
-        val newAccess = JwtConfig.makeToken(userId, role = "user")
+        val role = tokenDoc.getString("role") ?: "user"
+        val newAccess = JwtConfig.makeToken(userId, role = role)
         val newRefresh = JwtConfig.makeRefreshToken(userId)
         val ip = call.clientIp()
 
@@ -891,6 +894,7 @@ private fun Route.refreshTokenRoute() {
             Document()
                 .append("token", newRefresh)
                 .append("userId", userId)
+                .append("role", role)
                 .append("createdAt", Date.from(Instant.now()))
                 .append("expiresAt", Date.from(Instant.now().plusMillis(JwtConfig.REFRESH_TOKEN_EXPIRATION_MS)))
                 .append("ip", ip)

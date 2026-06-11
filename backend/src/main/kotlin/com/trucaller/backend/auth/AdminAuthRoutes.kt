@@ -163,8 +163,22 @@ fun Route.adminAuthRoutes() {
             val role = doc.getString("role") ?: "SUPER_ADMIN"
             val adminName = doc.getString("name") ?: ""
 
-            // Generate JWT
+            // Generate JWT + refresh token. Without a refresh token the admin
+            // session hard-expires after 15 minutes and every screen starts
+            // failing until re-login. The stored role lets /api/auth/refresh
+            // mint a new access token that keeps admin rights.
             val token = JwtConfig.makeToken(userId = userId, role = role)
+            val refreshTokenStr = JwtConfig.makeRefreshToken(userId)
+
+            Collections.refreshTokens.insertOne(
+                org.bson.Document()
+                    .append("token", refreshTokenStr)
+                    .append("userId", userId)
+                    .append("role", role)
+                    .append("createdAt", java.util.Date.from(Instant.now()))
+                    .append("expiresAt", java.util.Date.from(Instant.now().plusMillis(JwtConfig.REFRESH_TOKEN_EXPIRATION_MS)))
+                    .append("ip", ip)
+            )
 
             // Update lastLogin timestamp
             Collections.adminUsers.updateOne(
@@ -180,7 +194,7 @@ fun Route.adminAuthRoutes() {
                     success = true,
                     data = TokenResponse(
                         token = token,
-                        refreshToken = null,
+                        refreshToken = refreshTokenStr,
                         expiresIn = expiresIn,
                         userId = userId,
                         fullName = adminName,
