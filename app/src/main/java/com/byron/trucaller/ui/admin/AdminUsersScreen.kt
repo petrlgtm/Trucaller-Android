@@ -349,10 +349,13 @@ fun AdminUsersScreen(navController: NavController) {
                                             color = colorScheme.onSurface
                                         )
                                         Spacer(modifier = Modifier.width(8.dp))
-                                        TruCallerBadge(
-                                            text = if (user.isActive) "Active" else "Inactive",
-                                            type = if (user.isActive) BadgeType.Success else BadgeType.Info
-                                        )
+                                        val badgeType = when (user.status) {
+                                            "ACTIVE" -> BadgeType.Success
+                                            "BANNED" -> BadgeType.Spam
+                                            "SUSPENDED" -> BadgeType.Warning
+                                            else -> if (user.isActive) BadgeType.Success else BadgeType.Info
+                                        }
+                                        TruCallerBadge(text = user.status, type = badgeType)
                                     }
                                     Text(
                                         user.phoneNumber,

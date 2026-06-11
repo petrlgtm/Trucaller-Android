@@ -120,7 +120,7 @@ fun AdminDeviceDetailScreen(
 
         // Load IP logs and alarm logs in parallel
         launch {
-            val ipResult = ApiClient.getDeviceIpLogs(deviceId)
+            val ipResult = ApiClient.getAdminDeviceIpLogs(deviceId)
             if (ipResult.success && ipResult.data != null) {
                 ipLogs.clear()
                 @Suppress("UNCHECKED_CAST")

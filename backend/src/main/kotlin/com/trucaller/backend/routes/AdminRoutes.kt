@@ -51,6 +51,7 @@ private fun Document.toUserResponse(): UserResponse {
         phoneNumber = getString("phoneNumber") ?: "",
         email = getString("email"),
         isActive = effectiveIsActive,
+        status = storedStatus ?: if (effectiveIsActive) "ACTIVE" else "INACTIVE",
         trustScore = getInteger("trustScore", 0),
         trustLevel = getString("trustLevel") ?: "NEW",
         createdAt = getString("createdAt") ?: "",
@@ -123,6 +124,7 @@ data class UserResponse(
     val phoneNumber: String,
     val email: String? = null,
     val isActive: Boolean,
+    val status: String,
     val trustScore: Int,
     val trustLevel: String,
     val createdAt: String,
@@ -402,6 +404,32 @@ fun Route.adminRoutes() {
                 }
 
                 call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = deviceDoc.toDeviceResponse()))
+            }
+
+            // ── GET /api/admin/devices/{deviceId}/ip-logs ────────────────
+            get("/devices/{deviceId}/ip-logs") {
+                try { call.requireAdmin() } catch (e: IllegalAccessException) {
+                    call.respond(HttpStatusCode.Forbidden, ApiResponse<Nothing>(success = false, error = "Admin access required"))
+                    return@get
+                }
+
+                val deviceId = call.parameters["deviceId"]
+                if (deviceId.isNullOrBlank()) {
+                    call.respond(HttpStatusCode.BadRequest, ApiResponse<Nothing>(success = false, error = "Missing deviceId"))
+                    return@get
+                }
+
+                val docs = com.trucaller.backend.data.Collections.ipLogs
+                    .find(Filters.eq("deviceId", deviceId))
+                    .sort(Document("startTime", -1))
+                    .limit(100)
+                    .toList()
+
+                call.respond(HttpStatusCode.OK, ApiResponse(
+                    success = true,
+                    data = docs.map { it.toJsonElement() },
+                    message = "Retrieved ${docs.size} IP log(s)"
+                ))
             }
 
             // ── PUT /api/admin/devices/{deviceId}/status ─────────────────

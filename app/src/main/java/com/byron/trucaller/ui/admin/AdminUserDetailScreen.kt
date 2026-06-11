@@ -222,7 +222,13 @@ fun AdminUserDetailScreen(
                             Spacer(modifier = Modifier.height(8.dp))
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Text("Status: ", fontSize = 13.sp, color = colorScheme.onSurfaceVariant)
-                                TruCallerBadge(text = if (u.isActive) "Active" else "Inactive", type = if (u.isActive) BadgeType.Success else BadgeType.Spam)
+                                val badgeType = when (u.status) {
+                                    "ACTIVE" -> BadgeType.Success
+                                    "BANNED" -> BadgeType.Spam
+                                    "SUSPENDED" -> BadgeType.Warning
+                                    else -> if (u.isActive) BadgeType.Success else BadgeType.Info
+                                }
+                                TruCallerBadge(text = u.status, type = badgeType)
                             }
                             Spacer(modifier = Modifier.height(4.dp))
                             Text("Joined: ${formatRelativeTime(u.createdAt)}", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)

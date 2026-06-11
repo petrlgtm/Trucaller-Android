@@ -478,6 +478,9 @@ object ApiClient {
     suspend fun getAdminDeviceDetail(deviceId: String): ApiResult<AdminDeviceSummary> =
         get("/api/admin/devices/$deviceId")
 
+    suspend fun getAdminDeviceIpLogs(deviceId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/admin/devices/$deviceId/ip-logs")
+
     suspend fun getAdminSmsSpamReports(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/sms-spam-reports?skip=$skip&limit=$limit")
 
@@ -741,6 +744,7 @@ data class AdminUserSummary(
     val phoneNumber: String = "",
     val email: String? = null,
     val isActive: Boolean = true,
+    val status: String = "ACTIVE",
     val trustScore: Int = 0,
     val trustLevel: String = "NEW",
     val createdAt: String = "",
