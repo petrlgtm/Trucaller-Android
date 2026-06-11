@@ -35,6 +35,10 @@
     <uses-permission
         android:name="android.permission.SEND_SMS"
         tools:ignore="SensitivePermissionInspection" />
+    <!-- Required for SMS role eligibility — without this the system rejects the role request -->
+    <uses-permission
+        android:name="android.permission.RECEIVE_WAP_PUSH"
+        tools:ignore="SensitivePermissionInspection" />
 
     <!-- Location: geofencing and stolen-device recovery (precise + background) -->
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -133,6 +137,11 @@
             <intent-filter android:priority="999">
                 <action android:name="android.provider.Telephony.SMS_RECEIVED" />
                 <action android:name="android.provider.Telephony.SMS_DELIVER" />
+            </intent-filter>
+            <!-- Required for default SMS app eligibility via RoleManager.ROLE_SMS -->
+            <intent-filter android:priority="999">
+                <action android:name="android.provider.Telephony.WAP_PUSH_DELIVER" />
+                <data android:mimeType="application/vnd.wap.mms-message" />
             </intent-filter>
         </receiver>
 

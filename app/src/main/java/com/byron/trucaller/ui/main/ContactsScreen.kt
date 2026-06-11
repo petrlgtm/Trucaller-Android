@@ -176,14 +176,27 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
     }
 
     fun makeCall(number: String) {
+        val sanitized = number.trim().ifBlank { return }
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE)
             == PackageManager.PERMISSION_GRANTED
         ) {
-            context.startActivity(
-                Intent(Intent.ACTION_CALL).apply { data = Uri.parse("tel:$number") }
-            )
+            try {
+                context.startActivity(
+                    Intent(Intent.ACTION_CALL).apply {
+                        data = Uri.parse("tel:${Uri.encode(sanitized)}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            } catch (_: Exception) {
+                context.startActivity(
+                    Intent(Intent.ACTION_DIAL).apply {
+                        data = Uri.parse("tel:${Uri.encode(sanitized)}")
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                )
+            }
         } else {
-            pendingCallNumber = number
+            pendingCallNumber = sanitized
             callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
         }
     }
