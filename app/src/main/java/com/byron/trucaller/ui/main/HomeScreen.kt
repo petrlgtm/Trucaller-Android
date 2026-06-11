@@ -43,6 +43,8 @@ import androidx.compose.ui.unit.sp
 import android.telecom.TelecomManager
 import android.provider.Telephony
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.navigation.NavController
 import com.byron.trucaller.data.model.DeviceStatus
 import com.byron.trucaller.ui.components.*
@@ -106,6 +108,26 @@ fun HomeScreen(
             isDefaultDialer = roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
             isDefaultSms = roleManager.isRoleHeld(RoleManager.ROLE_SMS)
         }
+    }
+
+    // Re-check on every Activity resume — covers Samsung devices where isRoleHeld()
+    // returns the old value inside the roleLauncher callback due to a timing gap.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roleManager != null) {
+                    isDefaultDialer = roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
+                    isDefaultSms = roleManager.isRoleHeld(RoleManager.ROLE_SMS)
+                } else {
+                    val telecomManager = context.getSystemService(TelecomManager::class.java)
+                    isDefaultDialer = telecomManager?.defaultDialerPackage == context.packageName
+                    isDefaultSms = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LaunchedEffect(user.id) {

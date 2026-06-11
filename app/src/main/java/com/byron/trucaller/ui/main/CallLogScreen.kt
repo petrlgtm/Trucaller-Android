@@ -397,10 +397,16 @@ fun CallLogScreen(
                                     showActionSheet = true
                                 },
                                 onCall = {
-                                    val intent = Intent(Intent.ACTION_DIAL).apply {
-                                        data = Uri.parse("tel:${entry.phoneNumber}")
+                                    try {
+                                        val intent = Intent(Intent.ACTION_CALL).apply {
+                                            data = Uri.parse("tel:${entry.phoneNumber}")
+                                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                        }
+                                        context.startActivity(intent)
+                                    } catch (_: SecurityException) {
+                                        // CALL_PHONE not yet granted — open dial pad instead
+                                        rootNavController.navigate("dial_pad")
                                     }
-                                    context.startActivity(intent)
                                 },
                                 onBlock = {
                                     val encoded = java.net.URLEncoder.encode(entry.phoneNumber, "UTF-8")

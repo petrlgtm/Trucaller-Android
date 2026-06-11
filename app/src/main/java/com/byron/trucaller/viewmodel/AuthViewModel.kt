@@ -81,6 +81,14 @@ class AuthViewModel(
             val adminId = preferences.adminId.first()
             if (adminId != null) {
                 _adminUser.value = userRepository.getAdminById(adminId)
+                // Restore tokens for admin-only sessions (no regular userId means the
+                // block above was skipped, leaving ApiClient with no auth token).
+                if (userId == null) {
+                    val savedToken = try { preferences.authToken.first() } catch (_: Exception) { null }
+                    if (savedToken != null) ApiClient.setAuthToken(savedToken)
+                    val savedRefresh = try { preferences.refreshToken.first() } catch (_: Exception) { null }
+                    if (savedRefresh != null) ApiClient.setRefreshToken(savedRefresh)
+                }
             }
         }
     }
@@ -172,6 +180,10 @@ class AuthViewModel(
                 val tokenData = apiResult.data
                 ApiClient.setAuthToken(tokenData.token)
                 viewModelScope.launch { preferences.setAuthToken(tokenData.token) }
+                tokenData.refreshToken?.let {
+                    ApiClient.setRefreshToken(it)
+                    viewModelScope.launch { preferences.setRefreshToken(it) }
+                }
 
                 // Sync with local Room DB, or create a local record from the backend response
                 var admin = userRepository.getAdminByPhoneCredentials(phoneNumber, password)
