@@ -41,6 +41,36 @@ private fun Document.toJsonElement(): JsonElement = Json.parseToJsonElement(norm
 private fun Document.toJsonElementStripped(vararg fields: String): JsonElement =
     Json.parseToJsonElement(normalizedCopy(*fields).toJson())
 
+private fun Document.toUserResponse(): UserResponse {
+    val storedStatus = getString("status")
+    val effectiveIsActive = if (storedStatus != null) storedStatus == "ACTIVE"
+                            else getBoolean("isActive", true)
+    return UserResponse(
+        id = (this["_id"] as? ObjectId)?.toHexString() ?: this["_id"]?.toString() ?: "",
+        fullName = getString("fullName") ?: "",
+        phoneNumber = getString("phoneNumber") ?: "",
+        email = getString("email"),
+        isActive = effectiveIsActive,
+        trustScore = getInteger("trustScore", 0),
+        trustLevel = getString("trustLevel") ?: "NEW",
+        createdAt = getString("createdAt") ?: "",
+        lastLogin = getString("lastLogin")
+    )
+}
+
+private fun Document.toDeviceResponse() = DeviceResponse(
+    id = (this["_id"] as? ObjectId)?.toHexString() ?: this["_id"]?.toString() ?: "",
+    deviceId = getString("deviceId") ?: "",
+    userId = getString("userId") ?: "",
+    model = getString("model") ?: "",
+    manufacturer = getString("manufacturer") ?: "",
+    osVersion = getString("osVersion") ?: "",
+    status = getString("status") ?: "ACTIVE",
+    lastIp = getString("lastIp") ?: "",
+    lastSeen = getString("lastSeen") ?: getString("updatedAt") ?: getString("createdAt") ?: "",
+    registeredAt = getString("registeredAt") ?: ""
+)
+
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 @Serializable
@@ -87,9 +117,22 @@ data class TrustUpdateRequest(
 )
 
 @Serializable
-data class UserWithDevices(
-    val user: JsonElement,
-    val devices: List<JsonElement>
+data class UserResponse(
+    val id: String,
+    val fullName: String,
+    val phoneNumber: String,
+    val email: String? = null,
+    val isActive: Boolean,
+    val trustScore: Int,
+    val trustLevel: String,
+    val createdAt: String,
+    val lastLogin: String? = null
+)
+
+@Serializable
+data class UserDetailResponse(
+    val user: UserResponse,
+    val devices: List<DeviceResponse>
 )
 
 @Serializable
@@ -217,7 +260,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = users.map { it.toJsonElementStripped("passwordHash") },
+                        data = users.map { it.toUserResponse() },
                         message = "Retrieved ${users.size} user(s)"
                     )
                 )
@@ -265,9 +308,9 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = UserWithDevices(
-                            user = userDoc.toJsonElementStripped("passwordHash"),
-                            devices = devices.map { it.toJsonElement() }
+                        data = UserDetailResponse(
+                            user = userDoc.toUserResponse(),
+                            devices = devices.map { it.toDeviceResponse() }
                         ),
                         message = "User and devices retrieved"
                     )
@@ -329,7 +372,7 @@ fun Route.adminRoutes() {
                     HttpStatusCode.OK,
                     ApiResponse(
                         success = true,
-                        data = devices.map { it.toJsonElement() },
+                        data = devices.map { it.toDeviceResponse() },
                         message = "Retrieved ${devices.size} device(s)"
                     )
                 )

@@ -58,8 +58,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
-import com.byron.trucaller.data.model.TrustLevel
-import com.byron.trucaller.data.model.User
+import com.byron.trucaller.service.AdminUserSummary
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.ui.components.BadgeType
 import com.byron.trucaller.ui.components.EmptyStateIcon
@@ -75,34 +74,13 @@ import kotlinx.coroutines.launch
 
 private const val ADMIN_USERS_PAGE_SIZE = 20
 
-private fun Map<String, Any>.toAdminUser(): User? {
-    return try {
-        val id = this["_id"]?.toString() ?: this["id"]?.toString() ?: return null
-        User(
-            id = id,
-            fullName = this["fullName"]?.toString() ?: "",
-            phoneNumber = this["phoneNumber"]?.toString() ?: "",
-            email = this["email"]?.toString(),
-            passwordHash = "",
-            isActive = this["isActive"] as? Boolean ?: (this["status"]?.toString() == "ACTIVE"),
-            createdAt = this["createdAt"]?.toString() ?: "",
-            lastLogin = this["lastLogin"]?.toString(),
-            trustScore = (this["trustScore"] as? Number)?.toInt() ?: 0,
-            trustLevel = try {
-                TrustLevel.valueOf(this["trustLevel"]?.toString() ?: "NEW")
-            } catch (_: Exception) { TrustLevel.NEW }
-        )
-    } catch (_: Exception) { null }
-}
-
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun AdminUsersScreen(navController: NavController) {
     val colorScheme = MaterialTheme.colorScheme
     val coroutineScope = rememberCoroutineScope()
 
-    // Server-loaded users (replaces Room DB)
-    val users = remember { mutableStateListOf<User>() }
+    val users = remember { mutableStateListOf<AdminUserSummary>() }
     var isLoading by remember { mutableStateOf(true) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(true) }
@@ -131,13 +109,8 @@ fun AdminUsersScreen(navController: NavController) {
     suspend fun loadPage(pageSkip: Int) {
         val result = ApiClient.getAdminUsers(skip = pageSkip, limit = ADMIN_USERS_PAGE_SIZE)
         if (result.success && result.data != null) {
-            val mapped = result.data.mapNotNull { it.toAdminUser() }
-            if (pageSkip == 0) {
-                users.clear()
-                users.addAll(mapped)
-            } else {
-                users.addAll(mapped)
-            }
+            if (pageSkip == 0) { users.clear(); users.addAll(result.data) }
+            else users.addAll(result.data)
             hasMore = result.data.size >= ADMIN_USERS_PAGE_SIZE
             skip = pageSkip + result.data.size
             loadError = null
@@ -175,9 +148,8 @@ fun AdminUsersScreen(navController: NavController) {
             isInSearchMode = true
             val result = ApiClient.searchAdminUsers(searchQuery)
             if (result.success && result.data != null) {
-                val mapped = result.data.mapNotNull { it.toAdminUser() }
                 users.clear()
-                users.addAll(mapped)
+                users.addAll(result.data)
                 hasMore = false
             }
             isSearching = false

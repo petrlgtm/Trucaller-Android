@@ -455,10 +455,10 @@ object ApiClient {
     suspend fun getDashboardStats(): ApiResult<Map<String, Any>> =
         get("/api/admin/dashboard")
 
-    suspend fun getAdminUsers(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
+    suspend fun getAdminUsers(skip: Int = 0, limit: Int = 20): ApiResult<List<AdminUserSummary>> =
         get("/api/admin/users?skip=$skip&limit=$limit")
 
-    suspend fun getAdminDevices(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
+    suspend fun getAdminDevices(skip: Int = 0, limit: Int = 20): ApiResult<List<AdminDeviceSummary>> =
         get("/api/admin/devices?skip=$skip&limit=$limit")
 
     suspend fun getAdminCallerIds(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
@@ -476,7 +476,7 @@ object ApiClient {
     suspend fun getAdminSmsSpamReports(skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
         get("/api/admin/sms-spam-reports?skip=$skip&limit=$limit")
 
-    suspend fun getAdminUserDetail(userId: String): ApiResult<Map<String, Any>> =
+    suspend fun getAdminUserDetail(userId: String): ApiResult<AdminUserDetailResponse> =
         get("/api/admin/users/$userId")
 
     suspend fun banUser(userId: String, status: String): ApiResult<Unit> =
@@ -485,7 +485,7 @@ object ApiClient {
     suspend fun deleteAdminUser(userId: String): ApiResult<Map<String, Any>> =
         delete("/api/admin/users/$userId")
 
-    suspend fun searchAdminUsers(search: String, skip: Int = 0, limit: Int = 20): ApiResult<List<Map<String, Any>>> =
+    suspend fun searchAdminUsers(search: String, skip: Int = 0, limit: Int = 20): ApiResult<List<AdminUserSummary>> =
         get("/api/admin/users?search=${java.net.URLEncoder.encode(search, "UTF-8")}&skip=$skip&limit=$limit")
 
     suspend fun updateSmsSpamStatus(reportId: String, status: String): ApiResult<Unit> =
@@ -729,6 +729,36 @@ object ApiClient {
         }
     }
 }
+
+data class AdminUserSummary(
+    val id: String = "",
+    val fullName: String = "",
+    val phoneNumber: String = "",
+    val email: String? = null,
+    val isActive: Boolean = true,
+    val trustScore: Int = 0,
+    val trustLevel: String = "NEW",
+    val createdAt: String = "",
+    val lastLogin: String? = null
+)
+
+data class AdminDeviceSummary(
+    val id: String = "",
+    val deviceId: String = "",
+    val userId: String = "",
+    val model: String = "",
+    val manufacturer: String = "",
+    val osVersion: String = "",
+    val status: String = "ACTIVE",
+    val lastIp: String = "",
+    val lastSeen: String = "",
+    val registeredAt: String? = null
+)
+
+data class AdminUserDetailResponse(
+    val user: AdminUserSummary = AdminUserSummary(),
+    val devices: List<AdminDeviceSummary> = emptyList()
+)
 
 /**
  * Generic API response wrapper matching the backend's ApiResponse format.

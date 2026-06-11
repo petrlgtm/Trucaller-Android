@@ -48,6 +48,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import com.byron.trucaller.service.AdminDeviceSummary
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.ui.components.BadgeType
 import com.byron.trucaller.ui.components.EmptyStateIcon
@@ -65,7 +66,7 @@ private const val DEVICES_PAGE_SIZE = 20
 fun AdminDevicesScreen(navController: NavController) {
     val colorScheme = MaterialTheme.colorScheme
 
-    val devices = remember { mutableStateListOf<Map<String, Any>>() }
+    val devices = remember { mutableStateListOf<AdminDeviceSummary>() }
     var isLoading by remember { mutableStateOf(true) }
     var isLoadingMore by remember { mutableStateOf(false) }
     var hasMore by remember { mutableStateOf(true) }
@@ -111,10 +112,10 @@ fun AdminDevicesScreen(navController: NavController) {
             else {
                 val q = searchQuery.lowercase()
                 devices.filter { d ->
-                    d["model"]?.toString()?.lowercase()?.contains(q) == true ||
-                    d["manufacturer"]?.toString()?.lowercase()?.contains(q) == true ||
-                    d["deviceId"]?.toString()?.lowercase()?.contains(q) == true ||
-                    d["lastIp"]?.toString()?.contains(q) == true
+                    d.model.lowercase().contains(q) ||
+                    d.manufacturer.lowercase().contains(q) ||
+                    d.deviceId.lowercase().contains(q) ||
+                    d.lastIp.contains(q)
                 }
             }
         }
@@ -168,13 +169,13 @@ fun AdminDevicesScreen(navController: NavController) {
                     state = lazyListState,
                     modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md)
                 ) {
-                    items(filtered, key = { it["deviceId"]?.toString() ?: it.hashCode().toString() }) { device ->
-                        val deviceId = device["deviceId"]?.toString() ?: device["_id"]?.toString() ?: ""
-                        val model = device["model"]?.toString() ?: "Unknown"
-                        val manufacturer = device["manufacturer"]?.toString() ?: ""
-                        val status = device["status"]?.toString() ?: "ACTIVE"
-                        val lastIp = device["lastIp"]?.toString() ?: ""
-                        val lastSeen = device["lastSeen"]?.toString() ?: device["updatedAt"]?.toString() ?: device["createdAt"]?.toString() ?: ""
+                    items(filtered, key = { it.deviceId.ifBlank { it.id } }) { device ->
+                        val deviceId = device.deviceId.ifBlank { device.id }
+                        val model = device.model.ifBlank { "Unknown" }
+                        val manufacturer = device.manufacturer
+                        val status = device.status
+                        val lastIp = device.lastIp
+                        val lastSeen = device.lastSeen
 
                         val badgeType = when (status) {
                             "ACTIVE" -> BadgeType.Success

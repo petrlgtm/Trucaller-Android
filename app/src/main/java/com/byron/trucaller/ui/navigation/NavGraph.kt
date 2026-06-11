@@ -425,9 +425,7 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
             val userId = backStackEntry.arguments?.getString("userId") ?: ""
             AdminUserDetailScreen(
                 navController = navController,
-                userId = userId,
-                deviceViewModel = deviceViewModel,
-                stolenReportViewModel = stolenReportViewModel
+                userId = userId
             )
         }
         composable("admin_stolen_reports") {
