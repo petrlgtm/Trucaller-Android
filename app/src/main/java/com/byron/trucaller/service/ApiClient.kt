@@ -324,6 +324,13 @@ object ApiClient {
     suspend fun getAlarmLogs(deviceId: String): ApiResult<List<Map<String, Any>>> =
         get("/api/alarms/logs/$deviceId")
 
+    /**
+     * Polling fallback for remote commands: fetches queued commands that were
+     * not delivered by push. Each command is handed out only once.
+     */
+    suspend fun getPendingAlarmCommands(deviceId: String): ApiResult<List<Map<String, Any>>> =
+        get("/api/alarms/pending/$deviceId")
+
     suspend fun updateAlarmLogResult(logId: String, result: String, notes: String? = null): ApiResult<Unit> =
         put("/api/alarms/logs/$logId/result", mapOf("result" to result, "notes" to (notes ?: "")))
 

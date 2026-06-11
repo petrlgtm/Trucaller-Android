@@ -47,7 +47,14 @@ import java.time.Duration
 data class HealthResponse(
     val status: String,
     val timestamp: String = java.time.Instant.now().toString(),
-    val version: String = "1.0.0"
+    val version: String = "1.0.0",
+    val fcm: FcmHealth? = null
+)
+
+@Serializable
+data class FcmHealth(
+    val initialised: Boolean,
+    val lastError: String? = null
 )
 
 fun main(args: Array<String>): Unit = io.ktor.server.netty.EngineMain.main(args)
@@ -193,7 +200,16 @@ fun Application.module() {
     routing {
         // ── Health Check ────────────────────────────────────────────────
         get("/api/health") {
-            call.respond(HttpStatusCode.OK, HealthResponse(status = "ok"))
+            call.respond(
+                HttpStatusCode.OK,
+                HealthResponse(
+                    status = "ok",
+                    fcm = FcmHealth(
+                        initialised = FcmService.isInitialised,
+                        lastError = FcmService.lastError
+                    )
+                )
+            )
         }
 
         get("/api/health/db") {

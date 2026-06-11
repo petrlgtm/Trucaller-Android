@@ -1,10 +1,7 @@
 package com.byron.trucaller.service
 
-import android.app.admin.DevicePolicyManager
-import android.content.Context
 import android.util.Log
 import com.byron.trucaller.TruCallerApplication
-import com.byron.trucaller.util.DeviceAdminHelper
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 import kotlinx.coroutines.CoroutineScope
@@ -56,67 +53,11 @@ class TruCallerMessagingService : FirebaseMessagingService() {
         Log.d(TAG, "Received FCM action: $action, logId: $logId")
 
         when (action) {
-            "REMOTE_ALARM" -> {
-                var success = false
-                try {
-                    AlarmSoundManager.triggerAlarm(applicationContext)
-                    SecurityNotificationHelper.showAlarmNotification(applicationContext)
-                    success = true
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to execute REMOTE_ALARM", e)
-                }
-                reportActionResult(logId, success, action)
-            }
-            "STOP_ALARM" -> {
-                AlarmSoundManager.stopAlarm()
-                SecurityNotificationHelper.dismissAlarmNotification(applicationContext)
-                reportActionResult(logId, true, action)
-            }
-            "LOCK_DEVICE" -> {
-                var success = false
-                try {
-                    if (DeviceAdminHelper.isAdminActive(applicationContext)) {
-                        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-                        dpm.lockNow()
-                        success = true
-                        SecurityNotificationHelper.showLockNotification(applicationContext)
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to execute LOCK_DEVICE", e)
-                }
-                reportActionResult(logId, success, action)
-            }
-            "WIPE_DATA" -> {
-                try {
-                    if (DeviceAdminHelper.isAdminActive(applicationContext)) {
-                        // Report before wipe — device resets immediately after wipeData()
-                        reportActionResult(logId, true, action)
-                        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-                        @Suppress("DEPRECATION")
-                        dpm.wipeData(0)
-                        return
-                    }
-                } catch (e: Exception) {
-                    Log.e(TAG, "Failed to execute WIPE_DATA", e)
-                }
-                reportActionResult(logId, false, action)
-            }
-            "LOCATION_REQUEST" -> {
-                SecurityNotificationHelper.showLocationRequestNotification(applicationContext)
-                val app = application as? TruCallerApplication ?: return
+            "REMOTE_ALARM", "STOP_ALARM", "LOCK_DEVICE", "WIPE_DATA", "LOCATION_REQUEST" -> {
+                // Shared executor dedups by logId so a command also delivered
+                // via the polling fallback never runs twice.
                 CoroutineScope(Dispatchers.IO).launch {
-                    var success = false
-                    try {
-                        val userId = app.container.userPreferences.loggedInUserId.first()
-                        if (userId != null) {
-                            val regService = DeviceRegistrationService(applicationContext, app.container.deviceRepository)
-                            regService.registerOrUpdateDevice(userId)
-                            success = true
-                        }
-                    } catch (e: Exception) {
-                        Log.e(TAG, "Failed to update location on request", e)
-                    }
-                    reportActionResult(logId, success, action)
+                    RemoteCommandExecutor.execute(applicationContext, action, logId)
                 }
             }
             "FAMILY_ALERT" -> {

@@ -18,6 +18,14 @@ object FcmService {
     private val log = LoggerFactory.getLogger(FcmService::class.java)
     private var initialised = false
 
+    /** True when the Firebase Admin SDK is ready to send pushes. */
+    val isInitialised: Boolean get() = initialised
+
+    /** Human-readable reason why FCM is unavailable, or the last send error. */
+    @Volatile
+    var lastError: String? = null
+        private set
+
     /**
      * Initialises the Firebase Admin SDK.
      *
@@ -35,6 +43,7 @@ object FcmService {
         try {
             if (FirebaseApp.getApps().isEmpty()) {
                 val credentials = buildCredentials() ?: run {
+                    lastError = "FIREBASE_CREDENTIALS_JSON env var not set — push notifications disabled"
                     log.warn("Firebase credentials not configured (set FIREBASE_CREDENTIALS_JSON) — push notifications disabled")
                     return
                 }
@@ -43,8 +52,10 @@ object FcmService {
                 )
             }
             initialised = true
+            lastError = null
             log.info("Firebase Admin SDK initialised successfully")
         } catch (e: Exception) {
+            lastError = "Init failed: ${e.message}"
             log.error("Failed to initialise Firebase Admin SDK: ${e.message}", e)
         }
     }
@@ -91,6 +102,7 @@ object FcmService {
                 log.info("FCM push sent successfully (messageId=$messageId)")
                 true
             } catch (e: Exception) {
+                lastError = "Send failed: ${e.message}"
                 log.error("FCM push failed: ${e.message}", e)
                 false
             }

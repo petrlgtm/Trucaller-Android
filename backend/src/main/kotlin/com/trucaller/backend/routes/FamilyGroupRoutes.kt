@@ -112,6 +112,7 @@ fun Route.familyGroupRoutes() {
             joinGroup()
             updateMemberRole()
             removeMember()
+            updateGroup()
             deleteGroup()
             getGroupDevices()
             sendGroupAlert()
@@ -781,6 +782,85 @@ private fun Route.removeMember() {
                 success = true,
                 message = "Member removed from group"
             )
+        )
+    }
+}
+
+// ── PUT /api/family/{groupId} ───────────────────────────────────────────
+
+@Serializable
+data class UpdateGroupRequest(
+    val name: String
+)
+
+private fun Route.updateGroup() {
+    put("/{groupId}") {
+        val currentUserId = call.userId()
+        val groupId = call.parameters["groupId"]
+
+        if (groupId.isNullOrBlank()) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Missing groupId")
+            )
+            return@put
+        }
+
+        val request = try {
+            call.receive<UpdateGroupRequest>()
+        } catch (e: Exception) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Invalid request body")
+            )
+            return@put
+        }
+
+        val newName = request.name.trim()
+        if (newName.isBlank() || newName.length > 60) {
+            call.respond(
+                HttpStatusCode.BadRequest,
+                ApiResponse<Unit>(success = false, error = "Group name must be 1-60 characters")
+            )
+            return@put
+        }
+
+        val groupDoc = Collections.familyGroups.find(Filters.eq("_id", groupId)).firstOrNull()
+        if (groupDoc == null) {
+            call.respond(
+                HttpStatusCode.NotFound,
+                ApiResponse<Unit>(success = false, error = "Group not found")
+            )
+            return@put
+        }
+
+        // Owner or a member with ADMIN role may rename the group
+        val callerMember = Collections.familyMembers
+            .find(
+                Filters.and(
+                    Filters.eq("groupId", groupId),
+                    Filters.eq("userId", currentUserId)
+                )
+            )
+            .firstOrNull()
+        val isOwner = groupDoc.getString("ownerId") == currentUserId
+        val isAdminMember = callerMember?.getString("role") in listOf("OWNER", "ADMIN")
+        if (!isOwner && !isAdminMember) {
+            call.respond(
+                HttpStatusCode.Forbidden,
+                ApiResponse<Unit>(success = false, error = "Only the group owner or an admin can rename the group")
+            )
+            return@put
+        }
+
+        Collections.familyGroups.updateOne(
+            Filters.eq("_id", groupId),
+            Document("\$set", Document("name", newName))
+        )
+
+        call.respond(
+            HttpStatusCode.OK,
+            ApiResponse<Nothing>(success = true, message = "Group renamed successfully")
         )
     }
 }

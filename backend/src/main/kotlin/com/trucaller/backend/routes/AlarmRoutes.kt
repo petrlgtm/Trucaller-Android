@@ -131,36 +131,26 @@ fun Route.alarmRoutes() {
             Collections.alarmLogs.insertOne(alarmDoc)
 
             // ── Send FCM push to the target device ──────────────────────
+            // If push delivery is unavailable (no token, FCM not configured,
+            // send error), the command stays PENDING and the device picks it
+            // up via GET /api/alarms/pending/{deviceId} polling. A background
+            // job expires commands that are never picked up.
             val fcmToken = deviceDoc.getString("fcmToken")
 
-            if (fcmToken.isNullOrBlank()) {
-                Collections.alarmLogs.updateOne(
-                    Filters.eq("_id", logId),
-                    Document("\$set", Document("result", "FAILED"))
+            val pushSent = if (fcmToken.isNullOrBlank()) {
+                false
+            } else {
+                // Include logId in FCM payload so the device can report execution result back
+                FcmService.sendPush(
+                    fcmToken,
+                    mapOf("action" to request.type, "logId" to logId)
                 )
-                call.respond(
-                    HttpStatusCode.Created,
-                    ApiResponse(
-                        success = true,
-                        data = mapOf("logId" to logId),
-                        message = "Alarm logged but push failed: no FCM token for device"
-                    )
-                )
-                return@post
             }
 
-            // Include logId in FCM payload so the device can report execution result back
-            val pushSent = FcmService.sendPush(
-                fcmToken,
-                mapOf("action" to request.type, "logId" to logId)
+            Collections.alarmLogs.updateOne(
+                Filters.eq("_id", logId),
+                Document("\$set", Document("pushDelivered", pushSent))
             )
-
-            if (!pushSent) {
-                Collections.alarmLogs.updateOne(
-                    Filters.eq("_id", logId),
-                    Document("\$set", Document("result", "FAILED"))
-                )
-            }
 
             call.respond(
                 HttpStatusCode.Created,
@@ -168,7 +158,71 @@ fun Route.alarmRoutes() {
                     success = true,
                     data = mapOf("logId" to logId),
                     message = if (pushSent) "Alarm triggered successfully"
-                               else "Alarm logged but push delivery failed"
+                               else "Alarm queued — instant push unavailable; device will execute it on next check-in"
+                )
+            )
+        }
+
+        // GET /api/alarms/pending/{deviceId}
+        // Polling fallback for devices: returns queued commands that were never
+        // delivered by push. Each returned command is stamped deliveredAt so it
+        // is handed out only once. Device executes and reports via the
+        // PUT /api/alarms/logs/{logId}/result endpoint.
+        get("/api/alarms/pending/{deviceId}") {
+            val currentUserId = call.userId()
+            val deviceId = call.parameters["deviceId"]
+            if (deviceId == null) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Nothing>(success = false, error = "Missing deviceId")
+                )
+                return@get
+            }
+
+            // Only the device's owner may fetch its pending commands
+            val deviceDoc = Collections.devices
+                .find(Filters.eq("deviceId", deviceId))
+                .firstOrNull()
+            if (deviceDoc == null || deviceDoc.getString("userId") != currentUserId) {
+                call.respond(
+                    HttpStatusCode.Forbidden,
+                    ApiResponse<Nothing>(success = false, error = "Access denied")
+                )
+                return@get
+            }
+
+            val pending = Collections.alarmLogs
+                .find(
+                    Filters.and(
+                        Filters.eq("deviceId", deviceId),
+                        Filters.eq("result", "PENDING"),
+                        Filters.exists("deliveredAt", false)
+                    )
+                )
+                .toList()
+                .sortedBy { it.getString("triggeredAt") ?: "" }
+
+            val now = Instant.now().toString()
+            val commands = pending.map { doc ->
+                val id = doc.getString("_id") ?: doc.getObjectId("_id").toString()
+                Collections.alarmLogs.updateOne(
+                    Filters.eq("_id", id),
+                    Document("\$set", Document("deliveredAt", now))
+                )
+                mapOf(
+                    "logId" to id,
+                    "type" to (doc.getString("type") ?: ""),
+                    "notes" to (doc.getString("notes") ?: ""),
+                    "triggeredAt" to (doc.getString("triggeredAt") ?: "")
+                )
+            }
+
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse(
+                    success = true,
+                    data = commands,
+                    message = "Retrieved ${commands.size} pending command(s)"
                 )
             )
         }

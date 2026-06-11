@@ -5,6 +5,7 @@ import android.util.Log
 import com.byron.trucaller.di.AppContainer
 import com.byron.trucaller.service.ApiClient
 import com.byron.trucaller.service.NotificationChannelManager
+import com.byron.trucaller.service.PendingCommandsWorker
 import com.byron.trucaller.service.SpamSyncWorker
 import com.byron.trucaller.util.SecurityUtils
 import kotlinx.coroutines.CoroutineScope
@@ -60,6 +61,7 @@ class TruCallerApplication : Application() {
             }
             container.seedDatabaseIfEmpty()
             SpamSyncWorker.schedule(this@TruCallerApplication)
+            PendingCommandsWorker.schedule(this@TruCallerApplication)
         }
 
         // Defer notification channel creation — still synchronous but low-cost,

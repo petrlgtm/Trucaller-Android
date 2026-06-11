@@ -33,6 +33,7 @@ object BackgroundJobs {
         while (true) {
             delay(HOUR_MS)
             run("hourly:refreshBestNames") { refreshRecentBestNames() }
+            run("hourly:expirePendingAlarms") { expireStalePendingAlarms() }
         }
     }
 
@@ -77,6 +78,28 @@ object BackgroundJobs {
             runCatching { CallerIdService.refreshBestName(phone) }
         }
         if (phones.isNotEmpty()) logger.info("Hourly: refreshed bestName for ${phones.size} numbers")
+    }
+
+    /**
+     * Mark alarm commands still PENDING after 24h as FAILED — the device
+     * never executed them (offline, uninstalled, or never picked them up).
+     */
+    private suspend fun expireStalePendingAlarms() {
+        val cutoff = Instant.now().minus(24, ChronoUnit.HOURS).toString()
+        val result = Collections.alarmLogs.updateMany(
+            Filters.and(
+                Filters.eq("result", "PENDING"),
+                Filters.lt("triggeredAt", cutoff)
+            ),
+            Updates.combine(
+                Updates.set("result", "FAILED"),
+                Updates.set("resultNotes", "Expired: device did not execute the command within 24h"),
+                Updates.set("completedAt", Instant.now().toString())
+            )
+        )
+        if (result.modifiedCount > 0) {
+            logger.info("Hourly: expired ${result.modifiedCount} stale pending alarm(s)")
+        }
     }
 
     // ── Daily ────────────────────────────────────────────────────────────
