@@ -118,8 +118,16 @@ private fun Route.uploadContacts() {
             .map { Triple(PhoneNormalizer.normalize(it.phoneNumber), it.name, userId) }
 
         if (aliasEntries.isNotEmpty()) {
+            val phones = aliasEntries.map { it.first }.distinct()
             call.application.launch {
-                runCatching { CallerIdService.contributeAliasBatch(aliasEntries) }
+                runCatching {
+                    CallerIdService.contributeAliasBatch(aliasEntries)
+                    // Immediately recompute bestName so the callerIds collection is
+                    // current for the next lookup — no background job required.
+                    phones.forEach { phone ->
+                        runCatching { CallerIdService.refreshBestName(phone) }
+                    }
+                }
             }
         }
 

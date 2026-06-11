@@ -167,6 +167,29 @@ fun Route.callerIdRoutes() {
                     return@get
                 }
 
+                // ── Tier 4: Community aliases (cross-user crowdsourced name) ──
+                // Covers the window between alias contribution and the next bestName
+                // refresh — aliases are written immediately on contact upload, but the
+                // callerIds.bestName field is refreshed asynchronously.  Querying the
+                // aliases collection directly bridges that gap.
+                val communityName = CallerIdService.computeBestName(phone)
+                if (communityName != null) {
+                    // Persist as a callerIds entry so future spam-syncs pick it up
+                    runCatching { CallerIdService.refreshBestName(phone) }
+                    val response = LookupResponse(
+                        phoneNumber = phone,
+                        name = communityName,
+                        spamScore = 0,
+                        reportCount = 0,
+                        category = SpamCategory.SAFE,
+                        source = "community",
+                        confidence = 60
+                    )
+                    cacheAndLog(phone, response, userId, startMs)
+                    call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = response))
+                    return@get
+                }
+
                 // ── Not found ───────────────────────────────────────────
                 val notFound = LookupResponse(
                     phoneNumber = phone,
