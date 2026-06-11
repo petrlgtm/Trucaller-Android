@@ -64,6 +64,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -76,6 +77,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -169,6 +173,18 @@ fun MessagesScreen(
         showContent = true
     }
 
+    // Reload when returning from SMS rules screen so new rules apply immediately
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && hasSmsPermission) {
+                smsViewModel.loadConversations(contentResolver, user.id)
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // Local search filter combined with VM's filtered conversations
     val displayedConversations = remember(filteredConversations, searchQuery) {
         if (searchQuery.isBlank()) filteredConversations
@@ -196,7 +212,16 @@ fun MessagesScreen(
         ) {
             TruCallerHeader(
                 title = "Messages",
-                subtitle = if (conversations.isNotEmpty()) "${conversations.size} Conversations" else null
+                subtitle = if (conversations.isNotEmpty()) "${conversations.size} Conversations" else null,
+                trailingContent = {
+                    IconButton(onClick = { rootNavController.navigate("sms_rules") }) {
+                        Icon(
+                            Icons.Default.Rule,
+                            contentDescription = "SMS Rules",
+                            tint = colorScheme.primary
+                        )
+                    }
+                }
             )
         }
 

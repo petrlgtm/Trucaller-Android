@@ -46,6 +46,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.FmdGood
 import androidx.compose.material.icons.filled.GpsFixed
 import androidx.compose.material.icons.filled.LocationOn
@@ -107,7 +108,7 @@ import java.text.SimpleDateFormat
 import java.util.Locale
 import java.util.TimeZone
 
-private enum class PendingRemoteAction { ALARM, LOCK, LOCATION }
+private enum class PendingRemoteAction { ALARM, LOCK, LOCATION, WIPE }
 
 private val SuccessColor = Color(0xFF4CAF50)
 private val WarningColor = BrandGold
@@ -132,9 +133,12 @@ fun RemoteActionsScreen(
     var alarmLoading by remember { mutableStateOf(false) }
     var locationLoading by remember { mutableStateOf(false) }
     var lockLoading by remember { mutableStateOf(false) }
+    var wipeLoading by remember { mutableStateOf(false) }
     var showAlarmDialog by remember { mutableStateOf(false) }
     var showAlarmConfirm by remember { mutableStateOf(false) }
     var showLockConfirm by remember { mutableStateOf(false) }
+    var showWipeConfirm1 by remember { mutableStateOf(false) }
+    var showWipeConfirm2 by remember { mutableStateOf(false) }
     var showRecoverConfirm by remember { mutableStateOf(false) }
     var showRecoverSuccess by remember { mutableStateOf(false) }
     var recoverLoading by remember { mutableStateOf(false) }
@@ -197,6 +201,7 @@ fun RemoteActionsScreen(
             when (pendingAction) {
                 PendingRemoteAction.ALARM -> showAlarmConfirm = true
                 PendingRemoteAction.LOCK -> showLockConfirm = true
+                PendingRemoteAction.WIPE -> showWipeConfirm1 = true
                 PendingRemoteAction.LOCATION -> {
                     val currentUser = user ?: return
                     val currentDevice = device ?: return
@@ -533,6 +538,59 @@ fun RemoteActionsScreen(
         )
     }
 
+    // Wipe — first confirmation
+    if (showWipeConfirm1) {
+        AlertDialog(
+            onDismissRequest = { showWipeConfirm1 = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DeleteForever, null, tint = colorScheme.error, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Wipe Device?", color = colorScheme.error)
+                }
+            },
+            text = { Text("This will permanently erase ALL data on the device — apps, photos, contacts, and settings. The device will be reset to factory defaults.\n\nThis action CANNOT be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showWipeConfirm1 = false
+                    showWipeConfirm2 = true
+                }) { Text("Continue", color = colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeConfirm1 = false }) { Text("Cancel") }
+            }
+        )
+    }
+
+    // Wipe — final confirmation
+    if (showWipeConfirm2) {
+        AlertDialog(
+            onDismissRequest = { showWipeConfirm2 = false },
+            title = { Text("Last Chance — Are you sure?", color = colorScheme.error) },
+            text = { Text("Confirming will immediately send a factory reset command to the device. All data will be permanently erased.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showWipeConfirm2 = false
+                    val currentUser = user ?: return@TextButton
+                    val currentDevice = device ?: return@TextButton
+                    wipeLoading = true
+                    scope.launch {
+                        alarmViewModel.wipeDevice(
+                            deviceId = currentDevice.id,
+                            triggeredBy = currentUser.id,
+                            triggeredByName = currentUser.fullName,
+                            triggeredByRole = "owner"
+                        )
+                        wipeLoading = false
+                    }
+                }) { Text("WIPE DEVICE", color = colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWipeConfirm2 = false }) { Text("Cancel") }
+            }
+        )
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Column(
             modifier = Modifier
@@ -732,6 +790,34 @@ fun RemoteActionsScreen(
                             style = TruCallerButtonStyle.Primary,
                             enabled = !locationLoading && device != null && user != null,
                             isLoading = locationLoading
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                TruCallerCard(
+                    cornerRadius = 20.dp,
+                    containerColor = colorScheme.error.copy(alpha = 0.06f)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier.size(42.dp).background(colorScheme.error.copy(alpha = 0.12f), RoundedCornerShape(14.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.DeleteForever, null, tint = colorScheme.error, modifier = Modifier.size(22.dp))
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Wipe Device", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = colorScheme.error)
+                            Text("Factory reset — erases all data", fontSize = 12.sp, color = colorScheme.onSurfaceVariant)
+                        }
+                        TruCallerButton(
+                            text = "Wipe",
+                            onClick = { requirePin(PendingRemoteAction.WIPE) },
+                            style = TruCallerButtonStyle.Danger,
+                            enabled = !wipeLoading && device != null && user != null,
+                            isLoading = wipeLoading
                         )
                     }
                 }

@@ -121,6 +121,7 @@ class AlarmViewModel(
                         AlarmType.REMOTE_ALARM    -> "Alarm command sent to device"
                         AlarmType.LOCATION_REQUEST -> "Location request sent to device"
                         AlarmType.LOCK_DEVICE      -> "Lock command sent to device"
+                        AlarmType.WIPE_DATA        -> "Wipe command sent to device"
                     }
                 } else {
                     alarmRepository.updateResult(
@@ -305,6 +306,49 @@ class AlarmViewModel(
             } catch (e: Exception) {
                 alarmRepository.updateResult(logId, AlarmResult.FAILED, "Lock failed: ${e.message}")
                 _actionMessage.value = "Device lock failed"
+            }
+        }
+    }
+
+    // ── Wipe Device ──────────────────────────────────────────────────────
+
+    fun wipeDevice(
+        deviceId: String,
+        triggeredBy: String,
+        triggeredByName: String,
+        triggeredByRole: String
+    ) {
+        viewModelScope.launch {
+            val localLogId = "alm-wipe-${System.currentTimeMillis()}"
+            alarmRepository.insertLog(
+                AlarmLog(
+                    id = localLogId,
+                    deviceId = deviceId,
+                    triggeredBy = triggeredBy,
+                    triggeredByName = triggeredByName,
+                    triggeredByRole = triggeredByRole,
+                    triggeredAt = nowIso(),
+                    type = AlarmType.WIPE_DATA,
+                    result = AlarmResult.PENDING,
+                    notes = "Remote wipe initiated"
+                )
+            )
+            try {
+                val result = ApiClient.triggerAlarm(
+                    deviceId = deviceId,
+                    type = AlarmType.WIPE_DATA.name,
+                    notes = "Remote factory reset"
+                )
+                if (result.success) {
+                    _actionMessage.value = "Wipe command sent. Device will factory reset."
+                } else {
+                    alarmRepository.updateResult(localLogId, AlarmResult.FAILED, "Backend rejected: ${result.error}")
+                    _actionMessage.value = "Wipe request failed: ${result.error}"
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "wipeDevice API call failed", e)
+                alarmRepository.updateResult(localLogId, AlarmResult.FAILED, "Network error: ${e.message}")
+                _actionMessage.value = "Wipe request failed: network error"
             }
         }
     }

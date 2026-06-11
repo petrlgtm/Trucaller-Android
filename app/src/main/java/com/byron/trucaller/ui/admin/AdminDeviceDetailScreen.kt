@@ -19,6 +19,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.DeleteForever
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material.icons.filled.Shield
@@ -97,6 +98,8 @@ fun AdminDeviceDetailScreen(
 
     var showAlarmDialog by remember { mutableStateOf(false) }
     var showLockConfirmDialog by remember { mutableStateOf(false) }
+    var showWipeConfirm1 by remember { mutableStateOf(false) }
+    var showWipeConfirm2 by remember { mutableStateOf(false) }
     var showStolenPromptDialog by remember { mutableStateOf(false) }
     var showAutoResolvedDialog by remember { mutableStateOf(false) }
     var isStatusUpdating by remember { mutableStateOf(false) }
@@ -180,6 +183,50 @@ fun AdminDeviceDetailScreen(
                 }) { Text("Lock", color = colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { showLockConfirmDialog = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showWipeConfirm1) {
+        AlertDialog(
+            onDismissRequest = { showWipeConfirm1 = false },
+            title = {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.DeleteForever, null, tint = colorScheme.error, modifier = Modifier.size(22.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Wipe Device?", color = colorScheme.error, fontWeight = FontWeight.Bold)
+                }
+            },
+            text = { Text("This will permanently erase ALL data on the device — apps, photos, contacts, and settings. The device will be reset to factory defaults.\n\nThis cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showWipeConfirm1 = false
+                    showWipeConfirm2 = true
+                }) { Text("Continue", color = colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { showWipeConfirm1 = false }) { Text("Cancel") } }
+        )
+    }
+
+    if (showWipeConfirm2) {
+        AlertDialog(
+            onDismissRequest = { showWipeConfirm2 = false },
+            title = { Text("Final Confirmation", color = colorScheme.error, fontWeight = FontWeight.Bold) },
+            text = { Text("Confirming will immediately send a factory reset command to the device. All data will be permanently erased.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    showWipeConfirm2 = false
+                    val admin = adminUser
+                    if (admin != null) {
+                        alarmViewModel.wipeDevice(
+                            deviceId = deviceId,
+                            triggeredBy = admin.id,
+                            triggeredByName = admin.name,
+                            triggeredByRole = "admin"
+                        )
+                    }
+                }) { Text("WIPE DEVICE", color = colorScheme.error, fontWeight = FontWeight.Bold) }
+            },
+            dismissButton = { TextButton(onClick = { showWipeConfirm2 = false }) { Text("Cancel") } }
         )
     }
 
@@ -375,6 +422,20 @@ fun AdminDeviceDetailScreen(
                             style = TruCallerButtonStyle.Primary,
                             leadingIcon = Icons.Default.LocationOn
                         )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedButton(
+                        onClick = { showWipeConfirm1 = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = colorScheme.error),
+                        border = BorderStroke(1.5.dp, colorScheme.error.copy(alpha = 0.6f)),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Icon(Icons.Default.DeleteForever, null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Wipe Device Data", fontWeight = FontWeight.SemiBold)
                     }
 
                     if (currentStatus != DeviceStatus.STOLEN) {

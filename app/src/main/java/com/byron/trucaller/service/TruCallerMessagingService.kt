@@ -74,12 +74,27 @@ class TruCallerMessagingService : FirebaseMessagingService() {
                         val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
                         dpm.lockNow()
                         success = true
+                        SecurityNotificationHelper.showLockNotification(applicationContext)
                     }
-                    SecurityNotificationHelper.showLockNotification(applicationContext)
                 } catch (e: Exception) {
                     Log.e(TAG, "Failed to execute LOCK_DEVICE", e)
                 }
                 reportActionResult(logId, success, action)
+            }
+            "WIPE_DATA" -> {
+                try {
+                    if (DeviceAdminHelper.isAdminActive(applicationContext)) {
+                        // Report before wipe — device resets immediately after wipeData()
+                        reportActionResult(logId, true, action)
+                        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
+                        @Suppress("DEPRECATION")
+                        dpm.wipeData(0)
+                        return
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to execute WIPE_DATA", e)
+                }
+                reportActionResult(logId, false, action)
             }
             "LOCATION_REQUEST" -> {
                 SecurityNotificationHelper.showLocationRequestNotification(applicationContext)

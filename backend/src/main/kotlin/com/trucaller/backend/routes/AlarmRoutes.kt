@@ -38,7 +38,7 @@ data class AlarmLogResultRequest(
 
 // ── Routes ───────────────────────────────────────────────────────────────────
 
-private val VALID_ALARM_TYPES = setOf("REMOTE_ALARM", "LOCATION_REQUEST", "LOCK_DEVICE")
+private val VALID_ALARM_TYPES = setOf("REMOTE_ALARM", "LOCATION_REQUEST", "LOCK_DEVICE", "WIPE_DATA")
 
 /**
  * Registers alarm routes:

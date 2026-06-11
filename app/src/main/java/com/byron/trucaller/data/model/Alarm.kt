@@ -4,7 +4,7 @@ import androidx.room.Entity
 import androidx.room.PrimaryKey
 
 enum class AlarmType {
-    REMOTE_ALARM, LOCATION_REQUEST, LOCK_DEVICE
+    REMOTE_ALARM, LOCATION_REQUEST, LOCK_DEVICE, WIPE_DATA
 }
 
 enum class AlarmResult {
