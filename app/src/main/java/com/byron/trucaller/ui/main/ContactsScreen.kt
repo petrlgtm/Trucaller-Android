@@ -161,6 +161,33 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
         if (granted) contactsViewModel.syncContacts(user.id)
     }
 
+    var pendingCallNumber by remember { mutableStateOf<String?>(null) }
+    val callPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        val number = pendingCallNumber ?: return@rememberLauncherForActivityResult
+        pendingCallNumber = null
+        val intent = if (granted) {
+            Intent(Intent.ACTION_CALL).apply { data = Uri.parse("tel:$number") }
+        } else {
+            Intent(Intent.ACTION_DIAL).apply { data = Uri.parse("tel:$number") }
+        }
+        context.startActivity(intent)
+    }
+
+    fun makeCall(number: String) {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CALL_PHONE)
+            == PackageManager.PERMISSION_GRANTED
+        ) {
+            context.startActivity(
+                Intent(Intent.ACTION_CALL).apply { data = Uri.parse("tel:$number") }
+            )
+        } else {
+            pendingCallNumber = number
+            callPermissionLauncher.launch(Manifest.permission.CALL_PHONE)
+        }
+    }
+
     // Auto-sync contacts on first load
     LaunchedEffect(user.id) {
         if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_CONTACTS)
@@ -471,12 +498,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                                                 showFavouriteDialog = true
                                             }
                                         },
-                                        onCallClick = {
-                                            val intent = Intent(Intent.ACTION_DIAL).apply {
-                                                data = Uri.parse("tel:${contact.phoneNumber}")
-                                            }
-                                            context.startActivity(intent)
-                                        }
+                                        onCallClick = { makeCall(contact.phoneNumber) }
                                     )
                             }
                         }
@@ -597,10 +619,7 @@ fun ContactsScreen(authViewModel: AuthViewModel, contactsViewModel: ContactsView
                         label = "Call",
                         tint = colorScheme.tertiary,
                         onClick = {
-                            val intent = Intent(Intent.ACTION_DIAL).apply {
-                                data = Uri.parse("tel:${contact.phoneNumber}")
-                            }
-                            context.startActivity(intent)
+                            makeCall(contact.phoneNumber)
                             showActionsDialog = false
                         }
                     )

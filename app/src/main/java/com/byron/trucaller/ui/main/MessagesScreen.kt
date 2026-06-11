@@ -128,14 +128,26 @@ fun MessagesScreen(
     val roleManager = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         context.getSystemService(RoleManager::class.java)
     } else null
-    
-    val isDefaultSms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roleManager != null) {
+
+    fun checkIsDefault() = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roleManager != null) {
         roleManager.isRoleHeld(RoleManager.ROLE_SMS)
     } else true
 
+    var isDefaultSms by remember { mutableStateOf(checkIsDefault()) }
+
     val roleLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
-    ) { _ -> }
+    ) { isDefaultSms = checkIsDefault() }
+
+    // Re-check each time the screen comes back into view (e.g. after granting via Settings)
+    val lifecycleOwner2 = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner2) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) isDefaultSms = checkIsDefault()
+        }
+        lifecycleOwner2.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner2.lifecycle.removeObserver(observer) }
+    }
 
     val conversations by smsViewModel.conversations.collectAsState()
     val filteredConversations by smsViewModel.filteredConversations.collectAsState()
