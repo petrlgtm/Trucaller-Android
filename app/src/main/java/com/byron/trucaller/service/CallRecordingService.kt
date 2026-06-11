@@ -44,6 +44,8 @@ class CallRecordingService : Service() {
         private const val EXTRA_CALL_DIRECTION = "extra_call_direction"
         private const val RECORDINGS_DIR = "recordings"
 
+        val isRecording = kotlinx.coroutines.flow.MutableStateFlow(false)
+
         fun start(context: Context, phoneNumber: String, callDirection: CallDirection) {
             val intent = Intent(context, CallRecordingService::class.java).apply {
                 putExtra(EXTRA_PHONE_NUMBER, phoneNumber)
@@ -172,6 +174,7 @@ class CallRecordingService : Service() {
             mediaRecorder = recorder
             recordingStartTime = timestamp
             isRecording = true
+            Companion.isRecording.value = true
 
             Log.d(TAG, "Recording started: $fileName (direction=$callDirection)")
 
@@ -223,6 +226,7 @@ class CallRecordingService : Service() {
         } finally {
             mediaRecorder = null
             isRecording = false
+            Companion.isRecording.value = false
         }
 
         // Update the database entry with duration and file size

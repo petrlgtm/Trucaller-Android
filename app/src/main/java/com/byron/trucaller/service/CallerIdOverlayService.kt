@@ -448,16 +448,18 @@ class CallerIdOverlayService : Service() {
 
         topRow.addView(nameNumberColumn)
 
-        // Dismiss X button
+        // Dismiss ✕ button
         val dismissBg = GradientDrawable().apply {
             setColor(surfaceElevated)
             cornerRadius = dpToPx(14).toFloat()
         }
-        val dismissButton = ImageView(this).apply {
-            setImageResource(android.R.drawable.ic_menu_close_clear_cancel)
-            setColorFilter(textSecondary)
+        val dismissButton = TextView(this).apply {
+            text = "✕"
+            setTextColor(textSecondary)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            typeface = Typeface.DEFAULT_BOLD
             background = dismissBg
-            setPadding(dpToPx(6), dpToPx(6), dpToPx(6), dpToPx(6))
+            gravity = Gravity.CENTER
             layoutParams = LinearLayout.LayoutParams(dpToPx(28), dpToPx(28)).apply {
                 marginStart = dpToPx(8)
             }
@@ -563,7 +565,7 @@ class CallerIdOverlayService : Service() {
 
                 // Checkmark inside
                 val checkPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-                    color = 0xFF1A1A1A.toInt()
+                    color = Color.WHITE
                     style = Paint.Style.STROKE
                     strokeWidth = w * 0.12f
                     strokeCap = Paint.Cap.ROUND
@@ -593,7 +595,82 @@ class CallerIdOverlayService : Service() {
         bottomRow.addView(brandRow)
         contentLayout.addView(bottomRow)
 
+        // ── Quick "View Details" tap row (non-safe callers) ────────────────
+        if (category != SpamCategory.SAFE) {
+            val actionDivider = View(this).apply {
+                setBackgroundColor(dividerColor)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT, dpToPx(1)
+                ).apply { topMargin = dpToPx(8); bottomMargin = dpToPx(8) }
+            }
+            contentLayout.addView(actionDivider)
+
+            val quickActionRow = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            val warningIcon = TextView(this).apply {
+                text = if (category == SpamCategory.FRAUD) "🚨" else "⚠️"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 13f)
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginEnd = dpToPx(6) }
+            }
+            quickActionRow.addView(warningIcon)
+
+            val warningText = TextView(this).apply {
+                text = when (category) {
+                    SpamCategory.FRAUD          -> "Fraud risk — exercise caution"
+                    SpamCategory.SPAM           -> "Spam number reported by users"
+                    SpamCategory.SUSPECTED_SPAM -> "This number has been flagged"
+                    else                        -> ""
+                }
+                setTextColor(categoryColor)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            }
+            quickActionRow.addView(warningText)
+
+            val viewDetailsBg = GradientDrawable().apply {
+                setColor(android.graphics.Color.TRANSPARENT)
+                cornerRadius = dpToPx(10).toFloat()
+                setStroke(dpToPx(1), categoryColor)
+            }
+            val viewDetailsBtn = TextView(this).apply {
+                text = "Details"
+                setTextColor(categoryColor)
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 11f)
+                typeface = Typeface.DEFAULT_BOLD
+                background = viewDetailsBg
+                setPadding(dpToPx(10), dpToPx(5), dpToPx(10), dpToPx(5))
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = dpToPx(8) }
+                setOnClickListener {
+                    openCallerDetails(phoneNumber)
+                    animateExit()
+                }
+            }
+            quickActionRow.addView(viewDetailsBtn)
+
+            contentLayout.addView(quickActionRow)
+        }
+
         return rootCard
+    }
+
+    private fun openCallerDetails(phoneNumber: String) {
+        try {
+            val intent = android.content.Intent(this, com.byron.trucaller.MainActivity::class.java).apply {
+                action = android.content.Intent.ACTION_VIEW
+                data = android.net.Uri.parse("trucaller://caller_id_lookup/${android.net.Uri.encode(phoneNumber)}")
+                addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to open caller details", e)
+        }
     }
 
     // ── Animations ─────────────────────────────────────────────────────────

@@ -86,5 +86,26 @@ class CustomInCallService : InCallService() {
             val route = if (currentSpeaker) CallAudioState.ROUTE_EARPIECE else CallAudioState.ROUTE_SPEAKER
             instance?.setAudioRoute(route)
         }
+
+        fun toggleBluetooth(currentBluetooth: Boolean) {
+            val route = if (currentBluetooth) CallAudioState.ROUTE_EARPIECE else CallAudioState.ROUTE_BLUETOOTH
+            instance?.setAudioRoute(route)
+        }
+
+        fun toggleHold() {
+            val call = activeCall.value ?: return
+            when (call.state) {
+                Call.STATE_ACTIVE  -> call.hold()
+                Call.STATE_HOLDING -> call.unhold()
+            }
+        }
+
+        fun playDtmf(digit: Char) {
+            activeCall.value?.playDtmfTone(digit)
+        }
+
+        fun stopDtmf() {
+            activeCall.value?.stopDtmfTone()
+        }
     }
 }
