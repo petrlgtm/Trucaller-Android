@@ -34,6 +34,17 @@ class PhoneStateReceiver : BroadcastReceiver() {
     }
 
     override fun onReceive(context: Context, intent: Intent) {
+        // Capture the outgoing number before the call state changes to OFFHOOK
+        if (intent.action == Intent.ACTION_NEW_OUTGOING_CALL) {
+            val number = intent.getStringExtra(Intent.EXTRA_PHONE_NUMBER)
+            if (!number.isNullOrBlank()) {
+                lastNumber = number
+                lastDirection = CallDirection.OUTGOING
+                Log.d(TAG, "Outgoing call captured: $number")
+            }
+            return
+        }
+
         if (intent.action != TelephonyManager.ACTION_PHONE_STATE_CHANGED) return
 
         val stateStr = intent.getStringExtra(TelephonyManager.EXTRA_STATE) ?: return
@@ -56,11 +67,9 @@ class PhoneStateReceiver : BroadcastReceiver() {
             TelephonyManager.EXTRA_STATE_OFFHOOK -> {
                 // Call answered or outgoing call started
                 if (lastState == TelephonyManager.CALL_STATE_IDLE) {
-                    // Transition from IDLE -> OFFHOOK means outgoing call
-                    lastDirection = CallDirection.OUTGOING
-                    val number = incomingNumber ?: lastNumber
+                    // Transition from IDLE -> OFFHOOK: use number captured in NEW_OUTGOING_CALL
+                    val number = lastNumber
                     if (!number.isNullOrBlank()) {
-                        lastNumber = number
                         Log.d(TAG, "Outgoing call to: $number — showing overlay")
                         CallerIdOverlayService.show(context, number)
                     }

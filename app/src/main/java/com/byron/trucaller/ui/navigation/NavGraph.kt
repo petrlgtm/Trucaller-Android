@@ -1,5 +1,9 @@
 package com.byron.trucaller.ui.navigation
 
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.Spring
@@ -9,6 +13,7 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -52,6 +57,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
@@ -153,6 +159,22 @@ private val fadeSpec = tween<Float>(200)
 @Composable
 fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val navController = rememberNavController()
+    val context = LocalContext.current
+
+    // Redirect to login when token refresh fails (session expired on server)
+    DisposableEffect(Unit) {
+        val receiver = object : BroadcastReceiver() {
+            override fun onReceive(ctx: Context, intent: Intent) {
+                authViewModel.logout()
+                navController.navigate("login") {
+                    popUpTo(0) { inclusive = true }
+                }
+            }
+        }
+        val filter = IntentFilter("com.byron.trucaller.SESSION_EXPIRED")
+        context.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        onDispose { context.unregisterReceiver(receiver) }
+    }
     val deviceViewModel: DeviceViewModel = viewModel(factory = DeviceViewModel.Factory)
     val contactsViewModel: ContactsViewModel = viewModel(factory = ContactsViewModel.Factory)
     val callerIdViewModel: CallerIdViewModel = viewModel(factory = CallerIdViewModel.Factory)

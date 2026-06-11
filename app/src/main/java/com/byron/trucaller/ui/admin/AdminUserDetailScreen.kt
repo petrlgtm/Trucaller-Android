@@ -115,7 +115,7 @@ fun AdminUserDetailScreen(
                         isActionLoading = true
                         val r = ApiClient.banUser(userId, "INACTIVE")
                         isActionLoading = false
-                        if (r.success) user = user?.copy(isActive = false)
+                        if (r.success) user = user?.copy(isActive = false, status = "INACTIVE")
                         else actionError = r.error ?: "Failed to deactivate"
                     }
                 }) { Text("Deactivate", color = colorScheme.error) }
@@ -136,7 +136,7 @@ fun AdminUserDetailScreen(
                         isActionLoading = true
                         val r = ApiClient.banUser(userId, "ACTIVE")
                         isActionLoading = false
-                        if (r.success) user = user?.copy(isActive = true)
+                        if (r.success) user = user?.copy(isActive = true, status = "ACTIVE")
                         else actionError = r.error ?: "Failed to reactivate"
                     }
                 }) { Text("Reactivate") }
@@ -157,7 +157,7 @@ fun AdminUserDetailScreen(
                         isActionLoading = true
                         val r = ApiClient.banUser(userId, "BANNED")
                         isActionLoading = false
-                        if (r.success) user = user?.copy(isActive = false)
+                        if (r.success) user = user?.copy(isActive = false, status = "BANNED")
                         else actionError = r.error ?: "Failed to ban user"
                     }
                 }) { Text("Ban", color = colorScheme.error) }

@@ -193,13 +193,14 @@ class AlarmViewModel(
 
     fun stopRemoteAlarm(deviceId: String) {
         viewModelScope.launch {
-            _alarmSentDeviceId.value = null
             if (isCurrentDevice(deviceId)) {
+                _alarmSentDeviceId.value = null
                 stopAlarm()
                 return@launch
             }
             try {
                 ApiClient.triggerAlarm(deviceId = deviceId, type = AlarmType.STOP_ALARM.name, notes = null)
+                _alarmSentDeviceId.value = null
                 _actionMessage.value = "Stop command sent to device"
             } catch (e: Exception) {
                 Log.e(TAG, "stopRemoteAlarm failed", e)

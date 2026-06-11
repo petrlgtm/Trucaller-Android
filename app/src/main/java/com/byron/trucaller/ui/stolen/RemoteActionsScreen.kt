@@ -488,14 +488,16 @@ fun RemoteActionsScreen(
                     showLockConfirm = false
                     val currentUser = user ?: return@TextButton
                     val currentDevice = device ?: return@TextButton
-                    lockLoading = true
-                    alarmViewModel.lockDevice(
-                        deviceId = currentDevice.id,
-                        triggeredBy = currentUser.id,
-                        triggeredByName = currentUser.fullName,
-                        triggeredByRole = "owner"
-                    )
-                    lockLoading = false
+                    scope.launch {
+                        lockLoading = true
+                        alarmViewModel.lockDevice(
+                            deviceId = currentDevice.id,
+                            triggeredBy = currentUser.id,
+                            triggeredByName = currentUser.fullName,
+                            triggeredByRole = "owner"
+                        )
+                        lockLoading = false
+                    }
                 }) { Text("Lock Now", color = colorScheme.error) }
             },
             dismissButton = {

@@ -40,6 +40,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.telecom.TelecomManager
+import android.provider.Telephony
 import androidx.core.content.ContextCompat
 import androidx.navigation.NavController
 import com.byron.trucaller.data.model.DeviceStatus
@@ -85,11 +87,15 @@ fun HomeScreen(
     
     var isDefaultDialer by remember { mutableStateOf(true) }
     var isDefaultSms by remember { mutableStateOf(true) }
-    
+
     LaunchedEffect(Unit) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && roleManager != null) {
             isDefaultDialer = roleManager.isRoleHeld(RoleManager.ROLE_DIALER)
             isDefaultSms = roleManager.isRoleHeld(RoleManager.ROLE_SMS)
+        } else {
+            val telecomManager = context.getSystemService(TelecomManager::class.java)
+            isDefaultDialer = telecomManager?.defaultDialerPackage == context.packageName
+            isDefaultSms = Telephony.Sms.getDefaultSmsPackage(context) == context.packageName
         }
     }
 

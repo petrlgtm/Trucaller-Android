@@ -186,7 +186,17 @@ fun InCallContent(
         }
     }
 
-    if (call == null && !isCallEnded) return
+    if (call == null && !isCallEnded) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color(0xFF0D1B2A)),
+            contentAlignment = Alignment.Center
+        ) {
+            Text("Connecting…", color = Color.White, fontSize = 18.sp)
+        }
+        return
+    }
 
     val state = if (isCallEnded) Call.STATE_DISCONNECTED else call?.state ?: Call.STATE_DISCONNECTED
     val rawNumber = try { call?.details?.handle?.schemeSpecificPart?.takeIf { it.isNotBlank() } } catch (_: Exception) { null }

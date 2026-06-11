@@ -41,6 +41,9 @@ class TruCallerApplication : Application() {
             }
         }
 
+        // Wire session-expired broadcast so failed token refreshes redirect to login
+        ApiClient.sessionExpiredBroadcastAction = "com.byron.trucaller.SESSION_EXPIRED"
+
         // Root detection disabled to ensure app accessibility
         isDeviceRooted = false
 

@@ -397,8 +397,8 @@ fun AdminDeviceDetailScreen(
                                 val admin = adminUser
                                 if (admin != null) {
                                     alarmViewModel.triggerAlarm(deviceId = deviceId, triggeredBy = admin.id, triggeredByName = admin.name, triggeredByRole = "admin")
+                                    showAlarmDialog = true
                                 }
-                                showAlarmDialog = true
                             },
                             modifier = Modifier.weight(1f),
                             style = TruCallerButtonStyle.Danger,
