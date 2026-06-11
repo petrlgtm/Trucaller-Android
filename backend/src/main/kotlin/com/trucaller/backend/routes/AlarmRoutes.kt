@@ -101,11 +101,18 @@ fun Route.alarmRoutes() {
                 return@post
             }
 
-            // Look up user name
+            // Look up user name — check both regular users and admin users
             val userDoc = Collections.users
                 .find(Filters.eq("_id", userId))
                 .firstOrNull()
-            val userName = userDoc?.getString("fullName") ?: "Unknown"
+            val userName = if (userDoc != null) {
+                userDoc.getString("fullName") ?: "Unknown"
+            } else {
+                val adminDoc = Collections.adminUsers
+                    .find(Filters.eq("_id", userId))
+                    .firstOrNull()
+                adminDoc?.getString("name") ?: "Unknown"
+            }
 
             val logId = ObjectId().toString()
             val now = Instant.now().toString()
