@@ -83,3 +83,9 @@
 -dontwarn java.lang.invoke.**
 -dontwarn javax.annotation.**
 -dontwarn sun.misc.Unsafe
+
+# ── google-api-client Apache HTTP transport: optional JDK classes not present
+#    on Android (LDAP hostname verification + Kerberos/GSS auth). Never used at
+#    runtime here; suppress so R8 doesn't fail on the missing references.
+-dontwarn javax.naming.**
+-dontwarn org.ietf.jgss.**

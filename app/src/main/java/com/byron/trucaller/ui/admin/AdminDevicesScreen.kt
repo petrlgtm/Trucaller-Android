@@ -80,8 +80,16 @@ fun AdminDevicesScreen(navController: NavController) {
     suspend fun loadPage(pageSkip: Int) {
         val result = ApiClient.getAdminDevices(skip = pageSkip, limit = DEVICES_PAGE_SIZE)
         if (result.success && result.data != null) {
-            if (pageSkip == 0) { devices.clear(); devices.addAll(result.data) }
-            else devices.addAll(result.data)
+            if (pageSkip == 0) {
+                devices.clear()
+                devices.addAll(result.data)
+            } else {
+                // Guard against skip-based pagination returning a record we already
+                // hold (e.g. a device registered between page loads), which would
+                // otherwise duplicate a list key and crash the LazyColumn.
+                val existingIds = devices.mapTo(HashSet()) { it.id }
+                devices.addAll(result.data.filter { it.id !in existingIds })
+            }
             hasMore = result.data.size >= DEVICES_PAGE_SIZE
             skip = pageSkip + result.data.size
         }
@@ -169,7 +177,11 @@ fun AdminDevicesScreen(navController: NavController) {
                     state = lazyListState,
                     modifier = Modifier.fillMaxSize().padding(horizontal = Spacing.md)
                 ) {
-                    items(filtered, key = { it.deviceId.ifBlank { it.id } }) { device ->
+                    // Key by the globally-unique Mongo id, NOT deviceId: the same
+                    // physical phone can be registered under more than one account
+                    // (same deviceId, different id), and a duplicate key crashes the
+                    // LazyColumn with "Key … was already used".
+                    items(filtered, key = { it.id.ifBlank { it.deviceId } }) { device ->
                         val deviceId = device.deviceId.ifBlank { device.id }
                         val model = device.model.ifBlank { "Unknown" }
                         val manufacturer = device.manufacturer
