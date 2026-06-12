@@ -29,8 +29,16 @@ class DialPadViewModel(
     private val _matchingContacts = MutableStateFlow<List<Contact>>(emptyList())
     val matchingContacts: StateFlow<List<Contact>> = _matchingContacts.asStateFlow()
 
+    // Free-text contact search (by name or number), independent of the dial input.
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _searchResults = MutableStateFlow<List<Contact>>(emptyList())
+    val searchResults: StateFlow<List<Contact>> = _searchResults.asStateFlow()
+
     private var dbContacts: List<Contact> = emptyList()
     private var filterJob: Job? = null
+    private var searchJob: Job? = null
 
     init {
         viewModelScope.launch {
@@ -63,12 +71,42 @@ class DialPadViewModel(
         filterContacts(_phoneNumber.value)
     }
 
+    /** Updates the free-text search field and refreshes [searchResults]. */
+    fun onSearchQueryChange(query: String) {
+        _searchQuery.value = query
+        searchJob?.cancel()
+        if (query.isBlank()) {
+            _searchResults.value = emptyList()
+            return
+        }
+        searchJob = viewModelScope.launch {
+            _searchResults.value = searchContacts(query)
+        }
+    }
+
+    /** Clears the free-text search field and its results. */
+    fun clearSearch() {
+        searchJob?.cancel()
+        _searchQuery.value = ""
+        _searchResults.value = emptyList()
+    }
+
     private fun filterContacts(query: String) {
         if (query.isEmpty()) {
             _matchingContacts.value = emptyList()
             return
         }
+        filterJob?.cancel()
+        filterJob = viewModelScope.launch {
+            _matchingContacts.value = searchContacts(query)
+        }
+    }
 
+    /**
+     * Searches DB + system contacts by name or number. Numeric/`+` queries also
+     * run a T9 name match (e.g. "265" -> "BOB"); text queries match name substrings.
+     */
+    private suspend fun searchContacts(query: String): List<Contact> {
         // T9 Search logic:
         // 2 -> ABC, 3 -> DEF, 4 -> GHI, 5 -> JKL, 6 -> MNO, 7 -> PQRS, 8 -> TUV, 9 -> WXYZ
         val t9Map = mapOf(
@@ -76,47 +114,42 @@ class DialPadViewModel(
             '6' to "MNO", '7' to "PQRS", '8' to "TUV", '9' to "WXYZ"
         )
 
-        filterJob?.cancel()
-        filterJob = viewModelScope.launch {
-            // 1. Get system contacts
-            val systemContacts = try {
-                readPhoneContacts(getApplication()).map { pc ->
-                    Contact(
-                        id = "sys-${pc.phoneNumber}",
-                        userId = "system",
-                        name = pc.name,
-                        phoneNumber = pc.phoneNumber,
-                        email = pc.email,
-                        syncedAt = "",
-                        isBackedUp = false
-                    )
-                }
-            } catch (e: Exception) {
-                emptyList<Contact>()
+        // 1. Get system contacts
+        val systemContacts = try {
+            readPhoneContacts(getApplication()).map { pc ->
+                Contact(
+                    id = "sys-${pc.phoneNumber}",
+                    userId = "system",
+                    name = pc.name,
+                    phoneNumber = pc.phoneNumber,
+                    email = pc.email,
+                    syncedAt = "",
+                    isBackedUp = false
+                )
+            }
+        } catch (e: Exception) {
+            emptyList<Contact>()
+        }
+
+        // 2. Merge with DB contacts (deduplicate by phone)
+        val allMerged = (dbContacts + systemContacts).distinctBy { it.phoneNumber }
+
+        // 3. Filter
+        return allMerged.filter { contact ->
+            // Match phone number (strip formatting)
+            val cleanContactPhone = contact.phoneNumber.replace(Regex("[^\\d+]"), "")
+            val cleanQuery = query.replace(Regex("[^\\d+]"), "")
+            val phoneMatch = cleanQuery.isNotEmpty() && cleanContactPhone.contains(cleanQuery)
+
+            // Match T9 name for numeric queries, plain substring for text queries
+            val nameMatch = if (query.all { it.isDigit() || it == '+' }) {
+                matchT9(contact.name, query.filter { it.isDigit() }, t9Map)
+            } else {
+                contact.name.contains(query, ignoreCase = true)
             }
 
-            // 2. Merge with DB contacts (deduplicate by phone)
-            val allMerged = (dbContacts + systemContacts).distinctBy { it.phoneNumber }
-
-            // 3. Filter
-            val filtered = allMerged.filter { contact ->
-                // Match phone number (strip formatting)
-                val cleanContactPhone = contact.phoneNumber.replace(Regex("[^\\d+]"), "")
-                val cleanQuery = query.replace(Regex("[^\\d+]"), "")
-                val phoneMatch = cleanContactPhone.contains(cleanQuery)
-                
-                // Match T9 name
-                val nameMatch = if (query.all { it.isDigit() || it == '+' }) {
-                    matchT9(contact.name, query.filter { it.isDigit() }, t9Map)
-                } else {
-                    contact.name.contains(query, ignoreCase = true)
-                }
-
-                phoneMatch || nameMatch
-            }.take(15)
-            
-            _matchingContacts.value = filtered
-        }
+            phoneMatch || nameMatch
+        }.take(15)
     }
 
     private fun matchT9(name: String, digits: String, t9Map: Map<Char, String>): Boolean {

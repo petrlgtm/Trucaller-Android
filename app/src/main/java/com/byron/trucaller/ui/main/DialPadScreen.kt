@@ -36,13 +36,16 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Phone
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.ripple
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -98,6 +101,9 @@ fun DialPadScreen(
 
     val phoneNumber by viewModel.phoneNumber.collectAsState()
     val matchingContacts by viewModel.matchingContacts.collectAsState()
+    val searchQuery by viewModel.searchQuery.collectAsState()
+    val searchResults by viewModel.searchResults.collectAsState()
+    val isSearching = searchQuery.isNotEmpty()
 
     Column(
         modifier = Modifier
@@ -119,6 +125,28 @@ fun DialPadScreen(
                     tint = colorScheme.onBackground
                 )
             }
+
+            // Search contacts by name or number
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = { viewModel.onSearchQueryChange(it) },
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(end = 8.dp),
+                placeholder = { Text("Search contacts", fontSize = 14.sp) },
+                singleLine = true,
+                leadingIcon = {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = colorScheme.onSurfaceVariant)
+                },
+                trailingIcon = {
+                    if (isSearching) {
+                        IconButton(onClick = { viewModel.clearSearch() }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear search", tint = colorScheme.onSurfaceVariant)
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(24.dp)
+            )
         }
 
         if (!isDefaultDialer && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -184,10 +212,12 @@ fun DialPadScreen(
             }
         }
 
-        // Search Results Area
+        // Search Results Area — shows free-text search results while searching,
+        // otherwise the dial-as-you-type matches.
+        val resultsToShow = if (isSearching) searchResults else matchingContacts
         Column(modifier = Modifier.weight(1f).fillMaxWidth()) {
             AnimatedVisibility(
-                visible = matchingContacts.isNotEmpty(),
+                visible = resultsToShow.isNotEmpty(),
                 enter = fadeIn() + expandVertically(),
                 exit = fadeOut() + shrinkVertically()
             ) {
@@ -195,7 +225,7 @@ fun DialPadScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    items(matchingContacts) { contact ->
+                    items(resultsToShow) { contact ->
                         ContactSearchResultItem(contact = contact) {
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             dialWithSim(context, contact.phoneNumber, 0)
@@ -203,15 +233,20 @@ fun DialPadScreen(
                     }
                 }
             }
-            
-            if (matchingContacts.isEmpty() && phoneNumber.isNotEmpty()) {
+
+            val emptyMessage = when {
+                isSearching && searchResults.isEmpty() -> "No contacts found"
+                !isSearching && matchingContacts.isEmpty() && phoneNumber.isNotEmpty() -> "Unknown Number"
+                else -> null
+            }
+            if (emptyMessage != null) {
                 Column(
                     modifier = Modifier.fillMaxSize(),
                     verticalArrangement = Arrangement.Center,
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
                     Text(
-                        text = "Unknown Number",
+                        text = emptyMessage,
                         color = colorScheme.onSurface.copy(alpha = 0.4f),
                         fontSize = 14.sp
                     )
