@@ -115,7 +115,7 @@ fun AdminLoginScreen(navController: NavController, authViewModel: AuthViewModel)
             value = phoneNumber,
             onValueChange = { phoneNumber = it; error = null },
             label = { Text("Admin Phone Number") },
-            placeholder = { Text("e.g. 0787959715") },
+            placeholder = { Text("07XXXXXXXX") },
             leadingIcon = { Icon(Icons.Default.Phone, null, tint = Brand) },
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
             singleLine = true,
