@@ -25,8 +25,11 @@ class AppContainer(context: Context) {
         TruCallerDatabase::class.java,
         "trucaller_database"
     )
-        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12, TruCallerDatabase.MIGRATION_12_13, TruCallerDatabase.MIGRATION_13_14, TruCallerDatabase.MIGRATION_14_15, TruCallerDatabase.MIGRATION_15_16, TruCallerDatabase.MIGRATION_16_17, TruCallerDatabase.MIGRATION_17_18)
-        .fallbackToDestructiveMigration(true)
+        .addMigrations(TruCallerDatabase.MIGRATION_9_10, TruCallerDatabase.MIGRATION_10_11, TruCallerDatabase.MIGRATION_11_12, TruCallerDatabase.MIGRATION_12_13, TruCallerDatabase.MIGRATION_13_14, TruCallerDatabase.MIGRATION_14_15, TruCallerDatabase.MIGRATION_15_16, TruCallerDatabase.MIGRATION_16_17, TruCallerDatabase.MIGRATION_17_18, TruCallerDatabase.MIGRATION_18_19)
+        // Only wipe on a DOWNGRADE (unsupported, and rare). A missing FORWARD
+        // migration must fail loudly at build time / in QA rather than silently
+        // erasing the user's call logs, contacts, and recordings on update.
+        .fallbackToDestructiveMigrationOnDowngrade(true)
         .build()
 
     val userPreferences = UserPreferences(context)

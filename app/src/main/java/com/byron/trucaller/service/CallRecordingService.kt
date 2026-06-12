@@ -16,6 +16,7 @@ import com.byron.trucaller.R
 import com.byron.trucaller.TruCallerApplication
 import com.byron.trucaller.data.model.CallDirection
 import com.byron.trucaller.data.model.CallRecording
+import com.byron.trucaller.security.RecordingCrypto
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -66,7 +67,8 @@ class CallRecordingService : Service() {
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var mediaRecorder: MediaRecorder? = null
-    private var recordingFile: File? = null
+    private var recordingFile: File? = null       // final, encrypted .enc file (stored in DB)
+    private var recordingTempFile: File? = null   // plaintext temp in cache that MediaRecorder writes to
     private var recordingId: String? = null
     private var recordingStartTime: Long = 0L
     private var isRecording = false
@@ -125,9 +127,15 @@ class CallRecordingService : Service() {
         }
 
         val timestamp = System.currentTimeMillis()
-        val fileName = "rec_${timestamp}_${phoneNumber.replace(Regex("[^0-9+]"), "")}.m4a"
-        val outputFile = File(recordingsDir, fileName)
-        recordingFile = outputFile
+        val safeNumber = phoneNumber.replace(Regex("[^0-9+]"), "")
+        // MediaRecorder needs a seekable plaintext target (MPEG-4 writes its index
+        // on stop), so it records to a temp file in app-private cache. On stop we
+        // encrypt that to the final .enc file and delete the temp — plaintext audio
+        // never persists in long-term storage.
+        val tempFile = File(cacheDir, "rec_tmp_$id.m4a")
+        val encryptedFile = File(recordingsDir, "rec_${timestamp}_$safeNumber.m4a.${RecordingCrypto.ENCRYPTED_EXTENSION}")
+        recordingTempFile = tempFile
+        recordingFile = encryptedFile
 
         // Attempt to play a consent beep if enabled in preferences
         serviceScope.launch {
@@ -167,7 +175,7 @@ class CallRecordingService : Service() {
             recorder.setAudioEncoder(MediaRecorder.AudioEncoder.AAC)
             recorder.setAudioEncodingBitRate(128_000)
             recorder.setAudioSamplingRate(44_100)
-            recorder.setOutputFile(outputFile.absolutePath)
+            recorder.setOutputFile(tempFile.absolutePath)
             recorder.prepare()
             recorder.start()
 
@@ -176,7 +184,7 @@ class CallRecordingService : Service() {
             isRecording = true
             Companion.isRecording.value = true
 
-            Log.d(TAG, "Recording started: $fileName (direction=$callDirection)")
+            Log.d(TAG, "Recording started: ${encryptedFile.name} (direction=$callDirection)")
 
             // Insert the recording entry into the database
             serviceScope.launch {
@@ -189,10 +197,11 @@ class CallRecordingService : Service() {
                     callDirection = callDirection,
                     startTime = timestamp,
                     duration = 0L,
-                    filePath = outputFile.absolutePath,
+                    filePath = encryptedFile.absolutePath,
                     fileSize = 0L,
                     isStarred = false,
-                    createdAt = timestamp
+                    createdAt = timestamp,
+                    encrypted = true
                 )
                 try {
                     app.container.callRecordingRepository.insert(recording)
@@ -229,11 +238,30 @@ class CallRecordingService : Service() {
             Companion.isRecording.value = false
         }
 
-        // Update the database entry with duration and file size
+        // Encrypt the plaintext temp recording to the final .enc file, then delete
+        // the temp so no unencrypted audio is left behind.
         val id = recordingId ?: return
-        val file = recordingFile ?: return
+        val temp = recordingTempFile
+        val encryptedTarget = recordingFile ?: return
         val duration = System.currentTimeMillis() - recordingStartTime
-        val fileSize = if (file.exists()) file.length() else 0L
+
+        var fileSize = 0L
+        try {
+            if (temp != null && temp.exists() && temp.length() > 0) {
+                RecordingCrypto.encryptFile(temp, encryptedTarget)
+                fileSize = encryptedTarget.length()
+                Log.d(TAG, "Recording encrypted: ${encryptedTarget.name} (${fileSize}B)")
+            } else {
+                Log.w(TAG, "No temp recording to encrypt (empty or missing)")
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to encrypt recording", e)
+            // Never leave a partial/corrupt encrypted file alongside a deleted temp.
+            runCatching { encryptedTarget.delete() }
+        } finally {
+            runCatching { temp?.delete() }
+            recordingTempFile = null
+        }
 
         val app = applicationContext as? TruCallerApplication ?: return
         // Use runBlocking to ensure the DB update completes before onDestroy cancels the scope

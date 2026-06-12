@@ -12,6 +12,7 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.byron.trucaller.TruCallerApplication
+import com.byron.trucaller.security.RecordingCrypto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -90,13 +91,15 @@ class CallRecordingsViewModel(
 
     private val recordingsDir: File
         get() {
-            val dir = File(
-                getApplication<Application>().getExternalFilesDir(Environment.DIRECTORY_MUSIC),
-                "call_recordings"
-            )
+            // The app-private directory the recorder writes to. Audio files here are
+            // AES-GCM encrypted (extension .enc) and decrypted on demand for playback.
+            val dir = File(getApplication<Application>().filesDir, "recordings")
             if (!dir.exists()) dir.mkdirs()
             return dir
         }
+
+    /** Plaintext temp produced while decrypting the currently-playing recording. */
+    private var playbackTempFile: File? = null
 
     init {
         loadRecordings()
@@ -126,7 +129,7 @@ class CallRecordingsViewModel(
                 val (files, starred) = withContext(Dispatchers.IO) {
                     val dir = recordingsDir
                     val f = dir.listFiles()?.filter {
-                        it.isFile && (it.extension in listOf("mp3", "m4a", "aac", "wav", "ogg", "3gp", "amr"))
+                        it.isFile && (it.extension in listOf("mp3", "m4a", "aac", "wav", "ogg", "3gp", "amr", RecordingCrypto.ENCRYPTED_EXTENSION))
                     }?.sortedByDescending { it.lastModified() } ?: emptyList()
                     Pair(f, loadStarredSet())
                 }
@@ -148,27 +151,37 @@ class CallRecordingsViewModel(
     }
 
     private fun parseRecordingFile(file: File, index: Int, starred: Set<String>): CallRecording {
-        // Parse file name pattern: direction_number_timestamp.ext
-        // e.g. "incoming_+254712345678_1711234567890.m4a"
-        val nameParts = file.nameWithoutExtension.split("_", limit = 3)
-        val direction = when (nameParts.getOrNull(0)?.lowercase()) {
-            "incoming", "in" -> RecordingDirection.INCOMING
-            "outgoing", "out" -> RecordingDirection.OUTGOING
-            else -> RecordingDirection.INCOMING
-        }
-        val phoneNumber = nameParts.getOrNull(1) ?: "Unknown"
-        val timestamp = nameParts.getOrNull(2)?.toLongOrNull() ?: file.lastModified()
+        // Strip the encrypted (.enc) wrapper and the media extension to get the bare name.
+        val bareName = file.name
+            .removeSuffix(".${RecordingCrypto.ENCRYPTED_EXTENSION}")
+            .substringBeforeLast('.')
 
-        // Use MediaMetadataRetriever — lightweight, no full prepare/decode needed
-        val durationMs = try {
-            val retriever = MediaMetadataRetriever()
-            retriever.setDataSource(file.absolutePath)
-            val dur = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            retriever.release()
-            dur
-        } catch (_: Exception) {
-            0L
+        val direction: RecordingDirection
+        val phoneNumber: String
+        val timestamp: Long
+
+        if (bareName.startsWith("rec_")) {
+            // Recorder naming: rec_<timestamp>_<number>  (direction lives in the DB,
+            // not the filename, so it can't be recovered here).
+            val parts = bareName.removePrefix("rec_").split("_", limit = 2)
+            timestamp = parts.getOrNull(0)?.toLongOrNull() ?: file.lastModified()
+            phoneNumber = parts.getOrNull(1)?.takeIf { it.isNotBlank() } ?: "Unknown"
+            direction = RecordingDirection.INCOMING
+        } else {
+            // Legacy naming: direction_number_timestamp
+            val nameParts = bareName.split("_", limit = 3)
+            direction = when (nameParts.getOrNull(0)?.lowercase()) {
+                "incoming", "in" -> RecordingDirection.INCOMING
+                "outgoing", "out" -> RecordingDirection.OUTGOING
+                else -> RecordingDirection.INCOMING
+            }
+            phoneNumber = nameParts.getOrNull(1) ?: "Unknown"
+            timestamp = nameParts.getOrNull(2)?.toLongOrNull() ?: file.lastModified()
         }
+
+        // Use MediaMetadataRetriever — lightweight, no full prepare/decode needed.
+        // Encrypted files are decrypted to a short-lived cache temp first.
+        val durationMs = extractDurationMs(file)
 
         return CallRecording(
             id = "rec_${file.name.hashCode()}_$index",
@@ -182,6 +195,30 @@ class CallRecordingsViewModel(
             timestamp = timestamp,
             isStarred = file.name in starred
         )
+    }
+
+    /** Reads media duration, transparently decrypting [file] to a temp first if needed. */
+    private fun extractDurationMs(file: File): Long {
+        var temp: File? = null
+        val source = if (RecordingCrypto.isEncrypted(file)) {
+            val out = File(getApplication<Application>().cacheDir, "meta_${file.name.hashCode()}.m4a")
+            runCatching { RecordingCrypto.decryptFile(file, out) }.getOrElse { return 0L }
+            temp = out
+            out
+        } else {
+            file
+        }
+        return try {
+            val retriever = MediaMetadataRetriever()
+            retriever.setDataSource(source.absolutePath)
+            val dur = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+            retriever.release()
+            dur
+        } catch (_: Exception) {
+            0L
+        } finally {
+            temp?.let { runCatching { it.delete() } }
+        }
     }
 
     private fun updateStorageInfo() {
@@ -245,7 +282,16 @@ class CallRecordingsViewModel(
         stopPlayback()
         val player = MediaPlayer()
         try {
-            player.setDataSource(recording.filePath)
+            val srcFile = File(recording.filePath)
+            val playable = if (RecordingCrypto.isEncrypted(srcFile)) {
+                val out = File(getApplication<Application>().cacheDir, "play_${recording.id.hashCode()}.m4a")
+                RecordingCrypto.decryptFile(srcFile, out)
+                playbackTempFile = out
+                out
+            } else {
+                srcFile
+            }
+            player.setDataSource(playable.absolutePath)
             player.prepare()
             player.setOnCompletionListener {
                 _playbackState.value = _playbackState.value.copy(
@@ -288,6 +334,9 @@ class CallRecordingsViewModel(
         progressJob?.cancel()
         mediaPlayer?.release()
         mediaPlayer = null
+        // Remove the decrypted plaintext temp so it never lingers on disk.
+        playbackTempFile?.let { runCatching { it.delete() } }
+        playbackTempFile = null
         _playbackState.value = PlaybackState()
     }
 

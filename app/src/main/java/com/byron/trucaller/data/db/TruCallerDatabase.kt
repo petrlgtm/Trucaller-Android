@@ -29,7 +29,7 @@ import com.byron.trucaller.data.model.*
         FamilyGroup::class,
         FamilyMember::class
     ],
-    version = 18,
+    version = 19,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -177,6 +177,13 @@ abstract class TruCallerDatabase : RoomDatabase() {
         val MIGRATION_17_18 = object : Migration(17, 18) {
             override fun migrate(db: SupportSQLiteDatabase) {
                 db.execSQL("ALTER TABLE contact_aliases ADD COLUMN userId TEXT")
+            }
+        }
+
+        /** Migration 18 -> 19: flag call recordings whose audio file is encrypted at rest. */
+        val MIGRATION_18_19 = object : Migration(18, 19) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE call_recordings ADD COLUMN encrypted INTEGER NOT NULL DEFAULT 0")
             }
         }
     }
