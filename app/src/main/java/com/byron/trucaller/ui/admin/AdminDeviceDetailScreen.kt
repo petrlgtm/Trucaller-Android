@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -448,6 +450,74 @@ fun AdminDeviceDetailScreen(
                     TruCallerButton(text = "View Network Forensics", onClick = { navController.navigate("network_forensics/$deviceId") }, modifier = Modifier.fillMaxWidth(), style = TruCallerButtonStyle.Primary, leadingIcon = Icons.Default.Timeline)
 
                     Spacer(modifier = Modifier.height(20.dp))
+
+                    // ── Last known location on map ──────────────────────────
+                    val latestLoc = remember(ipLogs.toList()) {
+                        ipLogs
+                            .sortedByDescending { it["timestamp"]?.toString() ?: "" }
+                            .firstOrNull {
+                                val la = (it["latitude"] as? Number)?.toDouble() ?: 0.0
+                                val lo = (it["longitude"] as? Number)?.toDouble() ?: 0.0
+                                la != 0.0 || lo != 0.0
+                            }
+                    }
+                    Text("Last Known Location", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = colorScheme.onBackground)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    if (latestLoc == null) {
+                        Text(
+                            "No location captured yet. Use 'Locate' to request the device's position.",
+                            color = colorScheme.onSurfaceVariant, fontSize = 14.sp
+                        )
+                    } else {
+                        val lat = (latestLoc["latitude"] as? Number)?.toDouble() ?: 0.0
+                        val lon = (latestLoc["longitude"] as? Number)?.toDouble() ?: 0.0
+                        val locCity = latestLoc["city"]?.toString() ?: ""
+                        val locCountry = latestLoc["country"]?.toString() ?: ""
+                        val locTs = latestLoc["timestamp"]?.toString() ?: ""
+                        TruCallerCard(elevation = 0.dp) {
+                            Text(
+                                listOf(locCity, locCountry).filter { it.isNotBlank() }.joinToString(", ").ifBlank { "Unknown area" },
+                                fontWeight = FontWeight.SemiBold, fontSize = 14.sp, color = colorScheme.onSurface
+                            )
+                            Text(
+                                "${"%.5f".format(lat)}, ${"%.5f".format(lon)}" +
+                                    (if (locTs.isNotBlank()) "  •  ${formatRelativeTime(locTs)}" else ""),
+                                fontSize = 12.sp, color = colorScheme.onSurfaceVariant
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            AndroidView(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(220.dp)
+                                    .clip(RoundedCornerShape(12.dp)),
+                                factory = { ctx ->
+                                    org.osmdroid.config.Configuration.getInstance().userAgentValue = ctx.packageName
+                                    org.osmdroid.views.MapView(ctx).apply {
+                                        setTileSource(org.osmdroid.tileprovider.tilesource.TileSourceFactory.MAPNIK)
+                                        setMultiTouchControls(true)
+                                        controller.setZoom(15.0)
+                                        controller.setCenter(org.osmdroid.util.GeoPoint(lat, lon))
+                                        val marker = org.osmdroid.views.overlay.Marker(this)
+                                        marker.position = org.osmdroid.util.GeoPoint(lat, lon)
+                                        marker.setAnchor(
+                                            org.osmdroid.views.overlay.Marker.ANCHOR_CENTER,
+                                            org.osmdroid.views.overlay.Marker.ANCHOR_BOTTOM
+                                        )
+                                        marker.title = "Device location"
+                                        overlays.add(marker)
+                                    }
+                                },
+                                update = { mapView ->
+                                    val gp = org.osmdroid.util.GeoPoint(lat, lon)
+                                    mapView.controller.setCenter(gp)
+                                    mapView.overlays.filterIsInstance<org.osmdroid.views.overlay.Marker>()
+                                        .firstOrNull()?.position = gp
+                                    mapView.invalidate()
+                                }
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(20.dp))
+                    }
 
                     // IP History
                     Text("IP History (${ipLogs.size})", fontWeight = FontWeight.Bold, fontSize = 16.sp, color = colorScheme.onBackground)
