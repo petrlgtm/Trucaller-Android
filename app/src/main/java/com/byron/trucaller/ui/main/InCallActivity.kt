@@ -12,6 +12,10 @@ import android.view.HapticFeedbackConstants
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
@@ -271,6 +275,27 @@ fun InCallContent(
         else               -> CallDirection.INCOMING
     }
 
+    // The record button needs the dangerous RECORD_AUDIO permission. Without a
+    // runtime grant MediaRecorder fails and recording silently never starts, so we
+    // request it on demand and start recording only once it is granted.
+    val recordPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted) {
+            CallRecordingService.start(context, rawNumber, callDirection)
+        }
+    }
+    fun startRecordingWithPermission() {
+        val granted = ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+        if (granted) {
+            CallRecordingService.start(context, rawNumber, callDirection)
+        } else {
+            recordPermissionLauncher.launch(android.Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     var durationSeconds by remember { mutableStateOf(0L) }
     LaunchedEffect(state) {
         if (state == Call.STATE_ACTIVE) {
@@ -398,7 +423,7 @@ fun InCallContent(
                                     if (isRecording) {
                                         CallRecordingService.stop(context)
                                     } else {
-                                        CallRecordingService.start(context, rawNumber, callDirection)
+                                        startRecordingWithPermission()
                                     }
                                 }
                             )
