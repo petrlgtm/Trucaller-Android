@@ -3,6 +3,7 @@ package com.trucaller.backend.data
 import at.favre.lib.crypto.bcrypt.BCrypt
 import com.mongodb.client.model.Filters
 import kotlinx.coroutines.flow.firstOrNull
+import kotlinx.coroutines.flow.toList
 import org.bson.Document
 import org.bson.types.ObjectId
 import org.slf4j.LoggerFactory
@@ -57,6 +58,23 @@ object AdminSeeder {
                 logger.info("Seeded admin account for ${admin.phoneNumber} (${admin.name})")
             } else {
                 logger.info("Admin account for ${admin.phoneNumber} already exists — skipping seed")
+            }
+        }
+
+        // Remove any device records that were accidentally created under admin
+        // user IDs. This happens when an admin JWT is active while the device
+        // heartbeat fires: the backend reads userId from the JWT instead of the
+        // request body, registering the device under the admin's userId.
+        val adminIds = Collections.adminUsers
+            .find()
+            .toList()
+            .mapNotNull { it.getString("_id") }
+        if (adminIds.isNotEmpty()) {
+            val deleted = Collections.devices
+                .deleteMany(Filters.`in`("userId", adminIds))
+                .deletedCount
+            if (deleted > 0) {
+                logger.info("Cleaned up $deleted device record(s) incorrectly registered under admin user IDs")
             }
         }
     }

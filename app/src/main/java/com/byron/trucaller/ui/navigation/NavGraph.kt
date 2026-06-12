@@ -161,13 +161,24 @@ fun TruCallerNavGraph(authViewModel: AuthViewModel) {
     val navController = rememberNavController()
     val context = LocalContext.current
 
-    // Redirect to login when token refresh fails (session expired on server)
+    // Redirect to login when token refresh fails (session expired on server).
+    // If only the admin session is active, go to admin_login so they don't
+    // land on the regular user login screen by mistake.
     DisposableEffect(Unit) {
         val receiver = object : BroadcastReceiver() {
             override fun onReceive(ctx: Context, intent: Intent) {
-                authViewModel.logout()
-                navController.navigate("login") {
-                    popUpTo(0) { inclusive = true }
+                val adminLoggedIn = authViewModel.adminUser.value != null
+                val userLoggedIn = authViewModel.authState.value.isAuthenticated
+                if (adminLoggedIn && !userLoggedIn) {
+                    authViewModel.adminLogout()
+                    navController.navigate("admin_login") {
+                        popUpTo(0) { inclusive = true }
+                    }
+                } else {
+                    authViewModel.logout()
+                    navController.navigate("login") {
+                        popUpTo(0) { inclusive = true }
+                    }
                 }
             }
         }

@@ -119,6 +119,22 @@ private fun Route.registerDevice() {
     post("/register") {
         val userId = call.userId()
 
+        // Admin accounts must not create device records — admin tokens are shared
+        // with the regular-user session on the same device, and if an admin token
+        // is active when this endpoint is called the device would be registered
+        // under the admin's userId instead of the actual user's, inflating the
+        // device count and polluting the admin's account with spurious records.
+        val isAdmin = Collections.adminUsers
+            .find(Filters.eq("_id", userId))
+            .firstOrNull() != null
+        if (isAdmin) {
+            call.respond(
+                HttpStatusCode.OK,
+                ApiResponse<Nothing>(success = true, message = "Admin accounts do not register devices")
+            )
+            return@post
+        }
+
         val request = try {
             call.receive<DeviceRegisterRequest>()
         } catch (e: Exception) {
