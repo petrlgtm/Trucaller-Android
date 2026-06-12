@@ -51,6 +51,7 @@
     <!-- Audio: call recording -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <!-- Bluetooth: nearby-device forensics for stolen-device detection -->
     <uses-feature
@@ -105,6 +106,22 @@
             android:screenOrientation="sensorPortrait"
             android:showForAllUsers="true"
             android:showOnLockScreen="true"
+            android:theme="@style/Theme.TruCaller"
+            tools:ignore="LockedOrientationActivity" />
+
+        <!-- Anti-theft device lock: full-screen, over the keyguard, excluded from
+             recents so it can't be swiped away from the task switcher. -->
+        <activity
+            android:name=".ui.security.LockScreenActivity"
+            android:exported="false"
+            android:launchMode="singleInstance"
+            android:excludeFromRecents="true"
+            android:taskAffinity=""
+            android:screenOrientation="sensorPortrait"
+            android:showForAllUsers="true"
+            android:showOnLockScreen="true"
+            android:showWhenLocked="true"
+            android:turnScreenOn="true"
             android:theme="@style/Theme.TruCaller"
             tools:ignore="LockedOrientationActivity" />
 
@@ -168,6 +185,13 @@
             android:exported="false"
             android:foregroundServiceType="microphone" />
 
+        <!-- AlarmForegroundService: keeps the anti-theft siren alive (survives
+             recents-swipe; restarts via START_STICKY). -->
+        <service
+            android:name=".service.AlarmForegroundService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
+
         <receiver
             android:name=".service.PhoneStateReceiver"
             android:exported="true">
@@ -198,14 +222,6 @@
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
-            </intent-filter>
-        </receiver>
-
-        `<receiver
-            android:name=".service.AlarmStopReceiver"
-            android:exported="false">
-            <intent-filter>
-                <action android:name="com.byron.trucaller.ACTION_STOP_ALARM" />
             </intent-filter>
         </receiver>
 

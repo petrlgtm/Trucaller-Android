@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DateRangePicker
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -42,7 +43,9 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -100,6 +103,7 @@ fun AdminAlarmLogsScreen(navController: NavController) {
     var skip by remember { mutableStateOf(0) }
 
     val lazyListState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     // Filters (client-side on loaded data)
     var selectedType by remember { mutableStateOf<String?>(null) }
@@ -168,6 +172,23 @@ fun AdminAlarmLogsScreen(navController: NavController) {
             navigationIcon = {
                 IconButton(onClick = { navController.popBackStack() }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = colorScheme.onBackground)
+                }
+            },
+            actions = {
+                // Re-fetch from the server so freshly-acked results (PENDING → SUCCESS/
+                // FAILED, reported by the target device) show without leaving the screen.
+                IconButton(
+                    enabled = !isLoading,
+                    onClick = {
+                        scope.launch {
+                            isLoading = true
+                            skip = 0
+                            loadPage(0)
+                            isLoading = false
+                        }
+                    }
+                ) {
+                    Icon(Icons.Filled.Refresh, "Refresh", tint = colorScheme.onBackground)
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(containerColor = colorScheme.background)

@@ -38,6 +38,10 @@ class PendingCommandsWorker(
             val device = app.container.deviceRepository.getFirstDeviceByUser(userId)
                 ?: return Result.success() // device not registered yet
 
+            // WorkManager may run before onCreate's async token restore finishes;
+            // load the persisted token so both the poll and the result ack authenticate.
+            app.ensureApiAuthLoaded()
+
             val result = ApiClient.getPendingAlarmCommands(device.deviceId)
             if (!result.success) {
                 Log.w(TAG, "Pending-commands poll failed: ${result.error}")

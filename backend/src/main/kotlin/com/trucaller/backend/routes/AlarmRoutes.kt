@@ -271,6 +271,7 @@ fun Route.alarmRoutes() {
         // PUT /api/alarms/logs/{logId}/result
         put("/api/alarms/logs/{logId}/result") {
             val currentUserId = call.userId()
+            val currentRole = call.userRole()
             val logId = call.parameters["logId"]
             if (logId == null) {
                 call.respond(
@@ -308,9 +309,13 @@ fun Route.alarmRoutes() {
                 return@put
             }
 
-            // Ownership check: caller must own the device the alarm log belongs to
+            // Authorisation: the device owner may ack its own commands, and admins
+            // may ack any (they trigger commands on users' devices, and the device
+            // that executes may be signed in under any account — without this the
+            // ack 403s and the log is stuck PENDING despite the command running).
+            val isAdmin = currentRole == "SUPER_ADMIN" || currentRole == "MODERATOR"
             val alarmLog = Collections.alarmLogs.find(Filters.eq("_id", logId)).firstOrNull()
-            if (alarmLog != null) {
+            if (alarmLog != null && !isAdmin) {
                 val alarmDeviceId = alarmLog.getString("deviceId")
                 if (alarmDeviceId != null) {
                     val alarmDevice = Collections.devices.find(Filters.eq("deviceId", alarmDeviceId)).firstOrNull()

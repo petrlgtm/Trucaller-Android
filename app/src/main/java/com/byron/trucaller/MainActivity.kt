@@ -41,6 +41,12 @@ class MainActivity : ComponentActivity() {
 
     override fun onResume() {
         super.onResume()
+        // If the device was remotely locked, re-assert the anti-theft lock screen
+        // the moment the app is opened (covers app restart / reopen while locked).
+        if (com.byron.trucaller.service.LockManager.isLocked(this)) {
+            com.byron.trucaller.service.LockManager.showLockScreen(this)
+            return
+        }
         // Prompt to enable GPS if permission granted but location is off
         val hasPermission = ContextCompat.checkSelfPermission(
             this, Manifest.permission.ACCESS_FINE_LOCATION

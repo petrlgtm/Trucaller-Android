@@ -71,6 +71,29 @@ class TruCallerApplication : Application() {
         }
     }
 
+    /**
+     * Guarantees [ApiClient] has the persisted auth/refresh tokens loaded before a
+     * background entry point (FCM command handler, WorkManager poll) makes an
+     * authenticated call.
+     *
+     * [onCreate] restores these tokens asynchronously, so an FCM- or worker-driven
+     * cold start can race ahead of that restore: the command (e.g. the alarm) runs
+     * fine because playing it needs no auth, but the follow-up result ack hits an
+     * authenticated endpoint with no `Authorization` header → 401 → the log is stuck
+     * PENDING even though the device executed. Awaiting the DataStore read here closes
+     * that gap. If the loaded access token has since expired, the OkHttp authenticator
+     * refreshes it transparently (the header is now present, so refresh is attempted).
+     */
+    suspend fun ensureApiAuthLoaded() {
+        if (ApiClient.getAuthToken() != null) return
+        try {
+            container.userPreferences.authToken.first()?.let { ApiClient.setAuthToken(it) }
+            container.userPreferences.refreshToken.first()?.let { ApiClient.setRefreshToken(it) }
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to ensure API auth loaded for background work", e)
+        }
+    }
+
     companion object {
         private const val TAG = "TruCallerApp"
     }

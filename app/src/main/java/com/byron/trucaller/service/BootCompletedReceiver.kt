@@ -26,6 +26,13 @@ class BootCompletedReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
 
+        // Re-assert the anti-theft lock if the device was locked before reboot,
+        // so a thief can't escape it by power-cycling the phone.
+        if (LockManager.isLocked(context)) {
+            Log.d(TAG, "Boot completed while locked — re-showing lock screen")
+            runCatching { LockManager.showLockScreen(context) }
+        }
+
         Log.d(TAG, "Boot completed — re-registering geofences")
 
         val app = context.applicationContext as? TruCallerApplication ?: return

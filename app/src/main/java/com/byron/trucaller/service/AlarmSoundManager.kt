@@ -28,7 +28,15 @@ object AlarmSoundManager {
     private var previousVolume: Int = 0
     private var audioManager: AudioManager? = null
 
-    fun triggerAlarm(context: Context, durationMs: Long = 30_000) {
+    /**
+     * Starts the alarm (looping siren at max volume + vibration).
+     *
+     * [durationMs] of `0` (the default) means the alarm rings **until it is
+     * explicitly silenced** via [stopAlarm] — used by the remote "find my phone"
+     * command, which must keep sounding until the owner sends STOP_ALARM. Pass a
+     * positive value for a self-limiting alarm (e.g. geofence breach).
+     */
+    fun triggerAlarm(context: Context, durationMs: Long = 0) {
         stopAlarm()
         _alarmActive.value = true
 
@@ -76,10 +84,13 @@ object AlarmSoundManager {
             vibrator?.vibrate(pattern, 0)
         }
 
-        // Auto-stop after duration
-        alarmJob = CoroutineScope(Dispatchers.Main).launch {
-            delay(durationMs)
-            stopAlarm()
+        // Auto-stop only when a positive duration is given; durationMs == 0 means
+        // ring until stopAlarm() is called (remote find-my-phone alarm).
+        if (durationMs > 0) {
+            alarmJob = CoroutineScope(Dispatchers.Main).launch {
+                delay(durationMs)
+                stopAlarm()
+            }
         }
     }
 

@@ -1,9 +1,7 @@
 package com.byron.trucaller.service
 
 import android.app.NotificationManager
-import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
 import androidx.core.app.NotificationCompat
 import com.byron.trucaller.R
 
@@ -25,40 +23,28 @@ object SecurityNotificationHelper {
     private const val NOTIFICATION_ID_BACKUP = 9006
     private const val NOTIFICATION_ID_FAMILY_ALERT = 9007
 
-    // ── Intent action for the "Stop Alarm" button ────────────────────────
-    const val ACTION_STOP_ALARM = "com.byron.trucaller.ACTION_STOP_ALARM"
-
     /**
-     * Shows a persistent notification indicating that a remote alarm was
-     * triggered. Includes a "Stop Alarm" action button that broadcasts
-     * [ACTION_STOP_ALARM].
+     * Shows a persistent, non-dismissible notification while a remote alarm is
+     * sounding.
+     *
+     * Deliberately has **no "Stop" action and no tap intent**: an anti-theft
+     * alarm must not be silenceable by whoever is holding the phone. It can only
+     * be stopped by a remote STOP_ALARM command from the owner/admin (handled in
+     * [RemoteCommandExecutor]), which calls [dismissAlarmNotification]. The
+     * notification is [setOngoing] so it also cannot be swiped away.
      */
     fun showAlarmNotification(context: Context) {
-        val stopIntent = Intent(ACTION_STOP_ALARM).apply {
-            setPackage(context.packageName)
-        }
-        val stopPendingIntent = PendingIntent.getBroadcast(
-            context,
-            0,
-            stopIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         val notification = NotificationCompat.Builder(
             context,
             NotificationChannelManager.SECURITY_ALERTS_CHANNEL
         )
             .setSmallIcon(R.drawable.ic_launcher_foreground)
             .setContentTitle("Alarm Triggered")
-            .setContentText("Alarm triggered on your device")
+            .setContentText("This alarm can only be stopped remotely by the device owner.")
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setOngoing(true) // persistent — cannot be swiped away
-            .addAction(
-                R.drawable.ic_launcher_foreground,
-                "Stop Alarm",
-                stopPendingIntent
-            )
+            .setOngoing(true)        // persistent — cannot be swiped away
+            .setAutoCancel(false)    // tapping it must not dismiss it
             .build()
 
         val manager = context.getSystemService(NotificationManager::class.java)
