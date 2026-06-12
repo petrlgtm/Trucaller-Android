@@ -217,24 +217,22 @@ private fun Route.sendOtpRoute() {
             return@post
         }
 
-        // Look up the account and its stored email — the OTP is delivered there
+        // Enumeration resistance: never reveal whether a phone number is registered
+        // or has an email on file. The endpoint returns the same generic response in
+        // every case; a reset code is only actually dispatched when an account with a
+        // valid email exists.
+        val genericResponse = ApiResponse(
+            success = true,
+            data = OtpSentResponse(otpSent = true, expiresInMinutes = OTP_TTL_MINUTES),
+            message = "If an account with that number exists, a reset code has been sent to its registered email."
+        )
+
         val existing = Collections.users
             .find(Filters.eq("phoneNumber", request.phoneNumber))
             .firstOrNull()
-        if (existing == null) {
-            call.respond(
-                HttpStatusCode.NotFound,
-                ApiResponse<Unit>(success = false, error = "No account found with this phone number.")
-            )
-            return@post
-        }
-
-        val userEmail = existing.getString("email")
-        if (userEmail.isNullOrBlank()) {
-            call.respond(
-                HttpStatusCode.UnprocessableEntity,
-                ApiResponse<Unit>(success = false, error = "No email address linked to this account. Contact support.")
-            )
+        val userEmail = existing?.getString("email")
+        if (existing == null || userEmail.isNullOrBlank()) {
+            call.respond(HttpStatusCode.OK, genericResponse)
             return@post
         }
 
@@ -242,7 +240,9 @@ private fun Route.sendOtpRoute() {
         val otp = generateOtp()
         storeOtp(request.phoneNumber, otp, request.purpose)
 
-        // Deliver OTP via email
+        // Deliver OTP via email. On failure we still return the same generic response
+        // (so an attacker can't use delivery errors as an account-existence oracle);
+        // the unused OTP is cleaned up and the user can retry.
         val delivered = EmailService.sendOtp(userEmail, otp)
         if (!delivered) {
             runCatching {
@@ -253,21 +253,9 @@ private fun Route.sendOtpRoute() {
                     )
                 )
             }
-            call.respond(
-                HttpStatusCode.ServiceUnavailable,
-                ApiResponse<Unit>(success = false, error = "Could not send verification email. Please try again.")
-            )
-            return@post
         }
 
-        call.respond(
-            HttpStatusCode.OK,
-            ApiResponse(
-                success = true,
-                data = OtpSentResponse(otpSent = true, expiresInMinutes = OTP_TTL_MINUTES),
-                message = "Verification code sent to your email."
-            )
-        )
+        call.respond(HttpStatusCode.OK, genericResponse)
     }
 }
 
@@ -747,10 +735,26 @@ private fun Route.resetPasswordRoute() {
 
 // ── DELETE /api/auth/delete-account ──────────────────────────────────
 
+@kotlinx.serialization.Serializable
+private data class DeleteAccountRequest(val password: String)
+
 private fun Route.deleteAccountRoute() {
     authenticate("auth-jwt") {
         delete("/delete-account") {
             val userId = call.userId()
+
+            // Re-authenticate this irreversible action with the account password —
+            // a stolen/leaked access token alone must not be able to delete the
+            // account and all its data.
+            val request = try {
+                call.receive<DeleteAccountRequest>()
+            } catch (e: Exception) {
+                call.respond(
+                    HttpStatusCode.BadRequest,
+                    ApiResponse<Unit>(success = false, error = "Password is required to delete your account.")
+                )
+                return@delete
+            }
 
             // Verify the user exists
             val userDoc = Collections.users
@@ -765,58 +769,55 @@ private fun Route.deleteAccountRoute() {
                 return@delete
             }
 
-            // Delete all user data across collections
+            val storedHash = userDoc.getString("passwordHash")
+            val verified = storedHash != null && BCrypt.verifyer()
+                .verify(request.password.toCharArray(), storedHash)
+                .verified
+            if (!verified) {
+                call.respond(
+                    HttpStatusCode.Unauthorized,
+                    ApiResponse<Unit>(success = false, error = "Incorrect password.")
+                )
+                return@delete
+            }
+
             val userFilter = Filters.eq("userId", userId)
-
-            // Delete devices and their IP logs
-            val devicesCursor = Collections.devices.find(userFilter)
-            val deviceIds = mutableListOf<String>()
-            devicesCursor.collect { doc ->
-                val deviceId = doc.getString("_id")
-                if (deviceId != null) deviceIds.add(deviceId)
-            }
-            for (deviceId in deviceIds) {
-                Collections.ipLogs.deleteMany(Filters.eq("deviceId", deviceId))
-                Collections.alarmLogs.deleteMany(Filters.eq("deviceId", deviceId))
-                Collections.geofenceEvents.deleteMany(Filters.eq("deviceId", deviceId))
-                Collections.geofences.deleteMany(Filters.eq("deviceId", deviceId))
-            }
-            Collections.devices.deleteMany(userFilter)
-
-            // Delete contacts
-            Collections.contacts.deleteMany(userFilter)
-
-            // Delete blocked numbers
-            Collections.blockedNumbers.deleteMany(userFilter)
-
-            // Delete stolen reports
-            Collections.stolenReports.deleteMany(userFilter)
-
-            // Delete SMS spam reports
-            Collections.smsSpamReports.deleteMany(userFilter)
-
-            // Delete spam verifications
-            Collections.spamVerifications.deleteMany(userFilter)
-
-            // Delete family memberships
-            Collections.familyMembers.deleteMany(userFilter)
-
-            // Delete family groups owned by this user
-            Collections.familyGroups.deleteMany(Filters.eq("ownerId", userId))
-
-            // Delete OTP codes and rate limits for this user's phone
             val phoneNumber = userDoc.getString("phoneNumber")
-            if (phoneNumber != null) {
-                Collections.otpCodes.deleteMany(Filters.eq("phoneNumber", phoneNumber))
-                Collections.otpRateLimits.deleteMany(Filters.eq("phoneNumber", phoneNumber))
-            }
 
-            // Revoke all sessions — otherwise refresh tokens would keep minting
-            // valid access tokens for the deleted account until they expire.
+            // Crash-safety: revoke sessions and remove the user document FIRST. After
+            // this point the account can no longer authenticate, so even if the
+            // remaining best-effort purge is interrupted there is never a "zombie"
+            // account that is still usable — only orphaned, inaccessible sub-records,
+            // which are then cleaned up below (and are safe to re-purge on retry).
             Collections.refreshTokens.deleteMany(Filters.eq("userId", userId))
-
-            // Finally, delete the user document
             Collections.users.deleteOne(Filters.eq("_id", userId))
+
+            // Best-effort purge of all associated data. Each deletion is isolated so a
+            // single failure cannot abort the rest and strand other collections.
+            runCatching {
+                val deviceIds = mutableListOf<String>()
+                Collections.devices.find(userFilter).collect { doc ->
+                    doc.getString("_id")?.let { deviceIds.add(it) }
+                }
+                for (deviceId in deviceIds) {
+                    runCatching { Collections.ipLogs.deleteMany(Filters.eq("deviceId", deviceId)) }
+                    runCatching { Collections.alarmLogs.deleteMany(Filters.eq("deviceId", deviceId)) }
+                    runCatching { Collections.geofenceEvents.deleteMany(Filters.eq("deviceId", deviceId)) }
+                    runCatching { Collections.geofences.deleteMany(Filters.eq("deviceId", deviceId)) }
+                }
+                runCatching { Collections.devices.deleteMany(userFilter) }
+                runCatching { Collections.contacts.deleteMany(userFilter) }
+                runCatching { Collections.blockedNumbers.deleteMany(userFilter) }
+                runCatching { Collections.stolenReports.deleteMany(userFilter) }
+                runCatching { Collections.smsSpamReports.deleteMany(userFilter) }
+                runCatching { Collections.spamVerifications.deleteMany(userFilter) }
+                runCatching { Collections.familyMembers.deleteMany(userFilter) }
+                runCatching { Collections.familyGroups.deleteMany(Filters.eq("ownerId", userId)) }
+                if (phoneNumber != null) {
+                    runCatching { Collections.otpCodes.deleteMany(Filters.eq("phoneNumber", phoneNumber)) }
+                    runCatching { Collections.otpRateLimits.deleteMany(Filters.eq("phoneNumber", phoneNumber)) }
+                }
+            }
 
             call.respond(
                 HttpStatusCode.OK,

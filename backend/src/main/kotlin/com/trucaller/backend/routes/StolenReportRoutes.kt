@@ -69,11 +69,14 @@ fun Route.stolenReportRoutes() {
 
             val userId = call.userId()
 
-            // Ownership check: verify the device belongs to the requesting user
+            // Ownership check: the device must exist AND belong to the requesting
+            // user. Previously a report for an unknown/unregistered deviceId slipped
+            // through (the null-device branch did not reject), letting anyone file a
+            // report against an arbitrary deviceId. Require a real, owned device.
             val deviceDoc = Collections.devices
                 .find(Filters.eq("deviceId", request.deviceId))
                 .firstOrNull()
-            if (deviceDoc != null && deviceDoc.getString("userId") != userId) {
+            if (deviceDoc == null || deviceDoc.getString("userId") != userId) {
                 call.respond(
                     HttpStatusCode.Forbidden,
                     ApiResponse<Nothing>(
@@ -99,6 +102,10 @@ fun Route.stolenReportRoutes() {
                         .append("city", request.lastKnownCity)
                 } else null
 
+            // `pinVerified` is authoritative: it now means "filed by the
+            // authenticated device owner" (guaranteed by the ownership check above),
+            // NOT a client-supplied boolean that anyone could set to true. The raw
+            // client claim is retained separately, clearly labelled, for forensics.
             val reportDoc = Document()
                 .append("_id", reportId)
                 .append("deviceId", request.deviceId)
@@ -106,7 +113,8 @@ fun Route.stolenReportRoutes() {
                 .append("reportedAt", now)
                 .append("status", "PENDING")
                 .append("description", request.description)
-                .append("pinVerified", request.pinVerified)
+                .append("pinVerified", true)
+                .append("pinVerifiedClientClaim", request.pinVerified)
                 .append("lastKnownIp", request.lastKnownIp)
                 .append("lastKnownLocation", locationDoc)
 

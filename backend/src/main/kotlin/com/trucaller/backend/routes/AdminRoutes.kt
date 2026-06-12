@@ -627,6 +627,8 @@ fun Route.adminRoutes() {
                     return@put
                 }
 
+                val priorEntry = Collections.callerIds.find(idFilter(entryId)).firstOrNull()
+
                 val result = Collections.callerIds.updateOne(
                     idFilter(entryId),
                     Updates.combine(updates)
@@ -639,6 +641,19 @@ fun Route.adminRoutes() {
                     )
                     return@put
                 }
+
+                com.trucaller.backend.service.AdminAudit.record(
+                    adminId = call.userId(),
+                    action = "UPDATE_CALLER_ID",
+                    targetType = "callerId",
+                    targetId = entryId,
+                    details = mapOf(
+                        "oldSpamScore" to priorEntry?.getInteger("spamScore"),
+                        "newSpamScore" to request.spamScore,
+                        "newCategory" to request.category,
+                        "newName" to request.name
+                    )
+                )
 
                 call.respond(
                     HttpStatusCode.OK,
@@ -1287,6 +1302,9 @@ fun Route.adminRoutes() {
                     return@put
                 }
 
+                // Snapshot the prior values so the audit trail records before/after.
+                val priorDoc = Collections.users.find(idFilter(userId)).firstOrNull()
+
                 val result = Collections.users.updateOne(
                     idFilter(userId),
                     Updates.combine(updates)
@@ -1299,6 +1317,19 @@ fun Route.adminRoutes() {
                     )
                     return@put
                 }
+
+                com.trucaller.backend.service.AdminAudit.record(
+                    adminId = call.userId(),
+                    action = "UPDATE_TRUST_SCORE",
+                    targetType = "user",
+                    targetId = userId,
+                    details = mapOf(
+                        "oldTrustScore" to priorDoc?.getInteger("trustScore"),
+                        "newTrustScore" to request.trustScore,
+                        "oldTrustLevel" to priorDoc?.getString("trustLevel"),
+                        "newTrustLevel" to request.trustLevel
+                    )
+                )
 
                 call.respond(
                     HttpStatusCode.OK,

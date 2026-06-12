@@ -70,10 +70,18 @@ object RedisCache {
         }
     }
 
-    /** Returns true if this jti has been explicitly revoked. */
-    fun isRevoked(jti: String): Boolean {
+    /**
+     * Returns true if this jti has been explicitly revoked.
+     *
+     * The Lettuce sync API blocks the calling thread until Redis answers. This is
+     * invoked on every authenticated request, so it must run off the Ktor event
+     * loop — callers are suspend and we offload the blocking call to [Dispatchers.IO].
+     */
+    suspend fun isRevoked(jti: String): Boolean {
         val cmds = commands ?: return false
-        return runCatching { cmds.exists("$REVOKE_PREFIX$jti") ?: 0L > 0L }.getOrDefault(false)
+        return withContext(Dispatchers.IO) {
+            runCatching { (cmds.exists("$REVOKE_PREFIX$jti") ?: 0L) > 0L }.getOrDefault(false)
+        }
     }
 
     // ── Login brute-force protection ─────────────────────────────────────────

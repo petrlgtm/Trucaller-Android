@@ -81,7 +81,7 @@ object JwtConfig {
      * if the token is invalid, expired, or revoked. Used for WebSocket auth
      * where the standard Ktor JWT auth plugin is unavailable.
      */
-    fun verifyAccessToken(token: String): com.auth0.jwt.interfaces.DecodedJWT? = try {
+    suspend fun verifyAccessToken(token: String): com.auth0.jwt.interfaces.DecodedJWT? = try {
         val decoded = JWT.require(Algorithm.HMAC256(secret))
             .withIssuer(issuer)
             .withAudience(audience)

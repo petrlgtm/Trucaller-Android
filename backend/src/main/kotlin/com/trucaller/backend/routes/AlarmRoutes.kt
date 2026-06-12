@@ -14,6 +14,9 @@ import io.ktor.server.request.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
 import com.trucaller.backend.service.FcmService
+import com.trucaller.backend.service.RedisCache
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.toList
 import kotlinx.serialization.Serializable
@@ -39,6 +42,12 @@ data class AlarmLogResultRequest(
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 private val VALID_ALARM_TYPES = setOf("REMOTE_ALARM", "LOCATION_REQUEST", "LOCK_DEVICE", "WIPE_DATA", "STOP_ALARM")
+
+// Throttle how often a single caller may fire commands at one device. Without
+// this an authorised caller (owner or admin) can spam REMOTE_ALARM endlessly —
+// a denial-of-sleep / harassment vector against the target device.
+private const val ALARM_RATE_WINDOW_SECONDS = 60L
+private const val ALARM_RATE_MAX = 5L
 
 /**
  * Registers alarm routes:
@@ -99,6 +108,26 @@ fun Route.alarmRoutes() {
                     ApiResponse<Nothing>(success = false, error = "Not authorized for this device")
                 )
                 return@post
+            }
+
+            // Rate limit per (caller, device) so commands can't be fired in a tight
+            // loop. STOP_ALARM is exempt — the victim must always be able to silence
+            // an alarm. Degrades open (no limit) only when Redis is unavailable.
+            if (request.type != "STOP_ALARM") {
+                val rlKey = "alarm_rl:$userId:${request.deviceId}"
+                val recent = withContext(Dispatchers.IO) {
+                    RedisCache.incrementRateLimit(rlKey, ALARM_RATE_WINDOW_SECONDS)
+                }
+                if (recent > ALARM_RATE_MAX) {
+                    call.respond(
+                        HttpStatusCode.TooManyRequests,
+                        ApiResponse<Nothing>(
+                            success = false,
+                            error = "Too many commands for this device. Wait a moment before trying again."
+                        )
+                    )
+                    return@post
+                }
             }
 
             // Look up user name — check both regular users and admin users

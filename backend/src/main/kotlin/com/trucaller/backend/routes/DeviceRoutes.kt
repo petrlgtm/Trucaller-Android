@@ -145,8 +145,10 @@ private fun Route.registerDevice() {
             return@post
         }
 
-        // Use client-provided IP if available, fall back to the real client IP from headers
-        val deviceIp = request.lastIp ?: call.clientIp()
+        // Forensic integrity: always use the real connection IP. A client-supplied
+        // `lastIp` cannot be trusted — a thief could otherwise report any address and
+        // defeat stolen-device tracking.
+        val deviceIp = call.clientIp()
 
         val now = Instant.now().toString()
 
@@ -170,16 +172,17 @@ private fun Route.registerDevice() {
             UpdateOptions().upsert(true)
         )
 
-        // Resolve geolocation: prefer client-provided data, fall back to IP lookup
-        val geo = if (request.isp != null && request.city != null && request.country != null) {
-            null // client already provided full geo data
-        } else {
-            IpGeolocationService.resolve(deviceIp)
-        }
+        // Resolve network geolocation server-side from the real connection IP.
+        // The ISP/city/country forensic fields are NEVER taken from the client —
+        // trusting them would let a thief spoof location and neutralise tracking.
+        // Device GPS latitude/longitude IS honoured (it is more precise than IP
+        // geolocation for the locate feature) but cannot override the IP-derived
+        // network fields.
+        val geo = IpGeolocationService.resolve(deviceIp)
 
-        val resolvedCity = request.city ?: geo?.city ?: "unknown"
-        val resolvedCountry = request.country ?: geo?.country ?: "unknown"
-        val resolvedIsp = request.isp ?: geo?.isp ?: "unknown"
+        val resolvedCity = geo?.city ?: "unknown"
+        val resolvedCountry = geo?.country ?: "unknown"
+        val resolvedIsp = geo?.isp ?: "unknown"
         val resolvedLat = request.latitude ?: geo?.lat ?: 0.0
         val resolvedLon = request.longitude ?: geo?.lon ?: 0.0
         val resolvedNetwork = request.networkType ?: "unknown"

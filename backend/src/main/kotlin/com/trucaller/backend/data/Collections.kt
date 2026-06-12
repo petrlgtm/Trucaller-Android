@@ -77,6 +77,10 @@ object Collections {
     val loginAuditLog: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("loginAuditLog")
 
+    /** Immutable trail of privileged admin mutations (trust/spam score changes, etc.). */
+    val adminAuditLog: MongoCollection<Document>
+        get() = MongoDB.database.getCollection<Document>("adminAuditLog")
+
     val spamReports: MongoCollection<Document>
         get() = MongoDB.database.getCollection<Document>("spamReports")
 
