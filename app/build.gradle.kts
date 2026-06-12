@@ -150,6 +150,7 @@ dependencies {
     implementation(libs.room.ktx)
     ksp(libs.room.compiler)
     implementation(libs.datastore.preferences)
+    implementation(libs.security.crypto)
     implementation(libs.play.services.auth)
     implementation(libs.play.services.location)
     implementation(libs.google.api.client.android)

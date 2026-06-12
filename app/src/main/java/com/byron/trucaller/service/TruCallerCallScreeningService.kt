@@ -12,6 +12,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import java.util.concurrent.atomic.AtomicBoolean
 
 /**
  * System [CallScreeningService] that intercepts incoming calls before they ring.
@@ -36,12 +37,26 @@ class TruCallerCallScreeningService : CallScreeningService() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     override fun onScreenCall(callDetails: Call.Details) {
+        // The framework requires respondToCall to be invoked exactly once per call.
+        // This guard makes every response path idempotent: e.g. if the block path
+        // already responded but a follow-up disk read pushes it past the timeout,
+        // the timeout fallback must not respond a second time (which would override
+        // the block / throw). compareAndSet ensures only the first response wins.
+        val responded = AtomicBoolean(false)
+        fun respondOnce(response: CallResponse) {
+            if (responded.compareAndSet(false, true)) {
+                respondOnce(response)
+            } else {
+                Log.w(TAG, "respondToCall already invoked for this call — ignoring duplicate")
+            }
+        }
+
         val handle: Uri? = callDetails.handle
         val phoneNumber = handle?.schemeSpecificPart
 
         if (phoneNumber.isNullOrBlank()) {
             Log.d(TAG, "Incoming call with no number — allowing")
-            respondToCall(callDetails, CallResponse.Builder().build())
+            respondOnce(CallResponse.Builder().build())
             return
         }
 
@@ -50,7 +65,7 @@ class TruCallerCallScreeningService : CallScreeningService() {
         val app = application as? TruCallerApplication
         if (app == null) {
             Log.e(TAG, "Could not obtain TruCallerApplication — allowing call")
-            respondToCall(callDetails, CallResponse.Builder().build())
+            respondOnce(CallResponse.Builder().build())
             return
         }
 
@@ -64,17 +79,18 @@ class TruCallerCallScreeningService : CallScreeningService() {
         // doesn't complete in SCREEN_TIMEOUT_MS we allow the call through to
         // avoid ever silently blocking a legitimate call due to DB/IO latency.
         serviceScope.launch {
-            val responded = withTimeoutOrNull(SCREEN_TIMEOUT_MS) {
+            val completed = withTimeoutOrNull(SCREEN_TIMEOUT_MS) {
                 screenCallInternal(
                     callDetails, phoneNumber, app,
-                    blockedRepo, callerIdRepo, userPrefs, scheduleRepo, contactRepo
+                    blockedRepo, callerIdRepo, userPrefs, scheduleRepo, contactRepo,
+                    ::respondOnce
                 )
                 true
             }
 
-            if (responded == null) {
+            if (completed == null) {
                 Log.w(TAG, "Screening timeout for $phoneNumber — allowing call through")
-                respondToCall(callDetails, CallResponse.Builder().build())
+                respondOnce(CallResponse.Builder().build())
             }
         }
     }
@@ -87,7 +103,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
         callerIdRepo: com.byron.trucaller.data.repository.CallerIdRepository,
         userPrefs: com.byron.trucaller.data.preferences.UserPreferences,
         scheduleRepo: com.byron.trucaller.data.repository.BlockingScheduleRepository,
-        contactRepo: com.byron.trucaller.data.repository.ContactRepository
+        contactRepo: com.byron.trucaller.data.repository.ContactRepository,
+        respondOnce: (CallResponse) -> Unit
     ) {
         try {
             val userId = userPrefs.loggedInUserId.firstOrNull()
@@ -101,7 +118,7 @@ class TruCallerCallScreeningService : CallScreeningService() {
                     .setSkipCallLog(false)
                     .setSkipNotification(true)
                     .build()
-                respondToCall(callDetails, response)
+                respondOnce(response)
 
                 val lookup = callerIdRepo.lookupNumberLocal(phoneNumber, userId)
                 val blockedEntry = lookup.callerIdEntry
@@ -135,8 +152,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
             when {
                 spamScore >= 80 -> {
                     Log.d(TAG, "FRAUD spam score ($spamScore) for $phoneNumber — rejecting silently")
-                    respondToCall(
-                        callDetails, CallResponse.Builder()
+                    respondOnce(
+                        CallResponse.Builder()
                             .setDisallowCall(true).setRejectCall(true)
                             .setSkipCallLog(false).setSkipNotification(true)
                             .build()
@@ -145,8 +162,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
                 }
                 spamScore >= 60 -> {
                     Log.d(TAG, "SPAM score ($spamScore) for $phoneNumber — rejecting with notification")
-                    respondToCall(
-                        callDetails, CallResponse.Builder()
+                    respondOnce(
+                        CallResponse.Builder()
                             .setDisallowCall(true).setRejectCall(true)
                             .setSkipCallLog(false).setSkipNotification(false)
                             .build()
@@ -168,8 +185,8 @@ class TruCallerCallScreeningService : CallScreeningService() {
                     )
                     if (decision.shouldBlock) {
                         Log.d(TAG, "Schedule blocked: ${decision.reason} — rejecting $phoneNumber")
-                        respondToCall(
-                            callDetails, CallResponse.Builder()
+                        respondOnce(
+                            CallResponse.Builder()
                                 .setDisallowCall(true).setRejectCall(true)
                                 .setSkipCallLog(false).setSkipNotification(true)
                                 .build()
@@ -189,11 +206,11 @@ class TruCallerCallScreeningService : CallScreeningService() {
 
             // All checks passed — allow the call through
             Log.d(TAG, "All checks passed for $phoneNumber — allowing call")
-            respondToCall(callDetails, CallResponse.Builder().build())
+            respondOnce(CallResponse.Builder().build())
 
         } catch (e: Exception) {
             Log.e(TAG, "Error screening call from $phoneNumber", e)
-            respondToCall(callDetails, CallResponse.Builder().build())
+            respondOnce(CallResponse.Builder().build())
         }
     }
 

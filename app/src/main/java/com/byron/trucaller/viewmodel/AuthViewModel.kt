@@ -513,12 +513,13 @@ class AuthViewModel(
      * Returns true if the account was successfully deleted (or backend was unreachable
      * and local cleanup proceeded), false if the user is not authenticated.
      */
-    suspend fun deleteAccount(): Boolean {
+    suspend fun deleteAccount(password: String): Boolean {
         val user = _authState.value.user ?: return false
 
-        // Attempt backend deletion
+        // Attempt backend deletion. The password re-authenticates this irreversible
+        // action server-side (a stolen access token alone must not delete the account).
         try {
-            val result = ApiClient.deleteAccount()
+            val result = ApiClient.deleteAccount(password)
             if (!result.success) {
                 // If backend explicitly rejects (not a network error), abort
                 if (result.error != null && !result.error.contains("Network error")) {

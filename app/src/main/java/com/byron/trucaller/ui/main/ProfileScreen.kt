@@ -361,8 +361,9 @@ fun ProfileScreen(rootNavController: NavController, authViewModel: AuthViewModel
                         } else {
                             isDeleting = true
                             deleteAccountError = null
+                            val confirmedPassword = deleteAccountPassword
                             deleteScope.launch {
-                                val success = authViewModel.deleteAccount()
+                                val success = authViewModel.deleteAccount(confirmedPassword)
                                 isDeleting = false
                                 if (success) {
                                     showDeleteAccountDialog = false

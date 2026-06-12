@@ -1,6 +1,8 @@
 package com.byron.trucaller.data.preferences
 
 import android.content.Context
+import android.content.SharedPreferences
+import android.util.Log
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
@@ -8,14 +10,53 @@ import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import androidx.security.crypto.EncryptedSharedPreferences
+import androidx.security.crypto.MasterKey
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "user_prefs")
 
 class UserPreferences(private val context: Context) {
 
+    // ── Encrypted token store (Android Keystore-backed) ──────────────────────
+    // Access/refresh JWTs are bearer credentials: anyone who reads them owns the
+    // session. They must NOT sit in plaintext DataStore/XML (readable via ADB
+    // backup or on a rooted device). EncryptedSharedPreferences encrypts both keys
+    // and values with a master key held in the hardware-backed Keystore.
+    private val securePrefs: SharedPreferences = buildSecurePrefs(context)
+
+    private fun buildSecurePrefs(context: Context): SharedPreferences {
+        fun create(): SharedPreferences {
+            val masterKey = MasterKey.Builder(context.applicationContext)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
+            return EncryptedSharedPreferences.create(
+                context.applicationContext,
+                SECURE_PREFS_NAME,
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+            )
+        }
+        return try {
+            create()
+        } catch (e: Exception) {
+            // Keystore/keyset corruption (known on some OEMs after restore) makes the
+            // store unreadable. Reset it once and retry — the user simply re-authenticates.
+            Log.w("UserPreferences", "Encrypted prefs unreadable — resetting", e)
+            runCatching { context.applicationContext.deleteSharedPreferences(SECURE_PREFS_NAME) }
+            create()
+        }
+    }
+
     companion object {
+        private const val SECURE_PREFS_NAME = "secure_user_prefs"
+        private const val KEY_AUTH_TOKEN = "auth_token"
+        private const val KEY_REFRESH_TOKEN = "refresh_token"
+
         private val AUTO_BACKUP_KEY = booleanPreferencesKey("auto_backup")
         private val LOGGED_IN_USER_ID = stringPreferencesKey("logged_in_user_id")
         private val ADMIN_ID = stringPreferencesKey("admin_id")
@@ -30,8 +71,6 @@ class UserPreferences(private val context: Context) {
         private val LAST_CONTACT_SYNC_TIMESTAMP = longPreferencesKey("last_contact_sync_timestamp")
         private val FCM_TOKEN_NEEDS_SYNC = booleanPreferencesKey("fcm_token_needs_sync")
         private val DEVICE_PROTECTION_PROMPT_SHOWN = booleanPreferencesKey("device_protection_prompt_shown")
-        private val AUTH_TOKEN = stringPreferencesKey("auth_token")
-        private val REFRESH_TOKEN = stringPreferencesKey("refresh_token")
 
         // ── Call Recording Settings ────────────────────────────────────
         private val RECORDING_CONSENT_ACCEPTED = booleanPreferencesKey("recording_consent_accepted")
@@ -59,8 +98,12 @@ class UserPreferences(private val context: Context) {
     val lastContactSyncTimestamp: Flow<Long> = context.dataStore.data.map { it[LAST_CONTACT_SYNC_TIMESTAMP] ?: 0L }
     val fcmTokenNeedsSync: Flow<Boolean> = context.dataStore.data.map { it[FCM_TOKEN_NEEDS_SYNC] ?: false }
     val deviceProtectionPromptShown: Flow<Boolean> = context.dataStore.data.map { it[DEVICE_PROTECTION_PROMPT_SHOWN] ?: false }
-    val authToken: Flow<String?> = context.dataStore.data.map { it[AUTH_TOKEN] }
-    val refreshToken: Flow<String?> = context.dataStore.data.map { it[REFRESH_TOKEN] }
+    // Tokens are read from the encrypted store at construction and surfaced as
+    // StateFlows so existing Flow-based consumers keep working unchanged.
+    private val _authToken = MutableStateFlow(securePrefs.getString(KEY_AUTH_TOKEN, null))
+    private val _refreshToken = MutableStateFlow(securePrefs.getString(KEY_REFRESH_TOKEN, null))
+    val authToken: Flow<String?> = _authToken.asStateFlow()
+    val refreshToken: Flow<String?> = _refreshToken.asStateFlow()
     // ── Call Recording Settings (flows) ───────────────────────────────
     val recordingConsentAccepted: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_CONSENT_ACCEPTED] ?: false }
     val recordingEnabled: Flow<Boolean> = context.dataStore.data.map { it[RECORDING_ENABLED] ?: false }
@@ -185,26 +228,27 @@ class UserPreferences(private val context: Context) {
         context.dataStore.edit { it[LOCATION_PERMISSION_REQUESTED] = requested }
     }
 
-    suspend fun setAuthToken(token: String?) {
-        context.dataStore.edit {
-            if (token != null) it[AUTH_TOKEN] = token
-            else it.remove(AUTH_TOKEN)
-        }
+    fun setAuthToken(token: String?) {
+        securePrefs.edit().apply {
+            if (token != null) putString(KEY_AUTH_TOKEN, token) else remove(KEY_AUTH_TOKEN)
+        }.apply()
+        _authToken.value = token
     }
 
-    suspend fun setRefreshToken(token: String?) {
-        context.dataStore.edit {
-            if (token != null) it[REFRESH_TOKEN] = token
-            else it.remove(REFRESH_TOKEN)
-        }
+    fun setRefreshToken(token: String?) {
+        securePrefs.edit().apply {
+            if (token != null) putString(KEY_REFRESH_TOKEN, token) else remove(KEY_REFRESH_TOKEN)
+        }.apply()
+        _refreshToken.value = token
     }
 
     suspend fun clearSession() {
         context.dataStore.edit {
             it.remove(LOGGED_IN_USER_ID)
             it.remove(ADMIN_ID)
-            it.remove(AUTH_TOKEN)
-            it.remove(REFRESH_TOKEN)
         }
+        securePrefs.edit().remove(KEY_AUTH_TOKEN).remove(KEY_REFRESH_TOKEN).apply()
+        _authToken.value = null
+        _refreshToken.value = null
     }
 }

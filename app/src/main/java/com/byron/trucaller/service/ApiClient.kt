@@ -38,8 +38,13 @@ object ApiClient {
     private val certificatePinner = CertificatePinner.Builder()
         .add(
             "trucaller-backend-sh3t.onrender.com",
-            // Let's Encrypt ISRG Root X1 — SHA-256 pin
-            "sha256/C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M="
+            // Primary: Let's Encrypt ISRG Root X1 (RSA) — SHA-256 SPKI pin.
+            "sha256/C5+lpZ7tcVwmwQIMcRtPbsQtWLABXhQzejna0wHFr8M=",
+            // Backup: Let's Encrypt ISRG Root X2 (ECDSA) — SHA-256 SPKI pin.
+            // Pinning a single root means the app hard-fails (no connectivity) the
+            // moment the backend's chain rotates to a different root. Pinning both
+            // current Let's Encrypt roots keeps a valid fallback during rotation.
+            "sha256/diGVwiVYbubAI3RW4hB9xU8e/CH2GnkuvVFZE8zmgzI="
         )
         .build()
 
@@ -219,8 +224,8 @@ object ApiClient {
             "newPassword" to newPassword
         ))
 
-    suspend fun deleteAccount(): ApiResult<Unit> =
-        delete("/api/auth/delete-account")
+    suspend fun deleteAccount(password: String): ApiResult<Unit> =
+        delete("/api/auth/delete-account", mapOf("password" to password))
 
     suspend fun updateProfile(fullName: String): ApiResult<Unit> =
         put("/api/auth/profile", mapOf("fullName" to fullName))
@@ -669,12 +674,14 @@ object ApiClient {
         }
     }
 
-    private suspend inline fun <reified T> delete(path: String): ApiResult<T> = withContext(Dispatchers.IO) {
+    private suspend inline fun <reified T> delete(path: String, body: Any? = null): ApiResult<T> = withContext(Dispatchers.IO) {
         try {
             val request = Request.Builder()
                 .url("$baseUrl$path")
                 .apply { authToken?.let { addHeader("Authorization", "Bearer $it") } }
-                .delete()
+                .apply {
+                    if (body != null) delete(gson.toJson(body).toRequestBody(JSON_MEDIA)) else delete()
+                }
                 .build()
 
             val response = client.newCall(request).execute()
